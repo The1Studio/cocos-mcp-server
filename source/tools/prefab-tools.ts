@@ -6,7 +6,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'get_prefab_list',
                 description: 'Get all prefabs in the project',
-                displayDescription: '프로젝트의 모든 프리팹 조회',
+                displayDescription: 'Get all prefabs in project',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -21,7 +21,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'load_prefab',
                 description: 'Load a prefab by path',
-                displayDescription: '경로로 프리팹 로드',
+                displayDescription: 'Load prefab by path',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -36,7 +36,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'instantiate_prefab',
                 description: 'Instantiate a prefab in the scene',
-                displayDescription: '씬에 프리팹 인스턴스 생성',
+                displayDescription: 'Instantiate prefab in scene',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -64,7 +64,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'create_prefab',
                 description: 'Create a prefab from a node with all children and components',
-                displayDescription: '노드에서 모든 자식과 컴포넌트를 포함한 프리팹 생성',
+                displayDescription: 'Create prefab from node with children and components',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -87,7 +87,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'update_prefab',
                 description: 'Update an existing prefab',
-                displayDescription: '기존 프리팹 업데이트',
+                displayDescription: 'Update existing prefab',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -106,7 +106,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'revert_prefab',
                 description: 'Revert prefab instance to original',
-                displayDescription: '프리팹 인스턴스를 원본으로 되돌리기',
+                displayDescription: 'Revert prefab instance to original',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -121,7 +121,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'get_prefab_info',
                 description: 'Get detailed prefab information',
-                displayDescription: '프리팹 상세 정보 조회',
+                displayDescription: 'Get prefab details',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -136,7 +136,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'validate_prefab',
                 description: 'Validate a prefab file format',
-                displayDescription: '프리팹 파일 형식 검증',
+                displayDescription: 'Validate prefab file format',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -151,7 +151,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'duplicate_prefab',
                 description: 'Duplicate an existing prefab',
-                displayDescription: '기존 프리팹 복제',
+                displayDescription: 'Duplicate existing prefab',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -174,7 +174,7 @@ export class PrefabTools implements ToolExecutor {
             {
                 name: 'restore_prefab_node',
                 description: 'Restore prefab node using prefab asset (built-in undo record)',
-                displayDescription: '프리팹 에셋을 사용하여 프리팹 노드 복원 (내장 실행취소 기록)',
+                displayDescription: 'Restore prefab node using prefab asset (with undo)',
                 inputSchema: {
                     type: 'object',
                     properties: {

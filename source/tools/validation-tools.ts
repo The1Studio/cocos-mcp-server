@@ -6,7 +6,7 @@ export class ValidationTools implements ToolExecutor {
             {
                 name: 'validate_json_params',
                 description: 'Validate and fix JSON parameters before sending to other tools',
-                displayDescription: 'JSON 파라미터 검증 및 수정',
+                displayDescription: 'Validate and fix JSON parameters',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -25,7 +25,7 @@ export class ValidationTools implements ToolExecutor {
             {
                 name: 'safe_string_value',
                 description: 'Create a safe string value that won\'t cause JSON parsing issues',
-                displayDescription: '안전한 문자열 값 생성',
+                displayDescription: 'Create safe string value',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -40,7 +40,7 @@ export class ValidationTools implements ToolExecutor {
             {
                 name: 'format_mcp_request',
                 description: 'Format a complete MCP request with proper JSON escaping',
-                displayDescription: 'MCP 요청 포맷',
+                displayDescription: 'Format MCP request',
                 inputSchema: {
                     type: 'object',
                     properties: {

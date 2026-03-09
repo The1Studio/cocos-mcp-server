@@ -6,7 +6,7 @@ export class ServerTools implements ToolExecutor {
             {
                 name: 'query_server_ip_list',
                 description: 'Query server IP list',
-                displayDescription: '서버 IP 목록 조회',
+                displayDescription: 'Query server IP list',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -15,7 +15,7 @@ export class ServerTools implements ToolExecutor {
             {
                 name: 'query_sorted_server_ip_list',
                 description: 'Get sorted server IP list',
-                displayDescription: '정렬된 서버 IP 목록 조회',
+                displayDescription: 'Get sorted server IP list',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -24,7 +24,7 @@ export class ServerTools implements ToolExecutor {
             {
                 name: 'query_server_port',
                 description: 'Query editor server current port',
-                displayDescription: '에디터 서버 현재 포트 조회',
+                displayDescription: 'Query editor server current port',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -33,7 +33,7 @@ export class ServerTools implements ToolExecutor {
             {
                 name: 'get_server_status',
                 description: 'Get comprehensive server status information',
-                displayDescription: '종합 서버 상태 정보 조회',
+                displayDescription: 'Get comprehensive server status',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -42,7 +42,7 @@ export class ServerTools implements ToolExecutor {
             {
                 name: 'check_server_connectivity',
                 description: 'Check server connectivity and network status',
-                displayDescription: '서버 연결 및 네트워크 상태 확인',
+                displayDescription: 'Check server connectivity and network status',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -57,7 +57,7 @@ export class ServerTools implements ToolExecutor {
             {
                 name: 'get_network_interfaces',
                 description: 'Get available network interfaces',
-                displayDescription: '사용 가능한 네트워크 인터페이스 조회',
+                displayDescription: 'Get available network interfaces',
                 inputSchema: {
                     type: 'object',
                     properties: {}

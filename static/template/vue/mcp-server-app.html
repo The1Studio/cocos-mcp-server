@@ -1,25 +1,25 @@
 <div class="mcp-app">
-    <!-- 탭 내비게이션 -->
+    <!-- Tab navigation -->
     <div class="tab-navigation">
         <button class="tab-button" :class="{ active: activeTab === 'server' }" @click="switchTab('server')">
-            <span>서버</span>
+            <span>Server</span>
         </button>
         <button class="tab-button" :class="{ active: activeTab === 'tools' }" @click="switchTab('tools')">
-            <span>도구 관리</span>
+            <span>Tool Manager</span>
         </button>
     </div>
 
-    <!-- 서버 탭 -->
+    <!-- Server tab -->
     <div class="tab-content" v-show="activeTab === 'server'">
         <section class="server-status">
-            <h3>서버 상태</h3>
+            <h3>Server Status</h3>
             <div class="status-info">
                 <ui-prop>
-                    <ui-label slot="label">상태</ui-label>
+                    <ui-label slot="label">Status</ui-label>
                     <ui-label slot="content" class="status-value" :class="statusClass">{{ serverStatus }}</ui-label>
                 </ui-prop>
                 <ui-prop v-if="serverRunning">
-                    <ui-label slot="label">연결 수</ui-label>
+                    <ui-label slot="label">Connections</ui-label>
                     <ui-label slot="content">{{ connectedClients }}</ui-label>
                 </ui-prop>
             </div>
@@ -27,69 +27,69 @@
 
         <section class="server-controls">
             <ui-button @click="toggleServer" :disabled="isProcessing" class="primary">
-                {{ serverRunning ? '서버 중지' : '서버 시작' }}
+                {{ serverRunning ? 'Stop Server' : 'Start Server' }}
             </ui-button>
         </section>
 
         <section class="server-settings">
-            <h3>서버 설정</h3>
+            <h3>Server Settings</h3>
             <ui-prop>
-                <ui-label slot="label">포트</ui-label>
+                <ui-label slot="label">Port</ui-label>
                 <ui-num-input slot="content" v-model="settings.port" :min="1024" :max="65535" :step="1" :disabled="serverRunning">
                 </ui-num-input>
             </ui-prop>
             <ui-prop>
-                <ui-label slot="label">자동 시작</ui-label>
+                <ui-label slot="label">Auto Start</ui-label>
                 <ui-checkbox slot="content" v-model="settings.autoStart"></ui-checkbox>
             </ui-prop>
             <ui-prop>
-                <ui-label slot="label">디버그 로그</ui-label>
+                <ui-label slot="label">Debug Log</ui-label>
                 <ui-checkbox slot="content" v-model="settings.debugLog"></ui-checkbox>
             </ui-prop>
             <ui-prop>
-                <ui-label slot="label">최대 연결 수</ui-label>
+                <ui-label slot="label">Max Connections</ui-label>
                 <ui-num-input slot="content" v-model="settings.maxConnections" :min="1" :max="100" :step="1">
                 </ui-num-input>
             </ui-prop>
         </section>
 
         <section class="server-info" v-if="serverRunning">
-            <h3>연결 정보</h3>
+            <h3>Connection Info</h3>
             <div class="connection-details">
                 <ui-prop>
                     <ui-label slot="label">HTTP URL</ui-label>
                     <ui-input slot="content" :value="httpUrl" readonly>
-                        <ui-button slot="suffix" @click="copyUrl">복사</ui-button>
+                        <ui-button slot="suffix" @click="copyUrl">Copy</ui-button>
                     </ui-input>
                 </ui-prop>
             </div>
         </section>
 
         <footer>
-            <ui-button @click="saveSettings" :disabled="!settingsChanged">설정 저장</ui-button>
+            <ui-button @click="saveSettings" :disabled="!settingsChanged">Save Settings</ui-button>
         </footer>
     </div>
 
-    <!-- 도구 관리 탭 -->
+    <!-- Tool manager tab -->
     <div class="tab-content" v-show="activeTab === 'tools'">
         <section class="tool-manager">
             <div class="tool-manager-header">
-                <h3>도구 관리</h3>
+                <h3>Tool Manager</h3>
             </div>
 
             <div class="tools-section">
                 <div class="tools-section-header">
                     <div class="tools-section-title">
-                        <h4>사용 가능한 도구</h4>
+                        <h4>Available Tools</h4>
                         <div class="tools-stats">
-                            {{ totalTools }}개 도구
-                            ({{ enabledTools }} 활성 / {{ disabledTools }} 비활성)
+                            {{ totalTools }} tools
+                            ({{ enabledTools }} enabled / {{ disabledTools }} disabled)
                         </div>
                     </div>
                     <div class="tools-section-controls">
-                        <ui-button @click="selectAllTools" class="small">전체 선택</ui-button>
-                        <ui-button @click="deselectAllTools" class="small">전체 해제</ui-button>
-                        <ui-button @click="saveChanges" class="primary">변경사항 저장</ui-button>
+                        <ui-button @click="selectAllTools" class="small">Select All</ui-button>
+                        <ui-button @click="deselectAllTools" class="small">Deselect All</ui-button>
+                        <ui-button @click="saveChanges" class="primary">Save Changes</ui-button>
                     </div>
                 </div>
 
@@ -98,8 +98,8 @@
                         <div class="category-header">
                             <h5>{{ getCategoryDisplayName(category) }}</h5>
                             <div class="category-controls">
-                                <ui-button @click="toggleCategoryTools(category, true)" class="small">전체 선택</ui-button>
-                                <ui-button @click="toggleCategoryTools(category, false)" class="small">전체 해제</ui-button>
+                                <ui-button @click="toggleCategoryTools(category, true)" class="small">Select All</ui-button>
+                                <ui-button @click="toggleCategoryTools(category, false)" class="small">Deselect All</ui-button>
                             </div>
                         </div>
                         <div class="tool-items">

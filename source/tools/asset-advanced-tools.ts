@@ -6,7 +6,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'save_asset_meta',
                 description: 'Save asset meta information',
-                displayDescription: '에셋 메타 정보 저장',
+                displayDescription: 'Save asset meta info',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -25,7 +25,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'generate_available_url',
                 description: 'Generate an available URL based on input URL',
-                displayDescription: '사용 가능한 URL 생성',
+                displayDescription: 'Generate available URL',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -40,7 +40,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'query_asset_db_ready',
                 description: 'Check if asset database is ready',
-                displayDescription: '에셋 데이터베이스 준비 상태 조회',
+                displayDescription: 'Check asset database ready status',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -49,7 +49,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'open_asset_external',
                 description: 'Open asset with external program',
-                displayDescription: '외부 프로그램으로 에셋 열기',
+                displayDescription: 'Open asset with external program',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -64,7 +64,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'batch_import_assets',
                 description: 'Import multiple assets in batch',
-                displayDescription: '에셋 일괄 가져오기',
+                displayDescription: 'Batch import assets',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -99,7 +99,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'batch_delete_assets',
                 description: 'Delete multiple assets in batch',
-                displayDescription: '에셋 일괄 삭제',
+                displayDescription: 'Batch delete assets',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -115,7 +115,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'validate_asset_references',
                 description: 'Validate asset references and find broken links',
-                displayDescription: '에셋 참조 검증 및 깨진 링크 찾기',
+                displayDescription: 'Validate asset references and find broken links',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -130,7 +130,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'get_asset_dependencies',
                 description: 'Get asset dependency tree',
-                displayDescription: '에셋 의존성 트리 조회',
+                displayDescription: 'Get asset dependency tree',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -151,7 +151,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'get_unused_assets',
                 description: 'Find unused assets in project',
-                displayDescription: '프로젝트 내 미사용 에셋 찾기',
+                displayDescription: 'Find unused assets in project',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -172,7 +172,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'compress_textures',
                 description: 'Batch compress texture assets',
-                displayDescription: '텍스처 에셋 일괄 압축',
+                displayDescription: 'Batch compress texture assets',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -200,7 +200,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             {
                 name: 'export_asset_manifest',
                 description: 'Export asset manifest/inventory',
-                displayDescription: '에셋 매니페스트 내보내기',
+                displayDescription: 'Export asset manifest',
                 inputSchema: {
                     type: 'object',
                     properties: {

@@ -6,7 +6,7 @@ export class PreferencesTools implements ToolExecutor {
             {
                 name: 'open_preferences_settings',
                 description: 'Open preferences settings panel',
-                displayDescription: '환경설정 패널 열기',
+                displayDescription: 'Open preferences panel',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -25,7 +25,7 @@ export class PreferencesTools implements ToolExecutor {
             {
                 name: 'query_preferences_config',
                 description: 'Query preferences configuration',
-                displayDescription: '환경설정 조회',
+                displayDescription: 'Query preferences',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -51,7 +51,7 @@ export class PreferencesTools implements ToolExecutor {
             {
                 name: 'set_preferences_config',
                 description: 'Set preferences configuration',
-                displayDescription: '환경설정 설정',
+                displayDescription: 'Set preferences',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -79,7 +79,7 @@ export class PreferencesTools implements ToolExecutor {
             {
                 name: 'get_all_preferences',
                 description: 'Get all available preferences categories',
-                displayDescription: '모든 환경설정 카테고리 조회',
+                displayDescription: 'Get all preferences categories',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -88,7 +88,7 @@ export class PreferencesTools implements ToolExecutor {
             {
                 name: 'reset_preferences',
                 description: 'Reset preferences to default values',
-                displayDescription: '환경설정 초기화',
+                displayDescription: 'Reset preferences',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -108,7 +108,7 @@ export class PreferencesTools implements ToolExecutor {
             {
                 name: 'export_preferences',
                 description: 'Export current preferences configuration',
-                displayDescription: '환경설정 내보내기',
+                displayDescription: 'Export preferences',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -122,7 +122,7 @@ export class PreferencesTools implements ToolExecutor {
             {
                 name: 'import_preferences',
                 description: 'Import preferences configuration from file',
-                displayDescription: '환경설정 가져오기',
+                displayDescription: 'Import preferences',
                 inputSchema: {
                     type: 'object',
                     properties: {

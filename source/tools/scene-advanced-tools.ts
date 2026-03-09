@@ -6,7 +6,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'reset_node_property',
                 description: 'Reset node property to default value',
-                displayDescription: '노드 속성을 기본값으로 리셋',
+                displayDescription: 'Reset node property to default',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -25,7 +25,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'move_array_element',
                 description: 'Move array element position',
-                displayDescription: '배열 요소 위치 이동',
+                displayDescription: 'Move array element position',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -52,7 +52,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'remove_array_element',
                 description: 'Remove array element at specific index',
-                displayDescription: '특정 인덱스의 배열 요소 삭제',
+                displayDescription: 'Remove array element at index',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -75,7 +75,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'copy_node',
                 description: 'Copy node for later paste operation',
-                displayDescription: '노드 복사',
+                displayDescription: 'Copy node',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -93,7 +93,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'paste_node',
                 description: 'Paste previously copied nodes',
-                displayDescription: '노드 붙여넣기',
+                displayDescription: 'Paste node',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -120,7 +120,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'cut_node',
                 description: 'Cut node (copy + mark for move)',
-                displayDescription: '노드 잘라내기',
+                displayDescription: 'Cut node',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -138,7 +138,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'reset_node_transform',
                 description: 'Reset node position, rotation and scale',
-                displayDescription: '노드 트랜스폼 리셋',
+                displayDescription: 'Reset node transform',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -153,7 +153,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'reset_component',
                 description: 'Reset component to default values',
-                displayDescription: '컴포넌트를 기본값으로 리셋',
+                displayDescription: 'Reset component to default',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -168,7 +168,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'restore_prefab',
                 description: 'Restore prefab instance from asset',
-                displayDescription: '프리팹 인스턴스 복원',
+                displayDescription: 'Restore prefab instance',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -187,7 +187,7 @@ export class SceneAdvancedTools implements ToolExecutor {
             {
                 name: 'execute_component_method',
                 description: 'Execute method on component',
-                displayDescription: '컴포넌트 메서드 실행',
+                displayDescription: 'Execute component method',
                 inputSchema: {
                     type: 'object',
                     properties: {

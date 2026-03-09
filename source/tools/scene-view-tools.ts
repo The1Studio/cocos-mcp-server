@@ -6,7 +6,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'change_gizmo_tool',
                 description: 'Change Gizmo tool',
-                displayDescription: '기즈모 도구 변경',
+                displayDescription: 'Change Gizmo tool',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -22,7 +22,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'query_gizmo_tool_name',
                 description: 'Get current Gizmo tool name',
-                displayDescription: '현재 기즈모 도구 조회',
+                displayDescription: 'Query current Gizmo tool',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -31,7 +31,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'change_gizmo_pivot',
                 description: 'Change transform pivot point',
-                displayDescription: '변환 피벗 포인트 변경',
+                displayDescription: 'Change transform pivot point',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -47,7 +47,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'query_gizmo_pivot',
                 description: 'Get current Gizmo pivot point',
-                displayDescription: '현재 기즈모 피벗 포인트 조회',
+                displayDescription: 'Query current Gizmo pivot point',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -56,7 +56,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'query_gizmo_view_mode',
                 description: 'Query view mode (view/select)',
-                displayDescription: '뷰 모드 조회 (view/select)',
+                displayDescription: 'Query view mode (view/select)',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -65,7 +65,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'change_gizmo_coordinate',
                 description: 'Change coordinate system',
-                displayDescription: '좌표계 변경',
+                displayDescription: 'Change coordinate system',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -81,7 +81,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'query_gizmo_coordinate',
                 description: 'Get current coordinate system',
-                displayDescription: '현재 좌표계 조회',
+                displayDescription: 'Query current coordinate system',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -90,7 +90,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'change_view_mode_2d_3d',
                 description: 'Change 2D/3D view mode',
-                displayDescription: '2D/3D 뷰 모드 변경',
+                displayDescription: 'Change 2D/3D view mode',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -105,7 +105,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'query_view_mode_2d_3d',
                 description: 'Get current view mode',
-                displayDescription: '현재 뷰 모드 조회',
+                displayDescription: 'Query current view mode',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -114,7 +114,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'set_grid_visible',
                 description: 'Show/hide grid',
-                displayDescription: '그리드 표시/숨김',
+                displayDescription: 'Show/hide grid',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -129,7 +129,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'query_grid_visible',
                 description: 'Query grid visibility status',
-                displayDescription: '그리드 표시 상태 조회',
+                displayDescription: 'Query grid visibility',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -138,7 +138,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'set_icon_gizmo_3d',
                 description: 'Set IconGizmo to 3D or 2D mode',
-                displayDescription: '아이콘 기즈모 3D/2D 모드 설정',
+                displayDescription: 'Set IconGizmo 3D/2D mode',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -153,7 +153,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'query_icon_gizmo_3d',
                 description: 'Query IconGizmo mode',
-                displayDescription: '아이콘 기즈모 모드 조회',
+                displayDescription: 'Query IconGizmo mode',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -162,7 +162,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'set_icon_gizmo_size',
                 description: 'Set IconGizmo size',
-                displayDescription: '아이콘 기즈모 크기 설정',
+                displayDescription: 'Set IconGizmo size',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -179,7 +179,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'query_icon_gizmo_size',
                 description: 'Query IconGizmo size',
-                displayDescription: '아이콘 기즈모 크기 조회',
+                displayDescription: 'Query IconGizmo size',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -188,7 +188,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'focus_camera_on_nodes',
                 description: 'Focus scene camera on nodes',
-                displayDescription: '노드에 씬 카메라 포커스',
+                displayDescription: 'Focus scene camera on nodes',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -206,7 +206,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'align_camera_with_view',
                 description: 'Apply scene camera position and angle to selected node',
-                displayDescription: '씬 카메라 위치와 각도를 선택한 노드에 적용',
+                displayDescription: 'Apply scene camera position/angle to selected node',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -215,7 +215,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'align_view_with_node',
                 description: 'Apply selected node position and angle to current view',
-                displayDescription: '선택한 노드 위치와 각도를 현재 뷰에 적용',
+                displayDescription: 'Apply selected node position/angle to view',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -224,7 +224,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'get_scene_view_status',
                 description: 'Get comprehensive scene view status',
-                displayDescription: '종합 씬 뷰 상태 조회',
+                displayDescription: 'Get comprehensive scene view status',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -233,7 +233,7 @@ export class SceneViewTools implements ToolExecutor {
             {
                 name: 'reset_scene_view',
                 description: 'Reset scene view to default settings',
-                displayDescription: '씬 뷰 기본 설정으로 리셋',
+                displayDescription: 'Reset scene view to default',
                 inputSchema: {
                     type: 'object',
                     properties: {}

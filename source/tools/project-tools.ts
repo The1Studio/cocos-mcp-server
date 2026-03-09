@@ -8,7 +8,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'run_project',
                 description: 'Run the project in preview mode',
-                displayDescription: '프로젝트를 프리뷰 모드로 실행',
+                displayDescription: 'Run project in preview mode',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -24,7 +24,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'build_project',
                 description: 'Build the project',
-                displayDescription: '프로젝트 빌드',
+                displayDescription: 'Build project',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -45,7 +45,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'get_project_info',
                 description: 'Get project information',
-                displayDescription: '프로젝트 정보 조회',
+                displayDescription: 'Get project info',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -54,7 +54,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'get_project_settings',
                 description: 'Get project settings',
-                displayDescription: '프로젝트 설정 조회',
+                displayDescription: 'Get project settings',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -70,7 +70,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'refresh_assets',
                 description: 'Refresh asset database',
-                displayDescription: '에셋 데이터베이스 새로고침',
+                displayDescription: 'Refresh asset database',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -84,7 +84,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'import_asset',
                 description: 'Import an asset file',
-                displayDescription: '에셋 파일 가져오기',
+                displayDescription: 'Import asset file',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -103,7 +103,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'get_asset_info',
                 description: 'Get asset information',
-                displayDescription: '에셋 정보 조회',
+                displayDescription: 'Get asset info',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -118,7 +118,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'get_assets',
                 description: 'Get assets by type',
-                displayDescription: '타입별 에셋 목록 조회',
+                displayDescription: 'Get assets by type',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -139,7 +139,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'get_build_settings',
                 description: 'Get build settings - shows current limitations',
-                displayDescription: '빌드 설정 조회',
+                displayDescription: 'Get build settings',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -148,7 +148,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'open_build_panel',
                 description: 'Open the build panel in the editor',
-                displayDescription: '빌드 패널 열기',
+                displayDescription: 'Open build panel',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -157,7 +157,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'check_builder_status',
                 description: 'Check if builder worker is ready',
-                displayDescription: '빌더 상태 확인',
+                displayDescription: 'Check builder status',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -166,7 +166,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'start_preview_server',
                 description: 'Start preview server',
-                displayDescription: '프리뷰 서버 시작',
+                displayDescription: 'Start preview server',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -181,7 +181,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'stop_preview_server',
                 description: 'Stop preview server',
-                displayDescription: '프리뷰 서버 중지',
+                displayDescription: 'Stop preview server',
                 inputSchema: {
                     type: 'object',
                     properties: {}
@@ -190,7 +190,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'create_asset',
                 description: 'Create a new asset file or folder',
-                displayDescription: '에셋 파일 또는 폴더 생성',
+                displayDescription: 'Create asset file or folder',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -215,7 +215,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'copy_asset',
                 description: 'Copy an asset to another location',
-                displayDescription: '에셋 복사',
+                displayDescription: 'Copy asset',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -239,7 +239,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'move_asset',
                 description: 'Move an asset to another location',
-                displayDescription: '에셋 이동',
+                displayDescription: 'Move asset',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -263,7 +263,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'delete_asset',
                 description: 'Delete an asset',
-                displayDescription: '에셋 삭제',
+                displayDescription: 'Delete asset',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -278,7 +278,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'save_asset',
                 description: 'Save asset content',
-                displayDescription: '에셋 내용 저장',
+                displayDescription: 'Save asset content',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -297,7 +297,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'reimport_asset',
                 description: 'Reimport an asset',
-                displayDescription: '에셋 재가져오기',
+                displayDescription: 'Reimport asset',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -312,7 +312,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'query_asset_path',
                 description: 'Get asset disk path',
-                displayDescription: '에셋 디스크 경로 조회',
+                displayDescription: 'Get asset disk path',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -327,7 +327,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'query_asset_uuid',
                 description: 'Get asset UUID from URL',
-                displayDescription: 'URL로 에셋 UUID 조회',
+                displayDescription: 'Get asset UUID from URL',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -342,7 +342,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'query_asset_url',
                 description: 'Get asset URL from UUID',
-                displayDescription: 'UUID로 에셋 URL 조회',
+                displayDescription: 'Get asset URL from UUID',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -357,7 +357,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'find_asset_by_name',
                 description: 'Find assets by name (supports partial matching and multiple results)',
-                displayDescription: '이름으로 에셋 검색',
+                displayDescription: 'Find asset by name',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -395,7 +395,7 @@ export class ProjectTools implements ToolExecutor {
             {
                 name: 'get_asset_details',
                 description: 'Get detailed asset information including spriteFrame sub-assets',
-                displayDescription: '에셋 상세 정보 조회',
+                displayDescription: 'Get asset details',
                 inputSchema: {
                     type: 'object',
                     properties: {
