@@ -1,7 +1,52 @@
 import { v4 as uuidv4 } from 'uuid';
-import { ToolConfig, ToolConfiguration, ToolManagerSettings, ToolDefinition } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
+
+/** v2 flat tool config — no more category field */
+export interface ToolConfig {
+    name: string;
+    enabled: boolean;
+    description: string;
+}
+
+export interface ToolConfiguration {
+    id: string;
+    name: string;
+    description?: string;
+    tools: ToolConfig[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ToolManagerSettings {
+    configurations: ToolConfiguration[];
+    currentConfigId: string;
+    maxConfigSlots: number;
+}
+
+/** All v2 manage_* tool names */
+const V2_TOOL_NAMES: { name: string; description: string }[] = [
+    { name: 'manage_scene', description: 'Manage scenes in the project' },
+    { name: 'manage_node', description: 'Manage nodes in the current scene' },
+    { name: 'manage_component', description: 'Manage components on scene nodes' },
+    { name: 'manage_prefab', description: 'Manage prefab assets' },
+    { name: 'manage_asset', description: 'Manage project assets' },
+    { name: 'manage_project', description: 'Manage project build, run, and settings' },
+    { name: 'manage_debug', description: 'Debug tools: console, logs, scripts, validation' },
+    { name: 'manage_preferences', description: 'Manage editor preferences' },
+    { name: 'manage_server', description: 'Server network and connectivity info' },
+    { name: 'manage_broadcast', description: 'Editor broadcast event listeners' },
+    { name: 'manage_scene_view', description: 'Scene view gizmos, camera, grid settings' },
+    { name: 'manage_node_hierarchy', description: 'Advanced node operations: copy, paste, cut, reset' },
+    { name: 'manage_scene_query', description: 'Scene introspection and class queries' },
+    { name: 'manage_undo', description: 'Undo/redo recording and execution' },
+    { name: 'manage_reference_image', description: 'Reference image overlay management' },
+    { name: 'manage_validation', description: 'JSON validation utilities' },
+    { name: 'manage_selection', description: 'Editor selection state management' },
+    { name: 'manage_script', description: 'TypeScript script file management' },
+    { name: 'manage_material', description: 'Material and shader property management' },
+    { name: 'manage_animation', description: 'Animation clip management' },
+];
 
 export class ToolManager {
     private settings: ToolManagerSettings;
@@ -10,13 +55,13 @@ export class ToolManager {
     constructor() {
         this.settings = this.readToolManagerSettings();
         this.initializeAvailableTools();
-        this.syncDescriptions();
 
-        // 如果没有配置，自动创建一个默认配置
         if (this.settings.configurations.length === 0) {
-            console.log('[ToolManager] No configurations found, creating default configuration...');
-            this.createConfiguration('默认配置', '自动创建的默认工具配置');
+            console.log('[ToolManager] No configurations found, creating default...');
+            this.createConfiguration('Default', 'Auto-created default tool configuration');
         }
+
+        this.syncToolList();
     }
 
     private getToolManagerSettingsPath(): string {
@@ -31,7 +76,7 @@ export class ToolManager {
     }
 
     private readToolManagerSettings(): ToolManagerSettings {
-        const DEFAULT_TOOL_MANAGER_SETTINGS: ToolManagerSettings = {
+        const DEFAULT: ToolManagerSettings = {
             configurations: [],
             currentConfigId: '',
             maxConfigSlots: 5
@@ -42,12 +87,12 @@ export class ToolManager {
             const settingsFile = this.getToolManagerSettingsPath();
             if (fs.existsSync(settingsFile)) {
                 const content = fs.readFileSync(settingsFile, 'utf8');
-                return { ...DEFAULT_TOOL_MANAGER_SETTINGS, ...JSON.parse(content) };
+                return { ...DEFAULT, ...JSON.parse(content) };
             }
         } catch (e) {
             console.error('Failed to read tool manager settings:', e);
         }
-        return DEFAULT_TOOL_MANAGER_SETTINGS;
+        return DEFAULT;
     }
 
     private saveToolManagerSettings(settings: ToolManagerSettings): void {
@@ -61,180 +106,50 @@ export class ToolManager {
         }
     }
 
-    private exportToolConfiguration(config: ToolConfiguration): string {
-        return JSON.stringify(config, null, 2);
-    }
-
-    private importToolConfiguration(configJson: string): ToolConfiguration {
-        try {
-            const config = JSON.parse(configJson);
-            // 验证配置格式
-            if (!config.id || !config.name || !Array.isArray(config.tools)) {
-                throw new Error('Invalid configuration format');
-            }
-            return config;
-        } catch (e) {
-            console.error('Failed to parse tool configuration:', e);
-            throw new Error('Invalid JSON format or configuration structure');
-        }
-    }
-
     private initializeAvailableTools(): void {
-        // 从MCP服务器获取真实的工具列表
-        try {
-            // 导入所有工具类
-            const { SceneTools } = require('./scene-tools');
-            const { NodeTools } = require('./node-tools');
-            const { ComponentTools } = require('./component-tools');
-            const { PrefabTools } = require('./prefab-tools');
-            const { ProjectTools } = require('./project-tools');
-            const { DebugTools } = require('./debug-tools');
-            const { PreferencesTools } = require('./preferences-tools');
-            const { ServerTools } = require('./server-tools');
-            const { BroadcastTools } = require('./broadcast-tools');
-            const { SceneAdvancedTools } = require('./scene-advanced-tools');
-            const { SceneViewTools } = require('./scene-view-tools');
-            const { ReferenceImageTools } = require('./reference-image-tools');
-            const { AssetAdvancedTools } = require('./asset-advanced-tools');
-            const { ValidationTools } = require('./validation-tools');
-
-            // 初始化工具实例
-            const tools = {
-                scene: new SceneTools(),
-                node: new NodeTools(),
-                component: new ComponentTools(),
-                prefab: new PrefabTools(),
-                project: new ProjectTools(),
-                debug: new DebugTools(),
-                preferences: new PreferencesTools(),
-                server: new ServerTools(),
-                broadcast: new BroadcastTools(),
-                sceneAdvanced: new SceneAdvancedTools(),
-                sceneView: new SceneViewTools(),
-                referenceImage: new ReferenceImageTools(),
-                assetAdvanced: new AssetAdvancedTools(),
-                validation: new ValidationTools()
-            };
-
-            // 从每个工具类获取工具列表
-            this.availableTools = [];
-            for (const [category, toolSet] of Object.entries(tools)) {
-                const toolDefinitions = toolSet.getTools();
-                toolDefinitions.forEach((tool: any) => {
-                    this.availableTools.push({
-                        category: category,
-                        name: tool.name,
-                        enabled: true, // 默认启用
-                        description: tool.description,
-                        displayDescription: tool.displayDescription
-                    });
-                });
-            }
-
-            console.log(`[ToolManager] Initialized ${this.availableTools.length} tools from MCP server`);
-        } catch (error) {
-            console.error('[ToolManager] Failed to initialize tools from MCP server:', error);
-            // 如果获取失败，使用默认工具列表作为后备
-            this.initializeDefaultTools();
-        }
+        this.availableTools = V2_TOOL_NAMES.map(t => ({
+            name: t.name,
+            enabled: true,
+            description: t.description
+        }));
+        console.log(`[ToolManager] Initialized ${this.availableTools.length} v2 tools`);
     }
 
-    private initializeDefaultTools(): void {
-        // 默认工具列表作为后备方案
-        const toolCategories = [
-            { category: 'scene', name: '씬 도구', tools: [
-                { name: 'getCurrentSceneInfo', description: '현재 씬 정보 조회' },
-                { name: 'getSceneHierarchy', description: '씬 계층구조 조회' },
-                { name: 'createNewScene', description: '새 씬 생성' },
-                { name: 'saveScene', description: '씬 저장' },
-                { name: 'loadScene', description: '씬 불러오기' }
-            ]},
-            { category: 'node', name: '노드 도구', tools: [
-                { name: 'getAllNodes', description: '모든 노드 조회' },
-                { name: 'findNodeByName', description: '이름으로 노드 검색' },
-                { name: 'createNode', description: '노드 생성' },
-                { name: 'deleteNode', description: '노드 삭제' },
-                { name: 'setNodeProperty', description: '노드 속성 설정' },
-                { name: 'getNodeInfo', description: '노드 정보 조회' }
-            ]},
-            { category: 'component', name: '컴포넌트 도구', tools: [
-                { name: 'addComponentToNode', description: '노드에 컴포넌트 추가' },
-                { name: 'removeComponentFromNode', description: '노드에서 컴포넌트 제거' },
-                { name: 'setComponentProperty', description: '컴포넌트 속성 설정' },
-                { name: 'getComponentInfo', description: '컴포넌트 정보 조회' }
-            ]},
-            { category: 'prefab', name: '프리팹 도구', tools: [
-                { name: 'createPrefabFromNode', description: '노드에서 프리팹 생성' },
-                { name: 'instantiatePrefab', description: '프리팹 인스턴스화' },
-                { name: 'getPrefabInfo', description: '프리팹 정보 조회' },
-                { name: 'savePrefab', description: '프리팹 저장' }
-            ]},
-            { category: 'project', name: '프로젝트 도구', tools: [
-                { name: 'getProjectInfo', description: '프로젝트 정보 조회' },
-                { name: 'getAssetList', description: '에셋 목록 조회' },
-                { name: 'createAsset', description: '에셋 생성' },
-                { name: 'deleteAsset', description: '에셋 삭제' }
-            ]},
-            { category: 'debug', name: '디버그 도구', tools: [
-                { name: 'getConsoleLogs', description: '콘솔 로그 조회' },
-                { name: 'getPerformanceStats', description: '성능 통계 조회' },
-                { name: 'validateScene', description: '씬 검증' },
-                { name: 'getErrorLogs', description: '에러 로그 조회' }
-            ]},
-            { category: 'preferences', name: '환경설정 도구', tools: [
-                { name: 'getPreferences', description: '환경설정 조회' },
-                { name: 'setPreferences', description: '환경설정 설정' },
-                { name: 'resetPreferences', description: '환경설정 초기화' }
-            ]},
-            { category: 'server', name: '서버 도구', tools: [
-                { name: 'getServerStatus', description: '서버 상태 조회' },
-                { name: 'getConnectedClients', description: '연결된 클라이언트 조회' },
-                { name: 'getServerLogs', description: '서버 로그 조회' }
-            ]},
-            { category: 'broadcast', name: '브로드캐스트 도구', tools: [
-                { name: 'broadcastMessage', description: '메시지 브로드캐스트' },
-                { name: 'getBroadcastHistory', description: '브로드캐스트 이력 조회' }
-            ]},
-            { category: 'sceneAdvanced', name: '고급 씬 도구', tools: [
-                { name: 'optimizeScene', description: '씬 최적화' },
-                { name: 'analyzeScene', description: '씬 분석' },
-                { name: 'batchOperation', description: '일괄 작업' }
-            ]},
-            { category: 'sceneView', name: '씬 뷰 도구', tools: [
-                { name: 'getViewportInfo', description: '뷰포트 정보 조회' },
-                { name: 'setViewportCamera', description: '뷰포트 카메라 설정' },
-                { name: 'focusOnNode', description: '노드에 포커스' }
-            ]},
-            { category: 'referenceImage', name: '참조 이미지 도구', tools: [
-                { name: 'addReferenceImage', description: '참조 이미지 추가' },
-                { name: 'removeReferenceImage', description: '참조 이미지 제거' },
-                { name: 'getReferenceImages', description: '참조 이미지 목록 조회' }
-            ]},
-            { category: 'assetAdvanced', name: '고급 에셋 도구', tools: [
-                { name: 'importAsset', description: '에셋 가져오기' },
-                { name: 'exportAsset', description: '에셋 내보내기' },
-                { name: 'processAsset', description: '에셋 처리' }
-            ]},
-            { category: 'validation', name: '유효성 검사 도구', tools: [
-                { name: 'validateProject', description: '프로젝트 검증' },
-                { name: 'validateAssets', description: '에셋 검증' },
-                { name: 'generateReport', description: '리포트 생성' }
-            ]}
-        ];
+    /** Sync persisted configs with current tool list (add new tools, remove stale) */
+    private syncToolList(): void {
+        const currentNames = new Set(V2_TOOL_NAMES.map(t => t.name));
+        let changed = false;
 
-        this.availableTools = [];
-        toolCategories.forEach(category => {
-            category.tools.forEach(tool => {
-                this.availableTools.push({
-                    category: category.category,
-                    name: tool.name,
-                    enabled: true, // 默认启用
-                    description: tool.description
-                });
-            });
-        });
+        for (const config of this.settings.configurations) {
+            // Remove tools that no longer exist
+            const before = config.tools.length;
+            config.tools = config.tools.filter(t => currentNames.has(t.name));
+            if (config.tools.length !== before) changed = true;
 
-        console.log(`[ToolManager] Initialized ${this.availableTools.length} default tools`);
+            // Add new tools that don't exist in config
+            const existingNames = new Set(config.tools.map(t => t.name));
+            for (const tool of V2_TOOL_NAMES) {
+                if (!existingNames.has(tool.name)) {
+                    config.tools.push({ name: tool.name, enabled: true, description: tool.description });
+                    changed = true;
+                }
+            }
+
+            // Sync descriptions
+            const descMap = new Map(V2_TOOL_NAMES.map(t => [t.name, t.description]));
+            for (const tool of config.tools) {
+                const desc = descMap.get(tool.name);
+                if (desc && tool.description !== desc) {
+                    tool.description = desc;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) {
+            console.log('[ToolManager] Synced tool list with v2 tools');
+            this.saveSettings();
+        }
     }
 
     public getAvailableTools(): ToolConfig[] {
@@ -246,22 +161,20 @@ export class ToolManager {
     }
 
     public getCurrentConfiguration(): ToolConfiguration | null {
-        if (!this.settings.currentConfigId) {
-            return null;
-        }
-        return this.settings.configurations.find(config => config.id === this.settings.currentConfigId) || null;
+        if (!this.settings.currentConfigId) return null;
+        return this.settings.configurations.find(c => c.id === this.settings.currentConfigId) || null;
     }
 
     public createConfiguration(name: string, description?: string): ToolConfiguration {
         if (this.settings.configurations.length >= this.settings.maxConfigSlots) {
-            throw new Error(`已达到最大配置槽位数量 (${this.settings.maxConfigSlots})`);
+            throw new Error(`Maximum configuration slots reached (${this.settings.maxConfigSlots})`);
         }
 
         const config: ToolConfiguration = {
             id: uuidv4(),
             name,
             description,
-            tools: this.availableTools.map(tool => ({ ...tool })),
+            tools: this.availableTools.map(t => ({ ...t })),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
@@ -269,143 +182,105 @@ export class ToolManager {
         this.settings.configurations.push(config);
         this.settings.currentConfigId = config.id;
         this.saveSettings();
-
         return config;
     }
 
     public updateConfiguration(configId: string, updates: Partial<ToolConfiguration>): ToolConfiguration {
-        const configIndex = this.settings.configurations.findIndex(config => config.id === configId);
-        if (configIndex === -1) {
-            throw new Error('配置不存在');
-        }
+        const idx = this.settings.configurations.findIndex(c => c.id === configId);
+        if (idx === -1) throw new Error('Configuration not found');
 
-        const config = this.settings.configurations[configIndex];
-        const updatedConfig: ToolConfiguration = {
+        const config = this.settings.configurations[idx];
+        const updated: ToolConfiguration = {
             ...config,
             ...updates,
             updatedAt: new Date().toISOString()
         };
 
-        this.settings.configurations[configIndex] = updatedConfig;
+        this.settings.configurations[idx] = updated;
         this.saveSettings();
-
-        return updatedConfig;
+        return updated;
     }
 
     public deleteConfiguration(configId: string): void {
-        const configIndex = this.settings.configurations.findIndex(config => config.id === configId);
-        if (configIndex === -1) {
-            throw new Error('配置不存在');
-        }
+        const idx = this.settings.configurations.findIndex(c => c.id === configId);
+        if (idx === -1) throw new Error('Configuration not found');
 
-        this.settings.configurations.splice(configIndex, 1);
-        
-        // 如果删除的是当前配置，清空当前配置ID
+        this.settings.configurations.splice(idx, 1);
+
         if (this.settings.currentConfigId === configId) {
-            this.settings.currentConfigId = this.settings.configurations.length > 0 
-                ? this.settings.configurations[0].id 
+            this.settings.currentConfigId = this.settings.configurations.length > 0
+                ? this.settings.configurations[0].id
                 : '';
         }
-
         this.saveSettings();
     }
 
     public setCurrentConfiguration(configId: string): void {
-        const config = this.settings.configurations.find(config => config.id === configId);
-        if (!config) {
-            throw new Error('配置不存在');
-        }
-
+        const config = this.settings.configurations.find(c => c.id === configId);
+        if (!config) throw new Error('Configuration not found');
         this.settings.currentConfigId = configId;
         this.saveSettings();
     }
 
-    public updateToolStatus(configId: string, category: string, toolName: string, enabled: boolean): void {
-        console.log(`Backend: Updating tool status - configId: ${configId}, category: ${category}, toolName: ${toolName}, enabled: ${enabled}`);
-        
-        const config = this.settings.configurations.find(config => config.id === configId);
-        if (!config) {
-            console.error(`Backend: Config not found with ID: ${configId}`);
-            throw new Error('配置不存在');
-        }
+    public updateToolStatus(configId: string, toolName: string, enabled: boolean): void {
+        const config = this.settings.configurations.find(c => c.id === configId);
+        if (!config) throw new Error('Configuration not found');
 
-        console.log(`Backend: Found config: ${config.name}`);
+        const tool = config.tools.find(t => t.name === toolName);
+        if (!tool) throw new Error(`Tool '${toolName}' not found`);
 
-        const tool = config.tools.find(t => t.category === category && t.name === toolName);
-        if (!tool) {
-            console.error(`Backend: Tool not found - category: ${category}, name: ${toolName}`);
-            throw new Error('工具不存在');
-        }
-
-        console.log(`Backend: Found tool: ${tool.name}, current enabled: ${tool.enabled}, new enabled: ${enabled}`);
-        
         tool.enabled = enabled;
         config.updatedAt = new Date().toISOString();
-        
-        console.log(`Backend: Tool updated, saving settings...`);
         this.saveSettings();
-        console.log(`Backend: Settings saved successfully`);
     }
 
-    public updateToolStatusBatch(configId: string, updates: { category: string; name: string; enabled: boolean }[]): void {
-        console.log(`Backend: updateToolStatusBatch called with configId: ${configId}`);
-        console.log(`Backend: Current configurations count: ${this.settings.configurations.length}`);
-        console.log(`Backend: Current config IDs:`, this.settings.configurations.map(c => c.id));
-        
-        const config = this.settings.configurations.find(config => config.id === configId);
-        if (!config) {
-            console.error(`Backend: Config not found with ID: ${configId}`);
-            console.error(`Backend: Available config IDs:`, this.settings.configurations.map(c => c.id));
-            throw new Error('配置不存在');
-        }
+    public updateToolStatusBatch(configId: string, updates: { name: string; enabled: boolean }[]): void {
+        const config = this.settings.configurations.find(c => c.id === configId);
+        if (!config) throw new Error('Configuration not found');
 
-        console.log(`Backend: Found config: ${config.name}, updating ${updates.length} tools`);
-
-        updates.forEach(update => {
-            const tool = config.tools.find(t => t.category === update.category && t.name === update.name);
+        for (const update of updates) {
+            const tool = config.tools.find(t => t.name === update.name);
             if (tool) {
                 tool.enabled = update.enabled;
             }
-        });
+        }
 
         config.updatedAt = new Date().toISOString();
         this.saveSettings();
-        console.log(`Backend: Batch update completed successfully`);
     }
 
     public exportConfiguration(configId: string): string {
-        const config = this.settings.configurations.find(config => config.id === configId);
-        if (!config) {
-            throw new Error('配置不存在');
-        }
-
-        return this.exportToolConfiguration(config);
+        const config = this.settings.configurations.find(c => c.id === configId);
+        if (!config) throw new Error('Configuration not found');
+        return JSON.stringify(config, null, 2);
     }
 
     public importConfiguration(configJson: string): ToolConfiguration {
-        const config = this.importToolConfiguration(configJson);
-        
-        // 生成新的ID和时间戳
+        const config = JSON.parse(configJson);
+        if (!config.id || !config.name || !Array.isArray(config.tools)) {
+            throw new Error('Invalid configuration format');
+        }
+
         config.id = uuidv4();
         config.createdAt = new Date().toISOString();
         config.updatedAt = new Date().toISOString();
 
         if (this.settings.configurations.length >= this.settings.maxConfigSlots) {
-            throw new Error(`已达到最大配置槽位数量 (${this.settings.maxConfigSlots})`);
+            throw new Error(`Maximum configuration slots reached (${this.settings.maxConfigSlots})`);
         }
 
         this.settings.configurations.push(config);
         this.saveSettings();
-
         return config;
     }
 
-    public getEnabledTools(): ToolConfig[] {
+    /** Returns flat array of enabled tool names for MCP server filtering */
+    public getEnabledToolNames(): string[] {
         const currentConfig = this.getCurrentConfiguration();
         if (!currentConfig) {
-            return this.availableTools.filter(tool => tool.enabled);
+            return this.availableTools.filter(t => t.enabled).map(t => t.name);
         }
-        return currentConfig.tools.filter(tool => tool.enabled);
+        return currentConfig.tools.filter(t => t.enabled).map(t => t.name);
     }
 
     public getToolManagerState() {
@@ -419,39 +294,7 @@ export class ToolManager {
         };
     }
 
-    private syncDescriptions(): void {
-        const sourceDescMap = new Map<string, { description: string; displayDescription?: string }>();
-        this.availableTools.forEach(tool => {
-            sourceDescMap.set(`${tool.category}_${tool.name}`, {
-                description: tool.description,
-                displayDescription: tool.displayDescription
-            });
-        });
-
-        let changed = false;
-        this.settings.configurations.forEach(config => {
-            config.tools.forEach(tool => {
-                const key = `${tool.category}_${tool.name}`;
-                const source = sourceDescMap.get(key);
-                if (source) {
-                    if (tool.description !== source.description || tool.displayDescription !== source.displayDescription) {
-                        tool.description = source.description;
-                        tool.displayDescription = source.displayDescription;
-                        changed = true;
-                    }
-                }
-            });
-        });
-
-        if (changed) {
-            console.log('[ToolManager] Synced descriptions from source to persisted configs');
-            this.saveSettings();
-        }
-    }
-
     private saveSettings(): void {
-        console.log(`Backend: Saving settings, current configs count: ${this.settings.configurations.length}`);
         this.saveToolManagerSettings(this.settings);
-        console.log(`Backend: Settings saved to file`);
     }
-} 
+}

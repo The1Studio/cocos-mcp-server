@@ -127,7 +127,45 @@ export interface ToolExecutor {
     execute(toolName: string, args: any): Promise<ToolResponse>;
 }
 
-// 工具配置管理相关接口
+// === v2 Action-based Tool Types ===
+
+/** Action-based tool executor interface */
+export interface ActionToolExecutor {
+    /** Tool name (e.g., 'manage_node') */
+    readonly name: string;
+    /** Tool description for LLM */
+    readonly description: string;
+    /** MCP input schema with action enum */
+    readonly inputSchema: object;
+    /** Execute an action with given arguments */
+    execute(action: string, args: Record<string, any>): Promise<ActionToolResult>;
+    /** List of supported actions */
+    readonly actions: string[];
+}
+
+/** Standardized tool result — replaces ad-hoc ToolResponse */
+export interface ActionToolResult {
+    success: boolean;
+    data?: any;
+    message?: string;
+    error?: string;
+    /** Guidance for the LLM on how to correct the call or proceed */
+    instruction?: string;
+    /** When true, MCP response includes isError flag so LLM sees the failure */
+    isError?: boolean;
+}
+
+/** Helper to create success responses */
+export function successResult(data: any, message?: string): ActionToolResult {
+    return { success: true, data, message };
+}
+
+/** Helper to create error responses */
+export function errorResult(error: string): ActionToolResult {
+    return { success: false, error, isError: true };
+}
+
+// Tool configuration management interfaces
 export interface ToolConfig {
     category: string;
     name: string;

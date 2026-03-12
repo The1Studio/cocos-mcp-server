@@ -1,29 +1,38 @@
 import * as http from 'http';
 import * as url from 'url';
 import { v4 as uuidv4 } from 'uuid';
-import { MCPServerSettings, ServerStatus, MCPClient, ToolDefinition } from './types';
-import { SceneTools } from './tools/scene-tools';
-import { NodeTools } from './tools/node-tools';
-import { ComponentTools } from './tools/component-tools';
-import { PrefabTools } from './tools/prefab-tools';
-import { ProjectTools } from './tools/project-tools';
-import { DebugTools } from './tools/debug-tools';
-import { PreferencesTools } from './tools/preferences-tools';
-import { ServerTools } from './tools/server-tools';
-import { BroadcastTools } from './tools/broadcast-tools';
-import { SceneAdvancedTools } from './tools/scene-advanced-tools';
-import { SceneViewTools } from './tools/scene-view-tools';
-import { ReferenceImageTools } from './tools/reference-image-tools';
-import { AssetAdvancedTools } from './tools/asset-advanced-tools';
-import { ValidationTools } from './tools/validation-tools';
+import { MCPServerSettings, ServerStatus, MCPClient, ToolDefinition, ActionToolExecutor } from './types';
+import { ManageScene } from './tools/manage-scene';
+import { ManageNode } from './tools/manage-node';
+import { ManageComponent } from './tools/manage-component';
+import { ManagePrefab } from './tools/manage-prefab';
+import { ManageAsset } from './tools/manage-asset';
+import { ManageProject } from './tools/manage-project';
+import { ManageDebug } from './tools/manage-debug';
+import { ManagePreferences } from './tools/manage-preferences';
+import { ManageServer } from './tools/manage-server';
+import { ManageBroadcast } from './tools/manage-broadcast';
+import { ManageSceneView } from './tools/manage-scene-view';
+import { ManageNodeHierarchy } from './tools/manage-node-hierarchy';
+import { ManageSceneQuery } from './tools/manage-scene-query';
+import { ManageUndo } from './tools/manage-undo';
+import { ManageReferenceImage } from './tools/manage-reference-image';
+import { ManageValidation } from './tools/manage-validation';
+import { ManageSelection } from './tools/manage-selection';
+import { ManageScript } from './tools/manage-script';
+import { ManageMaterial } from './tools/manage-material';
+import { ManageAnimation } from './tools/manage-animation';
+import { CocosResources } from './resources/cocos-resources';
 
 export class MCPServer {
     private settings: MCPServerSettings;
     private httpServer: http.Server | null = null;
     private clients: Map<string, MCPClient> = new Map();
-    private tools: Record<string, any> = {};
+    private toolExecutors: Map<string, ActionToolExecutor> = new Map();
+    private toolDefinitions: ToolDefinition[] = [];
     private toolsList: ToolDefinition[] = [];
-    private enabledTools: any[] = []; // 存储启用的工具列表
+    private enabledTools: string[] = [];
+    private resourceProvider = new CocosResources();
 
     constructor(settings: MCPServerSettings) {
         this.settings = settings;
@@ -32,22 +41,38 @@ export class MCPServer {
 
     private initializeTools(): void {
         try {
-            console.log('[MCPServer] Initializing tools...');
-            this.tools.scene = new SceneTools();
-            this.tools.node = new NodeTools();
-            this.tools.component = new ComponentTools();
-            this.tools.prefab = new PrefabTools();
-            this.tools.project = new ProjectTools();
-            this.tools.debug = new DebugTools();
-            this.tools.preferences = new PreferencesTools();
-            this.tools.server = new ServerTools();
-            this.tools.broadcast = new BroadcastTools();
-            this.tools.sceneAdvanced = new SceneAdvancedTools();
-            this.tools.sceneView = new SceneViewTools();
-            this.tools.referenceImage = new ReferenceImageTools();
-            this.tools.assetAdvanced = new AssetAdvancedTools();
-            this.tools.validation = new ValidationTools();
-            console.log('[MCPServer] Tools initialized successfully');
+            console.log('[MCPServer] Initializing v2 action-based tools...');
+            const tools: ActionToolExecutor[] = [
+                new ManageScene(),
+                new ManageNode(),
+                new ManageComponent(),
+                new ManagePrefab(),
+                new ManageAsset(),
+                new ManageProject(),
+                new ManageDebug(),
+                new ManagePreferences(),
+                new ManageServer(),
+                new ManageBroadcast(),
+                new ManageSceneView(),
+                new ManageNodeHierarchy(),
+                new ManageSceneQuery(),
+                new ManageUndo(),
+                new ManageReferenceImage(),
+                new ManageValidation(),
+                new ManageSelection(),
+                new ManageScript(),
+                new ManageMaterial(),
+                new ManageAnimation(),
+            ];
+            for (const tool of tools) {
+                this.toolExecutors.set(tool.name, tool);
+                this.toolDefinitions.push({
+                    name: tool.name,
+                    description: tool.description,
+                    inputSchema: tool.inputSchema
+                });
+            }
+            console.log(`[MCPServer] ${this.toolDefinitions.length} v2 tools initialized`);
         } catch (error) {
             console.error('[MCPServer] Error initializing tools:', error);
             throw error;
@@ -90,60 +115,40 @@ export class MCPServer {
 
     private setupTools(): void {
         this.toolsList = [];
-        
-        // 如果没有启用工具配置，返回所有工具
+
         if (!this.enabledTools || this.enabledTools.length === 0) {
-            for (const [category, toolSet] of Object.entries(this.tools)) {
-                const tools = toolSet.getTools();
-                for (const tool of tools) {
-                    this.toolsList.push({
-                        name: `${category}_${tool.name}`,
-                        description: tool.description,
-                        inputSchema: tool.inputSchema
-                    });
-                }
-            }
+            // No filter — return all tools
+            this.toolsList = [...this.toolDefinitions];
         } else {
-            // 根据启用的工具配置过滤
-            const enabledToolNames = new Set(this.enabledTools.map(tool => `${tool.category}_${tool.name}`));
-            
-            for (const [category, toolSet] of Object.entries(this.tools)) {
-                const tools = toolSet.getTools();
-                for (const tool of tools) {
-                    const toolName = `${category}_${tool.name}`;
-                    if (enabledToolNames.has(toolName)) {
-                        this.toolsList.push({
-                            name: toolName,
-                            description: tool.description,
-                            inputSchema: tool.inputSchema
-                        });
-                    }
-                }
-            }
+            // Filter by enabled tool names
+            const enabledSet = new Set(this.enabledTools);
+            this.toolsList = this.toolDefinitions.filter(t => enabledSet.has(t.name));
         }
-        
+
         console.log(`[MCPServer] Setup tools: ${this.toolsList.length} tools available`);
     }
 
-    public getFilteredTools(enabledTools: any[]): ToolDefinition[] {
+    public getFilteredTools(enabledTools: string[]): ToolDefinition[] {
         if (!enabledTools || enabledTools.length === 0) {
-            return this.toolsList; // 如果没有过滤配置，返回所有工具
+            return this.toolsList;
         }
-
-        const enabledToolNames = new Set(enabledTools.map(tool => `${tool.category}_${tool.name}`));
-        return this.toolsList.filter(tool => enabledToolNames.has(tool.name));
+        const enabledSet = new Set(enabledTools);
+        return this.toolsList.filter(tool => enabledSet.has(tool.name));
     }
 
     public async executeToolCall(toolName: string, args: any): Promise<any> {
-        const parts = toolName.split('_');
-        const category = parts[0];
-        const toolMethodName = parts.slice(1).join('_');
-        
-        if (this.tools[category]) {
-            return await this.tools[category].execute(toolMethodName, args);
+        const executor = this.toolExecutors.get(toolName);
+        if (!executor) {
+            throw new Error(`Tool '${toolName}' not found. Available: ${Array.from(this.toolExecutors.keys()).join(', ')}`);
         }
-        
-        throw new Error(`Tool ${toolName} not found`);
+        const { action, ...restArgs } = args;
+        if (!action) {
+            throw new Error(
+                `Missing required 'action' parameter for tool '${toolName}'. ` +
+                `Available actions: ${executor.actions.join(', ')}`
+            );
+        }
+        return await executor.execute(action, restArgs);
     }
 
     public getClients(): MCPClient[] {
@@ -153,10 +158,10 @@ export class MCPServer {
         return this.toolsList;
     }
 
-    public updateEnabledTools(enabledTools: any[]): void {
+    public updateEnabledTools(enabledTools: string[]): void {
         console.log(`[MCPServer] Updating enabled tools: ${enabledTools.length} tools`);
         this.enabledTools = enabledTools;
-        this.setupTools(); // 重新设置工具列表
+        this.setupTools();
     }
 
     public getSettings(): MCPServerSettings {
@@ -253,21 +258,34 @@ export class MCPServer {
                 case 'tools/list':
                     result = { tools: this.getAvailableTools() };
                     break;
-                case 'tools/call':
-                    const { name, arguments: args } = params;
-                    const toolResult = await this.executeToolCall(name, args);
-                    result = { content: [{ type: 'text', text: JSON.stringify(toolResult) }] };
+                case 'tools/call': {
+                    const { name, arguments: callArgs } = params;
+                    const toolResult = await this.executeToolCall(name, callArgs);
+                    result = {
+                        content: [{ type: 'text', text: JSON.stringify(toolResult) }],
+                        isError: toolResult.isError || false
+                    };
                     break;
+                }
+                case 'resources/list':
+                    result = { resources: this.resourceProvider.resources };
+                    break;
+                case 'resources/read': {
+                    const { uri } = params;
+                    const content = await this.resourceProvider.read(uri);
+                    result = { contents: [content] };
+                    break;
+                }
                 case 'initialize':
-                    // MCP initialization
                     result = {
                         protocolVersion: '2024-11-05',
                         capabilities: {
-                            tools: {}
+                            tools: {},
+                            resources: {}
                         },
                         serverInfo: {
                             name: 'cocos-mcp-server',
-                            version: '1.0.0'
+                            version: '2.0.0'
                         }
                     };
                     break;
@@ -340,17 +358,15 @@ export class MCPServer {
         
         req.on('end', async () => {
             try {
-                // Extract tool name from path like /api/node/set_position
+                // Extract tool name from path like /api/manage_node
                 const pathParts = pathname.split('/').filter(p => p);
-                if (pathParts.length < 3) {
+                if (pathParts.length < 2) {
                     res.writeHead(400);
-                    res.end(JSON.stringify({ error: 'Invalid API path. Use /api/{category}/{tool_name}' }));
+                    res.end(JSON.stringify({ error: 'Invalid API path. Use /api/{tool_name}' }));
                     return;
                 }
-                
-                const category = pathParts[1];
-                const toolName = pathParts[2];
-                const fullToolName = `${category}_${toolName}`;
+
+                const fullToolName = pathParts.slice(1).join('_');
                 
                 // Parse parameters with enhanced error handling
                 let params;
@@ -397,27 +413,22 @@ export class MCPServer {
 
     private getSimplifiedToolsList(): any[] {
         return this.toolsList.map(tool => {
-            const parts = tool.name.split('_');
-            const category = parts[0];
-            const toolName = parts.slice(1).join('_');
-            
+            const executor = this.toolExecutors.get(tool.name);
             return {
                 name: tool.name,
-                category: category,
-                toolName: toolName,
                 description: tool.description,
-                apiPath: `/api/${category}/${toolName}`,
-                curlExample: this.generateCurlExample(category, toolName, tool.inputSchema)
+                actions: executor ? executor.actions : [],
+                apiPath: `/api/${tool.name}`,
+                curlExample: this.generateCurlExample(tool.name, tool.inputSchema)
             };
         });
     }
 
-    private generateCurlExample(category: string, toolName: string, schema: any): string {
-        // Generate sample parameters based on schema
+    private generateCurlExample(toolName: string, schema: any): string {
         const sampleParams = this.generateSampleParams(schema);
         const jsonString = JSON.stringify(sampleParams, null, 2);
-        
-        return `curl -X POST http://127.0.0.1:8585/api/${category}/${toolName} \\
+
+        return `curl -X POST http://127.0.0.1:${this.settings.port}/api/${toolName} \\
   -H "Content-Type: application/json" \\
   -d '${jsonString}'`;
     }

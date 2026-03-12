@@ -94,24 +94,15 @@
                 </div>
 
                 <div class="tools-container">
-                    <div v-for="category in toolCategories" :key="category" class="tool-category">
-                        <div class="category-header">
-                            <h5>{{ getCategoryDisplayName(category) }}</h5>
-                            <div class="category-controls">
-                                <ui-button @click="toggleCategoryTools(category, true)" class="small">Select All</ui-button>
-                                <ui-button @click="toggleCategoryTools(category, false)" class="small">Deselect All</ui-button>
-                            </div>
-                        </div>
-                        <div class="tool-items">
-                            <div v-for="tool in getToolsByCategory(category)" :key="tool.name" class="tool-item">
-                                <ui-checkbox
-                                    :value="tool.enabled"
-                                    @change="(event) => updateToolStatus(category, tool.name, event.target.checked)"
-                                ></ui-checkbox>
-                                <div class="tool-info">
-                                    <div class="tool-name">{{ tool.name }}</div>
-                                    <div class="tool-description">{{ tool.displayDescription || tool.description }}</div>
-                                </div>
+                    <div class="tool-items">
+                        <div v-for="tool in availableTools" :key="tool.name" class="tool-item">
+                            <ui-checkbox
+                                :value="tool.enabled"
+                                @change="(event) => updateToolStatus(tool.name, event.target.checked)"
+                            ></ui-checkbox>
+                            <div class="tool-info">
+                                <div class="tool-name">{{ tool.name }}</div>
+                                <div class="tool-description">{{ tool.description }}</div>
                             </div>
                         </div>
                     </div>
