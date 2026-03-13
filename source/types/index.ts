@@ -20,16 +20,6 @@ export interface ToolDefinition {
     inputSchema: any;
 }
 
-export interface ToolResponse {
-    success: boolean;
-    data?: any;
-    message?: string;
-    error?: string;
-    instruction?: string;
-    warning?: string;
-    verificationData?: any;
-    updatedProperties?: string[];
-}
 
 export interface NodeInfo {
     uuid: string;
@@ -121,11 +111,6 @@ export interface MCPClient {
     id: string;
     lastActivity: Date;
     userAgent?: string;
-}
-
-export interface ToolExecutor {
-    getTools(): ToolDefinition[];
-    execute(toolName: string, args: any): Promise<ToolResponse>;
 }
 
 // === v2 Action-based Tool Types ===

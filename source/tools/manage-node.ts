@@ -1,10 +1,9 @@
 import { BaseActionTool } from './base-action-tool';
 import { ActionToolResult, NodeInfo, successResult, errorResult } from '../types';
 import { coerceBool, coerceInt, normalizeVec3 } from '../utils/normalize';
-import { ComponentTools } from './component-tools';
+import { is2DNode, normalizeTransformValue, getComponentCategory, getNodePath, searchNodeInTree } from './manage-node-transform-helpers';
 
 export class ManageNode extends BaseActionTool {
-    private componentTools = new ComponentTools();
 
     readonly name = 'manage_node';
     readonly description = 'Manage nodes in the current scene. Actions: create, get_info, find, find_by_name, get_all, set_property, set_transform, delete, move, duplicate, detect_type. NOT for components — use manage_component. NOT for prefabs — use manage_prefab. Prerequisites: scene must be open (verify with manage_scene action=get_current). To find node UUIDs: use action=find or action=get_all first.';
@@ -233,15 +232,11 @@ export class ManageNode extends BaseActionTool {
                     await new Promise(r => setTimeout(r, 100));
                     for (const componentType of args.components) {
                         try {
-                            const result = await this.componentTools.execute('add_component', {
-                                nodeUuid: uuid,
-                                componentType: componentType
+                            await Editor.Message.request('scene', 'create-component', {
+                                uuid,
+                                component: componentType
                             });
-                            if (result.success) {
-                                console.log(`Component ${componentType} added successfully`);
-                            } else {
-                                console.warn(`Failed to add component ${componentType}:`, result.error);
-                            }
+                            console.log(`Component ${componentType} added successfully`);
                         } catch (err) {
                             console.warn(`Failed to add component ${componentType}:`, err);
                         }
@@ -311,225 +306,134 @@ export class ManageNode extends BaseActionTool {
 
     private async getNodeInfo(uuid: string): Promise<ActionToolResult> {
         if (!uuid) return errorResult('uuid is required');
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'query-node', uuid).then((nodeData: any) => {
-                if (!nodeData) {
-                    resolve(errorResult('Node not found or invalid response'));
-                    return;
-                }
-                const info: NodeInfo = {
-                    uuid: nodeData.uuid?.value || uuid,
-                    name: nodeData.name?.value || 'Unknown',
-                    active: nodeData.active?.value !== undefined ? nodeData.active.value : true,
-                    position: nodeData.position?.value || { x: 0, y: 0, z: 0 },
-                    rotation: nodeData.rotation?.value || { x: 0, y: 0, z: 0 },
-                    scale: nodeData.scale?.value || { x: 1, y: 1, z: 1 },
-                    parent: nodeData.parent?.value?.uuid || null,
-                    children: nodeData.children || [],
-                    components: (nodeData.__comps__ || []).map((comp: any) => ({
-                        type: comp.__type__ || 'Unknown',
-                        enabled: comp.enabled !== undefined ? comp.enabled : true
-                    })),
-                    layer: nodeData.layer?.value || 1073741824,
-                    mobility: nodeData.mobility?.value || 0
-                };
-                resolve(successResult(info));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const nodeData: any = await Editor.Message.request('scene', 'query-node', uuid);
+            if (!nodeData) return errorResult('Node not found or invalid response');
+            const info: NodeInfo = {
+                uuid: nodeData.uuid?.value || uuid,
+                name: nodeData.name?.value || 'Unknown',
+                active: nodeData.active?.value !== undefined ? nodeData.active.value : true,
+                position: nodeData.position?.value || { x: 0, y: 0, z: 0 },
+                rotation: nodeData.rotation?.value || { x: 0, y: 0, z: 0 },
+                scale: nodeData.scale?.value || { x: 1, y: 1, z: 1 },
+                parent: nodeData.parent?.value?.uuid || null,
+                children: nodeData.children || [],
+                components: (nodeData.__comps__ || []).map((comp: any) => ({
+                    type: comp.__type__ || 'Unknown',
+                    enabled: comp.enabled !== undefined ? comp.enabled : true
+                })),
+                layer: nodeData.layer?.value || 1073741824,
+                mobility: nodeData.mobility?.value || 0
+            };
+            return successResult(info);
+        } catch (err: any) {
+            return errorResult(err.message);
+        }
     }
 
     private async findNodes(pattern: string, exactMatch: boolean = false): Promise<ActionToolResult> {
         if (!pattern) return errorResult('pattern is required for action=find');
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
-                const nodes: any[] = [];
-
-                const searchTree = (node: any, currentPath: string = '') => {
-                    const nodePath = currentPath ? `${currentPath}/${node.name}` : node.name;
-                    const matches = exactMatch
-                        ? node.name === pattern
-                        : node.name.toLowerCase().includes(pattern.toLowerCase());
-
-                    if (matches) {
-                        nodes.push({ uuid: node.uuid, name: node.name, path: nodePath });
-                    }
-
-                    if (node.children) {
-                        for (const child of node.children) {
-                            searchTree(child, nodePath);
-                        }
-                    }
-                };
-
-                if (tree) {
-                    searchTree(tree);
+        try {
+            const tree: any = await Editor.Message.request('scene', 'query-node-tree');
+            const nodes: any[] = [];
+            const searchTree = (node: any, currentPath: string = '') => {
+                const nodePath = currentPath ? `${currentPath}/${node.name}` : node.name;
+                const matches = exactMatch
+                    ? node.name === pattern
+                    : node.name.toLowerCase().includes(pattern.toLowerCase());
+                if (matches) nodes.push({ uuid: node.uuid, name: node.name, path: nodePath });
+                if (node.children) {
+                    for (const child of node.children) searchTree(child, nodePath);
                 }
-
-                resolve(successResult(nodes));
-            }).catch((err: Error) => {
-                const options = {
-                    name: 'cocos-mcp-server',
-                    method: 'findNodes',
-                    args: [pattern, exactMatch]
-                };
-                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
-                    if (result && result.success) {
-                        resolve(successResult(result.data, result.message));
-                    } else {
-                        resolve(errorResult(result?.error || 'Unknown error'));
-                    }
-                }).catch((err2: Error) => {
-                    resolve(errorResult(`Tree search failed: ${err.message}, Scene script failed: ${err2.message}`));
+            };
+            if (tree) searchTree(tree);
+            return successResult(nodes);
+        } catch (err: any) {
+            try {
+                const result: any = await Editor.Message.request('scene', 'execute-scene-script', {
+                    name: 'cocos-mcp-server', method: 'findNodes', args: [pattern, exactMatch]
                 });
-            });
-        });
+                if (result && result.success) return successResult(result.data, result.message);
+                return errorResult(result?.error || 'Unknown error');
+            } catch (err2: any) {
+                return errorResult(`Tree search failed: ${err.message}, Scene script failed: ${err2.message}`);
+            }
+        }
     }
 
     private async findNodeByName(name: string): Promise<ActionToolResult> {
         if (!name) return errorResult('name is required for action=find_by_name');
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
-                const foundNode = this.searchNodeInTree(tree, name);
-                if (foundNode) {
-                    resolve(successResult({
-                        uuid: foundNode.uuid,
-                        name: foundNode.name,
-                        path: this.getNodePath(foundNode)
-                    }));
-                } else {
-                    resolve(errorResult(`Node '${name}' not found`));
-                }
-            }).catch((err: Error) => {
-                const options = {
-                    name: 'cocos-mcp-server',
-                    method: 'findNodeByName',
-                    args: [name]
-                };
-                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
-                    if (result && result.success) {
-                        resolve(successResult(result.data, result.message));
-                    } else {
-                        resolve(errorResult(result?.error || 'Unknown error'));
-                    }
-                }).catch((err2: Error) => {
-                    resolve(errorResult(`Direct API failed: ${err.message}, Scene script failed: ${err2.message}`));
+        try {
+            const tree: any = await Editor.Message.request('scene', 'query-node-tree');
+            const foundNode = searchNodeInTree(tree, name);
+            if (foundNode) {
+                return successResult({ uuid: foundNode.uuid, name: foundNode.name, path: getNodePath(foundNode) });
+            }
+            return errorResult(`Node '${name}' not found`);
+        } catch (err: any) {
+            try {
+                const result: any = await Editor.Message.request('scene', 'execute-scene-script', {
+                    name: 'cocos-mcp-server', method: 'findNodeByName', args: [name]
                 });
-            });
-        });
-    }
-
-    private searchNodeInTree(node: any, targetName: string): any {
-        if (node.name === targetName) {
-            return node;
-        }
-        if (node.children) {
-            for (const child of node.children) {
-                const found = this.searchNodeInTree(child, targetName);
-                if (found) return found;
+                if (result && result.success) return successResult(result.data, result.message);
+                return errorResult(result?.error || 'Unknown error');
+            } catch (err2: any) {
+                return errorResult(`Direct API failed: ${err.message}, Scene script failed: ${err2.message}`);
             }
         }
-        return null;
     }
 
     private async getAllNodes(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
-                const nodes: any[] = [];
-
-                const traverseTree = (node: any) => {
-                    nodes.push({
-                        uuid: node.uuid,
-                        name: node.name,
-                        type: node.type,
-                        active: node.active,
-                        path: this.getNodePath(node)
-                    });
-                    if (node.children) {
-                        for (const child of node.children) {
-                            traverseTree(child);
-                        }
-                    }
-                };
-
-                if (tree && tree.children) {
-                    traverseTree(tree);
+        try {
+            const tree: any = await Editor.Message.request('scene', 'query-node-tree');
+            const nodes: any[] = [];
+            const traverseTree = (node: any) => {
+                nodes.push({ uuid: node.uuid, name: node.name, type: node.type, active: node.active, path: getNodePath(node) });
+                if (node.children) {
+                    for (const child of node.children) traverseTree(child);
                 }
-
-                resolve(successResult({ totalNodes: nodes.length, nodes }));
-            }).catch((err: Error) => {
-                const options = {
-                    name: 'cocos-mcp-server',
-                    method: 'getAllNodes',
-                    args: []
-                };
-                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
-                    if (result && result.success) {
-                        resolve(successResult(result.data, result.message));
-                    } else {
-                        resolve(errorResult(result?.error || 'Unknown error'));
-                    }
-                }).catch((err2: Error) => {
-                    resolve(errorResult(`Direct API failed: ${err.message}, Scene script failed: ${err2.message}`));
+            };
+            if (tree && tree.children) traverseTree(tree);
+            return successResult({ totalNodes: nodes.length, nodes });
+        } catch (err: any) {
+            try {
+                const result: any = await Editor.Message.request('scene', 'execute-scene-script', {
+                    name: 'cocos-mcp-server', method: 'getAllNodes', args: []
                 });
-            });
-        });
-    }
-
-    // Stop at scene root (node whose parent has no parent), not at hardcoded "Canvas" name
-    private getNodePath(node: any): string {
-        const path = [node.name];
-        let current = node.parent;
-        while (current && current.parent !== null && current.parent !== undefined) {
-            path.unshift(current.name);
-            current = current.parent;
+                if (result && result.success) return successResult(result.data, result.message);
+                return errorResult(result?.error || 'Unknown error');
+            } catch (err2: any) {
+                return errorResult(`Direct API failed: ${err.message}, Scene script failed: ${err2.message}`);
+            }
         }
-        return path.join('/');
     }
 
     private async setNodeProperty(uuid: string, property: string, value: any): Promise<ActionToolResult> {
         if (!uuid || !property || value === undefined) {
             return errorResult('uuid, property, and value are required for action=set_property');
         }
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'set-property', {
-                uuid,
-                path: property,
-                dump: { value }
-            }).then(() => {
-                this.getNodeInfo(uuid).then((nodeInfo) => {
-                    resolve(successResult({
-                        nodeUuid: uuid,
-                        property,
-                        newValue: value,
-                        nodeInfo: nodeInfo.data,
-                        changeDetails: {
-                            property,
-                            value,
-                            timestamp: new Date().toISOString()
-                        }
-                    }, `Property '${property}' updated successfully`));
-                }).catch(() => {
-                    resolve(successResult({ nodeUuid: uuid, property, newValue: value }, `Property '${property}' updated successfully (verification failed)`));
+        try {
+            await Editor.Message.request('scene', 'set-property', { uuid, path: property, dump: { value } });
+            try {
+                const nodeInfo = await this.getNodeInfo(uuid);
+                return successResult({
+                    nodeUuid: uuid, property, newValue: value, nodeInfo: nodeInfo.data,
+                    changeDetails: { property, value, timestamp: new Date().toISOString() }
+                }, `Property '${property}' updated successfully`);
+            } catch {
+                return successResult({ nodeUuid: uuid, property, newValue: value }, `Property '${property}' updated successfully (verification failed)`);
+            }
+        } catch (err: any) {
+            try {
+                const result: any = await Editor.Message.request('scene', 'execute-scene-script', {
+                    name: 'cocos-mcp-server', method: 'setNodeProperty', args: [uuid, property, value]
                 });
-            }).catch((err: Error) => {
-                const options = {
-                    name: 'cocos-mcp-server',
-                    method: 'setNodeProperty',
-                    args: [uuid, property, value]
-                };
-                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
-                    if (result && result.success) {
-                        resolve(successResult(result.data, result.message));
-                    } else {
-                        resolve(errorResult(result?.error || 'Unknown error'));
-                    }
-                }).catch((err2: Error) => {
-                    resolve(errorResult(`Direct API failed: ${err.message}, Scene script failed: ${err2.message}`));
-                });
-            });
-        });
+                if (result && result.success) return successResult(result.data, result.message);
+                return errorResult(result?.error || 'Unknown error');
+            } catch (err2: any) {
+                return errorResult(`Direct API failed: ${err.message}, Scene script failed: ${err2.message}`);
+            }
+        }
     }
 
     private async setNodeTransform(args: any): Promise<ActionToolResult> {
@@ -549,10 +453,10 @@ export class ManageNode extends BaseActionTool {
             }
 
             const nodeInfo = nodeInfoResponse.data;
-            const is2DNode = this.is2DNode(nodeInfo);
+            const nodeIs2D = is2DNode(nodeInfo);
 
             if (position) {
-                const normalized = this.normalizeTransformValue(position, 'position', is2DNode);
+                const normalized = normalizeTransformValue(position, 'position', nodeIs2D);
                 if (normalized.warning) warnings.push(normalized.warning);
                 updatePromises.push(
                     Editor.Message.request('scene', 'set-property', {
@@ -563,7 +467,7 @@ export class ManageNode extends BaseActionTool {
             }
 
             if (rotation) {
-                const normalized = this.normalizeTransformValue(rotation, 'rotation', is2DNode);
+                const normalized = normalizeTransformValue(rotation, 'rotation', nodeIs2D);
                 if (normalized.warning) warnings.push(normalized.warning);
                 updatePromises.push(
                     Editor.Message.request('scene', 'set-property', {
@@ -574,7 +478,7 @@ export class ManageNode extends BaseActionTool {
             }
 
             if (scale) {
-                const normalized = this.normalizeTransformValue(scale, 'scale', is2DNode);
+                const normalized = normalizeTransformValue(scale, 'scale', nodeIs2D);
                 if (normalized.warning) warnings.push(normalized.warning);
                 updatePromises.push(
                     Editor.Message.request('scene', 'set-property', {
@@ -593,19 +497,19 @@ export class ManageNode extends BaseActionTool {
             const updatedNodeInfo = await this.getNodeInfo(uuid);
             const result: ActionToolResult = {
                 success: true,
-                message: `Transform properties updated: ${updates.join(', ')} ${is2DNode ? '(2D node)' : '(3D node)'}`,
+                message: `Transform properties updated: ${updates.join(', ')} ${nodeIs2D ? '(2D node)' : '(3D node)'}`,
                 data: {
                     nodeUuid: uuid,
-                    nodeType: is2DNode ? '2D' : '3D',
+                    nodeType: nodeIs2D ? '2D' : '3D',
                     appliedChanges: updates,
                     transformConstraints: {
-                        position: is2DNode ? 'x, y only (z ignored)' : 'x, y, z all used',
-                        rotation: is2DNode ? 'z only (x, y ignored)' : 'x, y, z all used',
-                        scale: is2DNode ? 'x, y main, z typically 1' : 'x, y, z all used'
+                        position: nodeIs2D ? 'x, y only (z ignored)' : 'x, y, z all used',
+                        rotation: nodeIs2D ? 'z only (x, y ignored)' : 'x, y, z all used',
+                        scale: nodeIs2D ? 'x, y main, z typically 1' : 'x, y, z all used'
                     },
                     nodeInfo: updatedNodeInfo.data,
                     transformDetails: {
-                        originalNodeType: is2DNode ? '2D' : '3D',
+                        originalNodeType: nodeIs2D ? '2D' : '3D',
                         appliedTransforms: updates,
                         timestamp: new Date().toISOString()
                     },
@@ -627,92 +531,14 @@ export class ManageNode extends BaseActionTool {
         }
     }
 
-    private is2DNode(nodeInfo: any): boolean {
-        const components = nodeInfo.components || [];
-
-        const has2DComponents = components.some((comp: any) =>
-            comp.type && (
-                comp.type.includes('cc.Sprite') ||
-                comp.type.includes('cc.Label') ||
-                comp.type.includes('cc.Button') ||
-                comp.type.includes('cc.Layout') ||
-                comp.type.includes('cc.Widget') ||
-                comp.type.includes('cc.Mask') ||
-                comp.type.includes('cc.Graphics')
-            )
-        );
-
-        if (has2DComponents) return true;
-
-        const has3DComponents = components.some((comp: any) =>
-            comp.type && (
-                comp.type.includes('cc.MeshRenderer') ||
-                comp.type.includes('cc.Camera') ||
-                comp.type.includes('cc.Light') ||
-                comp.type.includes('cc.DirectionalLight') ||
-                comp.type.includes('cc.PointLight') ||
-                comp.type.includes('cc.SpotLight')
-            )
-        );
-
-        if (has3DComponents) return false;
-
-        const position = nodeInfo.position;
-        if (position && Math.abs(position.z) < 0.001) return true;
-
-        return false;
-    }
-
-    private normalizeTransformValue(value: any, type: 'position' | 'rotation' | 'scale', is2D: boolean): { value: any; warning?: string } {
-        const result = { ...value };
-        let warning: string | undefined;
-
-        if (is2D) {
-            switch (type) {
-                case 'position':
-                    if (value.z !== undefined && Math.abs(value.z) > 0.001) {
-                        warning = `2D node: z position (${value.z}) ignored, set to 0`;
-                        result.z = 0;
-                    } else if (value.z === undefined) {
-                        result.z = 0;
-                    }
-                    break;
-                case 'rotation':
-                    if ((value.x !== undefined && Math.abs(value.x) > 0.001) ||
-                        (value.y !== undefined && Math.abs(value.y) > 0.001)) {
-                        warning = `2D node: x,y rotations ignored, only z rotation applied`;
-                        result.x = 0;
-                        result.y = 0;
-                    } else {
-                        result.x = result.x || 0;
-                        result.y = result.y || 0;
-                    }
-                    result.z = result.z || 0;
-                    break;
-                case 'scale':
-                    if (value.z === undefined) {
-                        result.z = 1;
-                    }
-                    break;
-            }
-        } else {
-            result.x = result.x !== undefined ? result.x : (type === 'scale' ? 1 : 0);
-            result.y = result.y !== undefined ? result.y : (type === 'scale' ? 1 : 0);
-            result.z = result.z !== undefined ? result.z : (type === 'scale' ? 1 : 0);
-        }
-
-        return { value: result, warning };
-    }
-
     private async deleteNode(uuid: string): Promise<ActionToolResult> {
         if (!uuid) return errorResult('uuid is required for action=delete');
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'remove-node', { uuid }).then(() => {
-                resolve(successResult(null, 'Node deleted successfully'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('scene', 'remove-node', { uuid });
+            return successResult(null, 'Node deleted successfully');
+        } catch (err: any) {
+            return errorResult(err.message);
+        }
     }
 
     private async moveNode(nodeUuid: string, newParentUuid: string, siblingIndex: number = -1, keepWorldTransform: boolean = false): Promise<ActionToolResult> {
@@ -778,7 +604,7 @@ export class ManageNode extends BaseActionTool {
             }
 
             const nodeInfo = nodeInfoResponse.data;
-            const is2D = this.is2DNode(nodeInfo);
+            const is2D = is2DNode(nodeInfo);
             const components = nodeInfo.components || [];
 
             const detectionReasons: string[] = [];
@@ -831,7 +657,7 @@ export class ManageNode extends BaseActionTool {
                 detectionReasons,
                 components: components.map((comp: any) => ({
                     type: comp.type,
-                    category: this.getComponentCategory(comp.type)
+                    category: getComponentCategory(comp.type)
                 })),
                 position: nodeInfo.position,
                 transformConstraints: {
@@ -846,22 +672,4 @@ export class ManageNode extends BaseActionTool {
         }
     }
 
-    private getComponentCategory(componentType: string): string {
-        if (!componentType) return 'unknown';
-
-        if (componentType.includes('cc.Sprite') || componentType.includes('cc.Label') ||
-            componentType.includes('cc.Button') || componentType.includes('cc.Layout') ||
-            componentType.includes('cc.Widget') || componentType.includes('cc.Mask') ||
-            componentType.includes('cc.Graphics')) {
-            return '2D';
-        }
-
-        if (componentType.includes('cc.MeshRenderer') || componentType.includes('cc.Camera') ||
-            componentType.includes('cc.Light') || componentType.includes('cc.DirectionalLight') ||
-            componentType.includes('cc.PointLight') || componentType.includes('cc.SpotLight')) {
-            return '3D';
-        }
-
-        return 'generic';
-    }
 }
