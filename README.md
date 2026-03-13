@@ -142,6 +142,26 @@ claude mcp add --transport http cocos-creator http://127.0.0.1:3000/mcp
 }
 ```
 
+### OpenCode
+
+Add to `opencode.json` in your project root:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "cocos-creator": {
+      "type": "remote",
+      "url": "http://127.0.0.1:3000/mcp"
+    }
+  }
+}
+```
+
+### Other MCP-Compatible Clients
+
+This server uses standard HTTP transport with JSON-RPC 2.0. Any MCP-compatible client can connect to `http://127.0.0.1:3000/mcp`.
+
 > Change the port number to the value configured in the editor panel. Default is 3000.
 
 ---
