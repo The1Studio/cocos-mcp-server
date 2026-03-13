@@ -256,18 +256,45 @@ export class ToolManager {
     }
 
     public importConfiguration(configJson: string): ToolConfiguration {
-        const config = JSON.parse(configJson);
-        if (!config.id || !config.name || !Array.isArray(config.tools)) {
+        const raw = JSON.parse(configJson);
+
+        // Validate required top-level fields
+        if (!raw || typeof raw !== 'object') {
             throw new Error('Invalid configuration format');
         }
+        if (typeof raw.name !== 'string' || !raw.name.trim()) {
+            throw new Error('Invalid configuration format: name must be a non-empty string');
+        }
+        if (!Array.isArray(raw.tools)) {
+            throw new Error('Invalid configuration format: tools must be an array');
+        }
 
-        config.id = uuidv4();
-        config.createdAt = new Date().toISOString();
-        config.updatedAt = new Date().toISOString();
+        // Validate and sanitize each tool entry — only keep known fields with correct types
+        const sanitizedTools: ToolConfig[] = [];
+        for (const tool of raw.tools) {
+            if (typeof tool.name !== 'string' || typeof tool.enabled !== 'boolean') {
+                throw new Error(`Invalid tool entry: name must be string and enabled must be boolean`);
+            }
+            sanitizedTools.push({
+                name: tool.name,
+                enabled: tool.enabled,
+                description: typeof tool.description === 'string' ? tool.description : ''
+            });
+        }
 
         if (this.settings.configurations.length >= this.settings.maxConfigSlots) {
             throw new Error(`Maximum configuration slots reached (${this.settings.maxConfigSlots})`);
         }
+
+        // Build a clean config object — discard any unexpected fields from input
+        const config: ToolConfiguration = {
+            id: uuidv4(),
+            name: raw.name.trim(),
+            description: typeof raw.description === 'string' ? raw.description : '',
+            tools: sanitizedTools,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
 
         this.settings.configurations.push(config);
         this.saveSettings();

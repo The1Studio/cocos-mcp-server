@@ -1,3 +1,7 @@
+// TODO: These tests need to be rewritten for v2.0 action-based tools
+// v1 tool references below (scene_get_current_scene, node_create_node, etc.) are no longer valid
+// v2 uses manage_* tools with action parameter: e.g. manage_scene{action:"get_current"}, manage_node{action:"create"}
+
 declare const Editor: any;
 
 /**

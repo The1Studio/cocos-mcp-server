@@ -62,16 +62,13 @@ export const methods: { [key: string]: (...any: any) => any } = {
      * @en Update server settings
      * @zh 更新服务器设置
      */
-    updateSettings(settings: MCPServerSettings) {
+    async updateSettings(settings: MCPServerSettings) {
         saveSettings(settings);
         if (mcpServer) {
             mcpServer.stop();
-            mcpServer = new MCPServer(settings);
-            mcpServer.start();
-        } else {
-            mcpServer = new MCPServer(settings);
-            mcpServer.start();
         }
+        mcpServer = new MCPServer(settings);
+        await mcpServer.start().catch(err => console.error('[MCP] Failed to start server after settings update:', err));
     },
 
     /**

@@ -257,8 +257,8 @@ module.exports = Editor.Panel.define({
                             console.log('[Vue App] Using default server settings');
                         }
 
-                        // Periodically update server status
-                        setInterval(async () => {
+                        // Periodically update server status — store ID for cleanup
+                        const statusIntervalId = setInterval(async () => {
                             try {
                                 const result = await Editor.Message.request('cocos-mcp-server', 'get-server-status');
                                 if (result) {
@@ -272,6 +272,9 @@ module.exports = Editor.Panel.define({
                                 console.error('[Vue App] Failed to get server status:', error);
                             }
                         }, 2000);
+
+                        // Expose cleanup for panel close
+                        (window as any).__mcpStatusInterval = statusIntervalId;
                     });
 
                     return {
@@ -315,6 +318,12 @@ module.exports = Editor.Panel.define({
     },
     beforeClose() { },
     close() {
+        // Clear the status polling interval to prevent memory leaks
+        const intervalId = (window as any).__mcpStatusInterval;
+        if (intervalId != null) {
+            clearInterval(intervalId);
+            delete (window as any).__mcpStatusInterval;
+        }
         const app = panelDataMap.get(this);
         if (app) {
             app.unmount();

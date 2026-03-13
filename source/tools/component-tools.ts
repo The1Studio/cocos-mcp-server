@@ -1,3 +1,9 @@
+/**
+ * @deprecated ComponentTools is a v1 ToolExecutor class.
+ * In v2.0, component operations are handled by ManageComponent (manage-component.ts).
+ * This class is retained only because ManageNode calls `this.componentTools.execute('add_component', ...)`
+ * for the create-with-component flow. Do NOT add new functionality here.
+ */
 import { ToolDefinition, ToolResponse, ToolExecutor, ComponentInfo } from '../types';
 
 export class ComponentTools implements ToolExecutor {

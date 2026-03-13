@@ -188,92 +188,97 @@ export class ManageDebug extends BaseActionTool {
         }
     }
 
+    private validateScript(script: string): string | null {
+        if (!script || typeof script !== 'string') return 'script is required';
+        if (script.length > 10240) return 'Script exceeds maximum length of 10KB';
+        const dangerous = [
+            "require('child_process')",
+            'require("child_process")',
+            'process.exit',
+            'eval(',
+            'Function(',
+        ];
+        for (const pattern of dangerous) {
+            if (script.includes(pattern)) {
+                return `Script contains disallowed pattern: ${pattern}`;
+            }
+        }
+        return null;
+    }
+
     private async executeScript(script: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'execute-scene-script', {
+        const validationError = this.validateScript(script);
+        if (validationError) return errorResult(validationError);
+        try {
+            const result = await Editor.Message.request('scene', 'execute-scene-script', {
                 name: 'console',
                 method: 'eval',
                 args: [script]
-            }).then((result: any) => {
-                resolve(successResult({
-                    result: result,
-                    message: 'Script executed successfully'
-                }));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
             });
-        });
+            return successResult({
+                result,
+                message: 'Script executed successfully',
+                warning: 'Code was executed in the scene context. Ensure scripts are trusted before execution.'
+            });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getNodeTree(rootUuid?: string, maxDepth: number = 10): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            const buildTree = async (nodeUuid: string, depth: number = 0): Promise<any> => {
-                if (depth >= maxDepth) {
-                    return { truncated: true };
-                }
-
-                try {
-                    const nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
-
-                    const tree = {
-                        uuid: nodeData.uuid,
-                        name: nodeData.name,
-                        active: nodeData.active,
-                        components: (nodeData as any).components ? (nodeData as any).components.map((c: any) => c.__type__) : [],
-                        childCount: nodeData.children ? nodeData.children.length : 0,
-                        children: [] as any[]
-                    };
-
-                    if (nodeData.children && nodeData.children.length > 0) {
-                        for (const childId of nodeData.children) {
-                            const childTree = await buildTree(childId, depth + 1);
-                            tree.children.push(childTree);
-                        }
+        const buildTree = async (nodeUuid: string, depth: number = 0): Promise<any> => {
+            if (depth >= maxDepth) return { truncated: true };
+            try {
+                const nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
+                const tree = {
+                    uuid: nodeData.uuid,
+                    name: nodeData.name,
+                    active: nodeData.active,
+                    components: (nodeData as any).components ? (nodeData as any).components.map((c: any) => c.__type__) : [],
+                    childCount: nodeData.children ? nodeData.children.length : 0,
+                    children: [] as any[]
+                };
+                if (nodeData.children && nodeData.children.length > 0) {
+                    for (const childId of nodeData.children) {
+                        tree.children.push(await buildTree(childId, depth + 1));
                     }
-
-                    return tree;
-                } catch (err: any) {
-                    return { error: err.message };
                 }
-            };
-
-            if (rootUuid) {
-                buildTree(rootUuid).then(tree => {
-                    resolve(successResult(tree));
-                });
-            } else {
-                Editor.Message.request('scene', 'query-hierarchy').then(async (hierarchy: any) => {
-                    const trees = [];
-                    for (const rootNode of hierarchy.children) {
-                        const tree = await buildTree(rootNode.uuid);
-                        trees.push(tree);
-                    }
-                    resolve(successResult(trees));
-                }).catch((err: Error) => {
-                    resolve(errorResult(err.message));
-                });
+                return tree;
+            } catch (err: any) {
+                return { error: err.message };
             }
-        });
+        };
+
+        try {
+            if (rootUuid) {
+                return successResult(await buildTree(rootUuid));
+            } else {
+                const hierarchy: any = await Editor.Message.request('scene', 'query-hierarchy');
+                const trees = [];
+                for (const rootNode of hierarchy.children) {
+                    trees.push(await buildTree(rootNode.uuid));
+                }
+                return successResult(trees);
+            }
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getPerformanceStats(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'query-performance').then((stats: any) => {
-                const perfStats: PerformanceStats = {
-                    nodeCount: stats.nodeCount || 0,
-                    componentCount: stats.componentCount || 0,
-                    drawCalls: stats.drawCalls || 0,
-                    triangles: stats.triangles || 0,
-                    memory: stats.memory || {}
-                };
-                resolve(successResult(perfStats));
-            }).catch(() => {
-                // Fallback to basic stats
-                resolve(successResult({
-                    message: 'Performance stats not available in edit mode'
-                }));
-            });
-        });
+        try {
+            const stats: any = await Editor.Message.request('scene', 'query-performance');
+            const perfStats: PerformanceStats = {
+                nodeCount: stats.nodeCount || 0,
+                componentCount: stats.componentCount || 0,
+                drawCalls: stats.drawCalls || 0,
+                triangles: stats.triangles || 0,
+                memory: stats.memory || {}
+            };
+            return successResult(perfStats);
+        } catch {
+            return successResult({ message: 'Performance stats not available in edit mode' });
+        }
     }
 
     private async validateScene(options: { checkMissingAssets: boolean; checkPerformance: boolean }): Promise<ActionToolResult> {
@@ -354,7 +359,6 @@ export class ManageDebug extends BaseActionTool {
     private resolveLogFilePath(): string {
         const possiblePaths = [
             Editor.Project ? Editor.Project.path : null,
-            '/Users/lizhiyong/NewProject_3',
             process.cwd(),
         ].filter((p): p is string => p !== null);
 
@@ -370,11 +374,32 @@ export class ManageDebug extends BaseActionTool {
         );
     }
 
+    /** Read up to last 100KB of a log file to avoid loading huge files into memory. */
+    private readLogFileTail(logFilePath: string): string {
+        const MAX_BYTES = 100 * 1024; // 100KB
+        const stats = fs.statSync(logFilePath);
+        const fileSize = stats.size;
+        if (fileSize <= MAX_BYTES) {
+            return fs.readFileSync(logFilePath, 'utf8');
+        }
+        const buffer = Buffer.alloc(MAX_BYTES);
+        const fd = fs.openSync(logFilePath, 'r');
+        try {
+            fs.readSync(fd, buffer, 0, MAX_BYTES, fileSize - MAX_BYTES);
+        } finally {
+            fs.closeSync(fd);
+        }
+        // Skip the first (possibly partial) line
+        const raw = buffer.toString('utf8');
+        const newlineIdx = raw.indexOf('\n');
+        return newlineIdx >= 0 ? raw.slice(newlineIdx + 1) : raw;
+    }
+
     private async getProjectLogs(lines: number, filterKeyword?: string, logLevel: string = 'ALL'): Promise<ActionToolResult> {
         try {
             const logFilePath = this.resolveLogFilePath();
 
-            const logContent = fs.readFileSync(logFilePath, 'utf8');
+            const logContent = this.readLogFileTail(logFilePath);
             const logLines = logContent.split('\n').filter(line => line.trim() !== '');
 
             // Get the last N lines
@@ -412,19 +437,20 @@ export class ManageDebug extends BaseActionTool {
     private async getLogFileInfo(): Promise<ActionToolResult> {
         try {
             const logFilePath = this.resolveLogFilePath();
-
             const stats = fs.statSync(logFilePath);
-            const logContent = fs.readFileSync(logFilePath, 'utf8');
-            const lineCount = logContent.split('\n').filter(line => line.trim() !== '').length;
+            // Count lines using tail read to avoid loading huge files
+            const tailContent = this.readLogFileTail(logFilePath);
+            const lineCount = tailContent.split('\n').filter(line => line.trim() !== '').length;
 
             return successResult({
                 filePath: logFilePath,
                 fileSize: stats.size,
                 fileSizeFormatted: this.formatFileSize(stats.size),
                 lastModified: stats.mtime.toISOString(),
-                lineCount: lineCount,
+                lineCount,
                 created: stats.birthtime.toISOString(),
-                accessible: fs.constants.R_OK
+                accessible: fs.constants.R_OK,
+                note: stats.size > 102400 ? 'File is large; only last 100KB is read.' : undefined
             });
         } catch (error: any) {
             return errorResult(`Failed to get log file info: ${error.message}`);
@@ -435,7 +461,7 @@ export class ManageDebug extends BaseActionTool {
         try {
             const logFilePath = this.resolveLogFilePath();
 
-            const logContent = fs.readFileSync(logFilePath, 'utf8');
+            const logContent = this.readLogFileTail(logFilePath);
             const logLines = logContent.split('\n');
 
             // Create regex pattern (support both string and regex patterns)

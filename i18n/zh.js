@@ -1,3 +1,4 @@
+// TODO: Translate to Chinese - currently contains English placeholder text
 "use strict";
 
 module.exports = {

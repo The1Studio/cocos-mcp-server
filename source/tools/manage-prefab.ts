@@ -220,139 +220,123 @@ export class ManagePrefab extends BaseActionTool {
     }
 
     private async instantiatePrefabByUuid(args: { prefabUuid: string; parentUuid?: string; position?: any; rotation?: any; scale?: any }): Promise<any> {
-        return new Promise(async (resolve) => {
-            try {
-                const { prefabUuid, parentUuid, position, rotation, scale } = args;
+        try {
+            const { prefabUuid, parentUuid, position, rotation, scale } = args;
 
-                // Verify the asset exists
-                const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', prefabUuid);
-                if (!assetInfo) {
-                    // Try treating prefabUuid as a direct UUID
-                }
+            const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', prefabUuid).catch(() => null);
 
-                const createNodeOptions: any = {
-                    assetUuid: prefabUuid
-                };
+            const createNodeOptions: any = {
+                assetUuid: prefabUuid
+            };
 
-                if (parentUuid) {
-                    createNodeOptions.parent = parentUuid;
-                }
-
-                if (assetInfo && assetInfo.name) {
-                    createNodeOptions.name = assetInfo.name;
-                }
-
-                if (position) {
-                    createNodeOptions.dump = {
-                        position: { value: position }
-                    };
-                }
-
-                const nodeUuid = await Editor.Message.request('scene', 'create-node', createNodeOptions);
-                const uuid = Array.isArray(nodeUuid) ? nodeUuid[0] : nodeUuid;
-
-                // Apply rotation and scale if provided
-                if (uuid) {
-                    if (rotation) {
-                        await Editor.Message.request('scene', 'set-property', {
-                            uuid,
-                            path: 'eulerAngles',
-                            dump: { value: rotation, type: 'cc.Vec3' }
-                        }).catch(() => {/* non-fatal */});
-                    }
-                    if (scale) {
-                        await Editor.Message.request('scene', 'set-property', {
-                            uuid,
-                            path: 'scale',
-                            dump: { value: scale, type: 'cc.Vec3' }
-                        }).catch(() => {/* non-fatal */});
-                    }
-                }
-
-                resolve({
-                    success: true,
-                    data: {
-                        nodeUuid: uuid,
-                        prefabUuid,
-                        parentUuid,
-                        position,
-                        rotation,
-                        scale,
-                        message: 'Prefab instantiated successfully'
-                    }
-                });
-            } catch (err: any) {
-                resolve({
-                    success: false,
-                    error: `Failed to instantiate prefab: ${err.message}`,
-                    instruction: 'Check that the prefabUuid is correct and the asset DB is ready.'
-                });
+            if (parentUuid) {
+                createNodeOptions.parent = parentUuid;
             }
-        });
+
+            if (assetInfo && assetInfo.name) {
+                createNodeOptions.name = assetInfo.name;
+            }
+
+            if (position) {
+                createNodeOptions.dump = {
+                    position: { value: position }
+                };
+            }
+
+            const nodeUuid = await Editor.Message.request('scene', 'create-node', createNodeOptions);
+            const uuid = Array.isArray(nodeUuid) ? nodeUuid[0] : nodeUuid;
+
+            // Apply rotation and scale if provided
+            if (uuid) {
+                if (rotation) {
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid,
+                        path: 'eulerAngles',
+                        dump: { value: rotation, type: 'cc.Vec3' }
+                    }).catch(() => {/* non-fatal */});
+                }
+                if (scale) {
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid,
+                        path: 'scale',
+                        dump: { value: scale, type: 'cc.Vec3' }
+                    }).catch(() => {/* non-fatal */});
+                }
+            }
+
+            return {
+                success: true,
+                data: {
+                    nodeUuid: uuid,
+                    prefabUuid,
+                    parentUuid,
+                    position,
+                    rotation,
+                    scale,
+                    message: 'Prefab instantiated successfully'
+                }
+            };
+        } catch (err: any) {
+            return {
+                success: false,
+                error: `Failed to instantiate prefab: ${err.message}`,
+                instruction: 'Check that the prefabUuid is correct and the asset DB is ready.'
+            };
+        }
     }
 
     private async createPrefab(args: any): Promise<any> {
-        return new Promise(async (resolve) => {
-            try {
-                const pathParam = args.prefabPath || args.savePath;
-                if (!pathParam) {
-                    resolve({ success: false, error: 'Missing prefab path parameter. Provide savePath.' });
-                    return;
-                }
-
-                const prefabName = args.prefabName || 'NewPrefab';
-                const fullPath = pathParam.endsWith('.prefab') ?
-                    pathParam : `${pathParam}/${prefabName}.prefab`;
-
-                const includeChildren = args.includeChildren !== false;
-                const includeComponents = args.includeComponents !== false;
-
-                const assetDbResult = await this.createPrefabWithAssetDB(
-                    args.nodeUuid,
-                    fullPath,
-                    prefabName,
-                    includeChildren,
-                    includeComponents
-                );
-
-                if (assetDbResult.success) {
-                    resolve(assetDbResult);
-                    return;
-                }
-
-                const nativeResult = await this.createPrefabNative(args.nodeUuid, fullPath);
-                if (nativeResult.success) {
-                    resolve(nativeResult);
-                    return;
-                }
-
-                const customResult = await this.createPrefabCustom(args.nodeUuid, fullPath, prefabName);
-                resolve(customResult);
-
-            } catch (error) {
-                resolve({ success: false, error: `Error creating prefab: ${error}` });
+        try {
+            const pathParam = args.prefabPath || args.savePath;
+            if (!pathParam) {
+                return { success: false, error: 'Missing prefab path parameter. Provide savePath.' };
             }
-        });
+
+            const prefabName = args.prefabName || 'NewPrefab';
+            const fullPath = pathParam.endsWith('.prefab') ?
+                pathParam : `${pathParam}/${prefabName}.prefab`;
+
+            const includeChildren = args.includeChildren !== false;
+            const includeComponents = args.includeComponents !== false;
+
+            const assetDbResult = await this.createPrefabWithAssetDB(
+                args.nodeUuid,
+                fullPath,
+                prefabName,
+                includeChildren,
+                includeComponents
+            );
+
+            if (assetDbResult.success) {
+                return assetDbResult;
+            }
+
+            const nativeResult = await this.createPrefabNative(args.nodeUuid, fullPath);
+            if (nativeResult.success) {
+                return nativeResult;
+            }
+
+            return await this.createPrefabCustom(args.nodeUuid, fullPath, prefabName);
+        } catch (error) {
+            return { success: false, error: `Error creating prefab: ${error}` };
+        }
     }
 
     private async updatePrefab(nodeUuid: string): Promise<any> {
-        return new Promise(async (resolve) => {
-            try {
-                // Get node info to find associated prefab
-                const nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
-                if (!nodeData) {
-                    resolve({ success: false, error: 'Node not found' });
-                    return;
-                }
-
-                // Apply changes to prefab using the node's prefab connection
-                await Editor.Message.request('scene', 'apply-prefab', { node: nodeUuid });
-
-                resolve({ success: true, message: 'Prefab updated successfully', data: { nodeUuid } });
-            } catch (err: any) {
-                resolve({ success: false, error: err.message });
+        try {
+            // Get node info to find associated prefab
+            const nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
+            if (!nodeData) {
+                return { success: false, error: 'Node not found' };
             }
-        });
+
+            // Apply changes to prefab using the node's prefab connection
+            await Editor.Message.request('scene', 'apply-prefab', { node: nodeUuid });
+
+            return { success: true, message: 'Prefab updated successfully', data: { nodeUuid } };
+        } catch (err: any) {
+            return { success: false, error: err.message };
+        }
     }
 
     private async revertPrefab(nodeUuid: string): Promise<any> {
@@ -451,51 +435,46 @@ export class ManagePrefab extends BaseActionTool {
     // ===== Prefab creation helpers (ported from PrefabTools) =====
 
     private async createPrefabWithAssetDB(nodeUuid: string, savePath: string, prefabName: string, includeChildren: boolean, includeComponents: boolean): Promise<any> {
-        return new Promise(async (resolve) => {
-            try {
-                const nodeData = await this.getNodeData(nodeUuid);
-                if (!nodeData) {
-                    resolve({ success: false, error: 'Cannot get node data' });
-                    return;
-                }
-
-                const tempPrefabContent = JSON.stringify([{ "__type__": "cc.Prefab", "_name": prefabName }], null, 2);
-                const createResult = await this.createAssetWithAssetDB(savePath, tempPrefabContent);
-                if (!createResult.success) {
-                    resolve(createResult);
-                    return;
-                }
-
-                const actualPrefabUuid = createResult.data?.uuid;
-                if (!actualPrefabUuid) {
-                    resolve({ success: false, error: 'Cannot get engine-assigned prefab UUID' });
-                    return;
-                }
-
-                const prefabContent = await this.createStandardPrefabContent(nodeData, prefabName, actualPrefabUuid, includeChildren, includeComponents);
-                const prefabContentString = JSON.stringify(prefabContent, null, 2);
-
-                const updateResult = await this.updateAssetWithAssetDB(savePath, prefabContentString);
-                const metaContent = this.createStandardMetaContent(prefabName, actualPrefabUuid);
-                const metaResult = await this.createMetaWithAssetDB(savePath, metaContent);
-                const reimportResult = await this.reimportAssetWithAssetDB(savePath);
-                const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, actualPrefabUuid, savePath);
-
-                resolve({
-                    success: true,
-                    data: {
-                        prefabUuid: actualPrefabUuid,
-                        prefabPath: savePath,
-                        nodeUuid,
-                        prefabName,
-                        convertedToPrefabInstance: convertResult.success,
-                        message: convertResult.success ? 'Prefab created and node converted' : 'Prefab created, node conversion failed'
-                    }
-                });
-            } catch (error) {
-                resolve({ success: false, error: `Failed to create prefab: ${error}` });
+        try {
+            const nodeData = await this.getNodeData(nodeUuid);
+            if (!nodeData) {
+                return { success: false, error: 'Cannot get node data' };
             }
-        });
+
+            const tempPrefabContent = JSON.stringify([{ "__type__": "cc.Prefab", "_name": prefabName }], null, 2);
+            const createResult = await this.createAssetWithAssetDB(savePath, tempPrefabContent);
+            if (!createResult.success) {
+                return createResult;
+            }
+
+            const actualPrefabUuid = createResult.data?.uuid;
+            if (!actualPrefabUuid) {
+                return { success: false, error: 'Cannot get engine-assigned prefab UUID' };
+            }
+
+            const prefabContent = await this.createStandardPrefabContent(nodeData, prefabName, actualPrefabUuid, includeChildren, includeComponents);
+            const prefabContentString = JSON.stringify(prefabContent, null, 2);
+
+            await this.updateAssetWithAssetDB(savePath, prefabContentString);
+            const metaContent = this.createStandardMetaContent(prefabName, actualPrefabUuid);
+            await this.createMetaWithAssetDB(savePath, metaContent);
+            await this.reimportAssetWithAssetDB(savePath);
+            const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, actualPrefabUuid, savePath);
+
+            return {
+                success: true,
+                data: {
+                    prefabUuid: actualPrefabUuid,
+                    prefabPath: savePath,
+                    nodeUuid,
+                    prefabName,
+                    convertedToPrefabInstance: convertResult.success,
+                    message: convertResult.success ? 'Prefab created and node converted' : 'Prefab created, node conversion failed'
+                }
+            };
+        } catch (error) {
+            return { success: false, error: `Failed to create prefab: ${error}` };
+        }
     }
 
     private async createPrefabNative(nodeUuid: string, prefabPath: string): Promise<any> {
@@ -507,54 +486,49 @@ export class ManagePrefab extends BaseActionTool {
     }
 
     private async createPrefabCustom(nodeUuid: string, prefabPath: string, prefabName: string): Promise<any> {
-        return new Promise(async (resolve) => {
-            try {
-                const nodeData = await this.getNodeData(nodeUuid);
-                if (!nodeData) {
-                    resolve({ success: false, error: `Node not found: ${nodeUuid}` });
-                    return;
-                }
-
-                const prefabUuid = this.generateUUID();
-                const prefabJsonData = await this.createStandardPrefabContent(nodeData, prefabName, prefabUuid, true, true);
-                const standardMetaData = this.createStandardMetaData(prefabName, prefabUuid);
-                const saveResult = await this.savePrefabWithMeta(prefabPath, prefabJsonData, standardMetaData);
-
-                if (saveResult.success) {
-                    const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, prefabPath, prefabUuid);
-                    resolve({
-                        success: true,
-                        data: {
-                            prefabUuid,
-                            prefabPath,
-                            nodeUuid,
-                            prefabName,
-                            convertedToPrefabInstance: convertResult.success,
-                            message: convertResult.success ?
-                                'Custom prefab created and node converted' :
-                                'Prefab created, node conversion failed'
-                        }
-                    });
-                } else {
-                    resolve({ success: false, error: saveResult.error || 'Failed to save prefab file' });
-                }
-            } catch (error) {
-                resolve({ success: false, error: `Error creating prefab: ${error}` });
+        try {
+            const nodeData = await this.getNodeData(nodeUuid);
+            if (!nodeData) {
+                return { success: false, error: `Node not found: ${nodeUuid}` };
             }
-        });
+
+            const prefabUuid = this.generateUUID();
+            const prefabJsonData = await this.createStandardPrefabContent(nodeData, prefabName, prefabUuid, true, true);
+            const standardMetaData = this.createStandardMetaData(prefabName, prefabUuid);
+            const saveResult = await this.savePrefabWithMeta(prefabPath, prefabJsonData, standardMetaData);
+
+            if (saveResult.success) {
+                const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, prefabPath, prefabUuid);
+                return {
+                    success: true,
+                    data: {
+                        prefabUuid,
+                        prefabPath,
+                        nodeUuid,
+                        prefabName,
+                        convertedToPrefabInstance: convertResult.success,
+                        message: convertResult.success ?
+                            'Custom prefab created and node converted' :
+                            'Prefab created, node conversion failed'
+                    }
+                };
+            } else {
+                return { success: false, error: saveResult.error || 'Failed to save prefab file' };
+            }
+        } catch (error) {
+            return { success: false, error: `Error creating prefab: ${error}` };
+        }
     }
 
     private async getNodeData(nodeUuid: string): Promise<any> {
-        return new Promise(async (resolve) => {
-            try {
-                const nodeInfo = await Editor.Message.request('scene', 'query-node', nodeUuid);
-                if (!nodeInfo) { resolve(null); return; }
-                const nodeTree = await this.getNodeWithChildren(nodeUuid);
-                resolve(nodeTree || nodeInfo);
-            } catch (error) {
-                resolve(null);
-            }
-        });
+        try {
+            const nodeInfo = await Editor.Message.request('scene', 'query-node', nodeUuid);
+            if (!nodeInfo) return null;
+            const nodeTree = await this.getNodeWithChildren(nodeUuid);
+            return nodeTree || nodeInfo;
+        } catch (error) {
+            return null;
+        }
     }
 
     private async getNodeWithChildren(nodeUuid: string): Promise<any> {
@@ -572,33 +546,24 @@ export class ManagePrefab extends BaseActionTool {
     }
 
     /**
-     * Enhance node tree with accurate component info via MCP self-call.
-     * Script components return compressed UUID type names via this path.
+     * Enhance node tree with accurate component info via direct Editor API.
+     * Replaces previous HTTP self-call to localhost:8585 which was fragile and port-dependent.
      */
     private async enhanceTreeWithMCPComponents(node: any): Promise<any> {
         if (!node || !node.uuid) return node;
 
         try {
-            const response = await fetch('http://localhost:8585/mcp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'tools/call',
-                    params: { name: 'component_get_components', arguments: { nodeUuid: node.uuid } },
-                    id: Date.now()
-                })
-            });
-            const mcpResult = await response.json();
-            if (mcpResult.result?.content?.[0]?.text) {
-                const componentData = JSON.parse(mcpResult.result.content[0].text);
-                if (componentData.success && componentData.data.components) {
-                    node.components = componentData.data.components;
-                    console.log(`Node ${node.uuid} enhanced with ${componentData.data.components.length} components (incl. script types)`);
-                }
+            const nodeData = await Editor.Message.request('scene', 'query-node', node.uuid);
+            if (nodeData && nodeData.__comps__) {
+                node.components = nodeData.__comps__.map((comp: any) => ({
+                    type: comp.__type__ || comp.cid || comp.type || 'Unknown',
+                    uuid: comp.uuid?.value || comp.uuid || null,
+                    enabled: comp.enabled !== undefined ? comp.enabled : true
+                }));
+                console.log(`Node ${node.uuid} enhanced with ${node.components.length} components (incl. script types)`);
             }
         } catch (error) {
-            console.warn(`Failed to get MCP component info for node ${node.uuid}:`, error);
+            console.warn(`Failed to get component info for node ${node.uuid}:`, error);
         }
 
         if (node.children && Array.isArray(node.children)) {

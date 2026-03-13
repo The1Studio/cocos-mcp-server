@@ -1,3 +1,7 @@
+// TODO: These tests need to be rewritten for v2.0 action-based tools
+// v1 tool references below are no longer valid
+// v2 uses manage_* tools via MCP JSON-RPC — not direct Editor.Message.request scene calls
+
 declare const Editor: any;
 
 interface TestResult {

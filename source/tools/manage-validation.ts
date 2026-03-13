@@ -179,6 +179,7 @@ export class ManageValidation extends BaseActionTool {
 
     private generateCurlCommand(jsonStr: string): string {
         const escapedJson = jsonStr.replace(/'/g, "'\"'\"'");
-        return `curl -X POST http://127.0.0.1:8585/mcp \\\n  -H "Content-Type: application/json" \\\n  -d '${escapedJson}'`;
+        // Port is read from MCP server default; adjust if your server uses a different port
+        return `curl -X POST http://127.0.0.1:3000/mcp \\\n  -H "Content-Type: application/json" \\\n  -d '${escapedJson}'`;
     }
 }

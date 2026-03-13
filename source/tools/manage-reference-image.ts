@@ -92,86 +92,73 @@ export class ManageReferenceImage extends BaseActionTool {
 
     private async add(paths: string[]): Promise<ActionToolResult> {
         if (!paths || paths.length === 0) return errorResult('paths is required for add');
-        return new Promise((resolve) => {
-            Editor.Message.request('reference-image', 'add-image', paths).then(() => {
-                resolve(successResult(
-                    { addedPaths: paths, count: paths.length },
-                    `Added ${paths.length} reference image(s)`
-                ));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('reference-image', 'add-image', paths);
+            return successResult({ addedPaths: paths, count: paths.length }, `Added ${paths.length} reference image(s)`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async remove(paths?: string[]): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('reference-image', 'remove-image', paths).then(() => {
-                const message = paths && paths.length > 0
-                    ? `Removed ${paths.length} reference image(s)`
-                    : 'Removed current reference image';
-                resolve(successResult(null, message));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('reference-image', 'remove-image', paths);
+            const message = paths && paths.length > 0
+                ? `Removed ${paths.length} reference image(s)`
+                : 'Removed current reference image';
+            return successResult(null, message);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async switchImage(path: string, sceneUUID?: string): Promise<ActionToolResult> {
         if (!path) return errorResult('path is required for switch');
-        return new Promise((resolve) => {
+        try {
             const args = sceneUUID ? [path, sceneUUID] : [path];
-            Editor.Message.request('reference-image', 'switch-image', ...args).then(() => {
-                resolve(successResult(
-                    { path, sceneUUID },
-                    `Switched to reference image: ${path}`
-                ));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+            await Editor.Message.request('reference-image', 'switch-image', ...args);
+            return successResult({ path, sceneUUID }, `Switched to reference image: ${path}`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async setData(key: string, value: any): Promise<ActionToolResult> {
         if (!key) return errorResult('key is required for set_data');
         if (value === undefined) return errorResult('value is required for set_data');
-        return new Promise((resolve) => {
-            Editor.Message.request('reference-image', 'set-image-data', key, value).then(() => {
-                resolve(successResult({ key, value }, `Reference image ${key} set to ${value}`));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('reference-image', 'set-image-data', key, value);
+            return successResult({ key, value }, `Reference image ${key} set to ${value}`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getConfig(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('reference-image', 'query-config').then((config: any) => {
-                resolve(successResult(config));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const config = await Editor.Message.request('reference-image', 'query-config');
+            return successResult(config);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getCurrent(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('reference-image', 'query-current').then((current: any) => {
-                resolve(successResult(current));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const current = await Editor.Message.request('reference-image', 'query-current');
+            return successResult(current);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async refresh(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('reference-image', 'refresh').then(() => {
-                resolve(successResult(null, 'Reference image refreshed'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('reference-image', 'refresh');
+            return successResult(null, 'Reference image refreshed');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async setPosition(x: number | undefined, y: number | undefined): Promise<ActionToolResult> {
@@ -182,7 +169,7 @@ export class ManageReferenceImage extends BaseActionTool {
             await Editor.Message.request('reference-image', 'set-image-data', 'y', y);
             return successResult({ x, y }, `Reference image position set to (${x}, ${y})`);
         } catch (err: any) {
-            return errorResult(err.message);
+            return errorResult(err.message || String(err));
         }
     }
 
@@ -194,31 +181,27 @@ export class ManageReferenceImage extends BaseActionTool {
             await Editor.Message.request('reference-image', 'set-image-data', 'sy', sy);
             return successResult({ sx, sy }, `Reference image scale set to (${sx}, ${sy})`);
         } catch (err: any) {
-            return errorResult(err.message);
+            return errorResult(err.message || String(err));
         }
     }
 
     private async setOpacity(opacity: number | undefined): Promise<ActionToolResult> {
         if (opacity === undefined) return errorResult('opacity is required for set_opacity');
-        return new Promise((resolve) => {
-            Editor.Message.request('reference-image', 'set-image-data', 'opacity', opacity).then(() => {
-                resolve(successResult({ opacity }, `Reference image opacity set to ${opacity}`));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('reference-image', 'set-image-data', 'opacity', opacity);
+            return successResult({ opacity }, `Reference image opacity set to ${opacity}`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async list(): Promise<ActionToolResult> {
         try {
             const config = await Editor.Message.request('reference-image', 'query-config');
             const current = await Editor.Message.request('reference-image', 'query-current');
-            return successResult(
-                { config, current },
-                'Reference image information retrieved'
-            );
+            return successResult({ config, current }, 'Reference image information retrieved');
         } catch (err: any) {
-            return errorResult(err.message);
+            return errorResult(err.message || String(err));
         }
     }
 
@@ -227,7 +210,7 @@ export class ManageReferenceImage extends BaseActionTool {
             await Editor.Message.request('reference-image', 'remove-image');
             return successResult(null, 'All reference images cleared');
         } catch (err: any) {
-            return errorResult(err.message);
+            return errorResult(err.message || String(err));
         }
     }
 }

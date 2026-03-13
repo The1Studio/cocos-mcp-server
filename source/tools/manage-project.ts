@@ -61,125 +61,98 @@ export class ManageProject extends BaseActionTool {
     };
 
     private async runProject(platform: string = 'browser'): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
+        try {
             // Note: Preview module is not documented in official API.
             // Using fallback approach — open build panel as alternative.
-            Editor.Message.request('builder', 'open').then(() => {
-                resolve(successResult(
-                    { platform },
-                    `Build panel opened. Preview functionality requires manual setup.`
-                ));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+            await Editor.Message.request('builder', 'open');
+            return successResult({ platform }, 'Build panel opened. Preview functionality requires manual setup.');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async buildProject(args: any): Promise<ActionToolResult> {
-        const debug: boolean = args.debug !== false && args.debug !== 'false';
-
-        return new Promise((resolve) => {
+        try {
             // Note: Builder module only supports 'open' and 'query-worker-ready'.
             // Building requires manual interaction through the build panel.
-            Editor.Message.request('builder', 'open').then(() => {
-                resolve(successResult(
-                    {
-                        platform: args.platform,
-                        instruction: 'Use the build panel to configure and start the build process'
-                    },
-                    `Build panel opened for ${args.platform}. Please configure and start build manually.`
-                ));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+            await Editor.Message.request('builder', 'open');
+            return successResult(
+                { platform: args.platform, instruction: 'Use the build panel to configure and start the build process' },
+                `Build panel opened for ${args.platform}. Please configure and start build manually.`
+            );
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getProjectInfo(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            const info: any = {
-                name: Editor.Project.name,
-                path: Editor.Project.path,
-                uuid: Editor.Project.uuid,
-                version: (Editor.Project as any).version || '1.0.0',
-                cocosVersion: (Editor as any).versions?.cocos || 'Unknown'
-            };
-
+        const info: any = {
+            name: Editor.Project.name,
+            path: Editor.Project.path,
+            uuid: Editor.Project.uuid,
+            version: (Editor.Project as any).version || '1.0.0',
+            cocosVersion: (Editor as any).versions?.cocos || 'Unknown'
+        };
+        try {
             // Note: 'query-info' API doesn't exist, using 'query-config' instead.
-            Editor.Message.request('project', 'query-config', 'project').then((additionalInfo: any) => {
-                if (additionalInfo) {
-                    Object.assign(info, { config: additionalInfo });
-                }
-                resolve(successResult(info));
-            }).catch(() => {
-                // Return basic info even if detailed query fails
-                resolve(successResult(info));
-            });
-        });
+            const additionalInfo = await Editor.Message.request('project', 'query-config', 'project');
+            if (additionalInfo) Object.assign(info, { config: additionalInfo });
+        } catch {
+            // Return basic info even if detailed query fails
+        }
+        return successResult(info);
     }
 
     private async getProjectSettings(category: string = 'general'): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
+        try {
             const configMap: Record<string, string> = {
-                general: 'project',
-                physics: 'physics',
-                render: 'render',
-                assets: 'asset-db'
+                general: 'project', physics: 'physics', render: 'render', assets: 'asset-db'
             };
-
             const configName = configMap[category] || 'project';
-
-            Editor.Message.request('project', 'query-config', configName).then((settings: any) => {
-                resolve(successResult({
-                    category,
-                    config: settings
-                }, `${category} settings retrieved successfully`));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+            const settings = await Editor.Message.request('project', 'query-config', configName);
+            return successResult({ category, config: settings }, `${category} settings retrieved successfully`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getBuildSettings(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('builder', 'query-worker-ready').then((ready: boolean) => {
-                resolve(successResult({
-                    builderReady: ready,
-                    availableActions: [
-                        'Open build panel with open_build_panel',
-                        'Check builder status with check_builder_status',
-                        'Start preview server with start_preview',
-                        'Stop preview server with stop_preview'
-                    ],
-                    limitation: 'Full build configuration requires direct Editor UI access'
-                }, 'Build settings are limited in MCP plugin environment'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const ready: boolean = await Editor.Message.request('builder', 'query-worker-ready') as boolean;
+            return successResult({
+                builderReady: ready,
+                availableActions: [
+                    'Open build panel with open_build_panel',
+                    'Check builder status with check_builder_status',
+                    'Start preview server with start_preview',
+                    'Stop preview server with stop_preview'
+                ],
+                limitation: 'Full build configuration requires direct Editor UI access'
+            }, 'Build settings are limited in MCP plugin environment');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async openBuildPanel(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('builder', 'open').then(() => {
-                resolve(successResult(null, 'Build panel opened successfully'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('builder', 'open');
+            return successResult(null, 'Build panel opened successfully');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async checkBuilderStatus(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('builder', 'query-worker-ready').then((ready: boolean) => {
-                resolve(successResult({
-                    ready,
-                    status: ready ? 'Builder worker is ready' : 'Builder worker is not ready'
-                }, 'Builder status checked successfully'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const ready: boolean = await Editor.Message.request('builder', 'query-worker-ready') as boolean;
+            return successResult({
+                ready,
+                status: ready ? 'Builder worker is ready' : 'Builder worker is not ready'
+            }, 'Builder status checked successfully');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async startPreviewServer(_port: number = 7456): Promise<ActionToolResult> {

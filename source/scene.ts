@@ -270,6 +270,10 @@ export const methods: { [key: string]: (...any: any) => any } = {
             } else if (property === 'name') {
                 node.name = value;
             } else {
+                // Prototype pollution guard
+                if (['__proto__', 'constructor', 'prototype'].includes(property)) {
+                    return { success: false, error: `Setting property '${property}' is not allowed` };
+                }
                 // Try to set the property directly
                 (node as any)[property] = value;
             }
@@ -286,7 +290,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
     /**
      * Get scene hierarchy
      */
-    getSceneHierarchy(includeComponents: boolean = false) {
+    getSceneHierarchy(includeComponents: boolean = false, maxDepth: number = 50) {
         try {
             const { director } = require('cc');
             const scene = director.getScene();
@@ -294,7 +298,10 @@ export const methods: { [key: string]: (...any: any) => any } = {
                 return { success: false, error: 'No active scene' };
             }
 
-            const processNode = (node: any): any => {
+            const processNode = (node: any, depth: number = 0): any => {
+                if (depth >= maxDepth) {
+                    return { name: node.name, uuid: node.uuid, truncated: true };
+                }
                 const result: any = {
                     name: node.name,
                     uuid: node.uuid,
@@ -310,13 +317,13 @@ export const methods: { [key: string]: (...any: any) => any } = {
                 }
 
                 if (node.children && node.children.length > 0) {
-                    result.children = node.children.map((child: any) => processNode(child));
+                    result.children = node.children.map((child: any) => processNode(child, depth + 1));
                 }
 
                 return result;
             };
 
-            const hierarchy = scene.children.map((child: any) => processNode(child));
+            const hierarchy = scene.children.map((child: any) => processNode(child, 0));
             return { success: true, data: hierarchy };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -376,26 +383,32 @@ export const methods: { [key: string]: (...any: any) => any } = {
             if (!component) {
                 return { success: false, error: `Component ${componentType} not found on node` };
             }
+            // Prototype pollution guard (applied first for all property names)
+            if (['__proto__', 'constructor', 'prototype'].includes(property)) {
+                return { success: false, error: `Setting property '${property}' is not allowed` };
+            }
             // Special handling for common properties
             if (property === 'spriteFrame' && componentType === 'cc.Sprite') {
                 // Value can be a uuid or asset path
                 if (typeof value === 'string') {
-                    // Try to find by uuid first
                     const assetManager = require('cc').assetManager;
-                    assetManager.resources.load(value, require('cc').SpriteFrame, (err: any, spriteFrame: any) => {
-                        if (!err && spriteFrame) {
-                            component.spriteFrame = spriteFrame;
-                        } else {
-                            // Try loading by uuid
-                            assetManager.loadAny({ uuid: value }, (err2: any, asset: any) => {
-                                if (!err2 && asset) {
-                                    component.spriteFrame = asset;
-                                } else {
-                                    // Assign directly (compatible with pre-loaded asset objects)
-                                    component.spriteFrame = value;
-                                }
-                            });
-                        }
+                    // Return a Promise so the caller waits for the asset to load
+                    return new Promise<{ success: boolean; message?: string; error?: string }>((resolve) => {
+                        assetManager.resources.load(value, require('cc').SpriteFrame, (err: any, spriteFrame: any) => {
+                            if (!err && spriteFrame) {
+                                component.spriteFrame = spriteFrame;
+                                resolve({ success: true, message: `Component property '${property}' updated successfully` });
+                            } else {
+                                assetManager.loadAny({ uuid: value }, (err2: any, asset: any) => {
+                                    if (!err2 && asset) {
+                                        component.spriteFrame = asset;
+                                        resolve({ success: true, message: `Component property '${property}' updated successfully` });
+                                    } else {
+                                        resolve({ success: false, error: `Failed to load spriteFrame: ${err2?.message || err?.message || 'unknown error'}` });
+                                    }
+                                });
+                            }
+                        });
                     });
                 } else {
                     component.spriteFrame = value;
@@ -404,18 +417,23 @@ export const methods: { [key: string]: (...any: any) => any } = {
                 // Value can be a uuid or asset path
                 if (typeof value === 'string') {
                     const assetManager = require('cc').assetManager;
-                    assetManager.resources.load(value, require('cc').Material, (err: any, material: any) => {
-                        if (!err && material) {
-                            component.material = material;
-                        } else {
-                            assetManager.loadAny({ uuid: value }, (err2: any, asset: any) => {
-                                if (!err2 && asset) {
-                                    component.material = asset;
-                                } else {
-                                    component.material = value;
-                                }
-                            });
-                        }
+                    // Return a Promise so the caller waits for the asset to load
+                    return new Promise<{ success: boolean; message?: string; error?: string }>((resolve) => {
+                        assetManager.resources.load(value, require('cc').Material, (err: any, material: any) => {
+                            if (!err && material) {
+                                component.material = material;
+                                resolve({ success: true, message: `Component property '${property}' updated successfully` });
+                            } else {
+                                assetManager.loadAny({ uuid: value }, (err2: any, asset: any) => {
+                                    if (!err2 && asset) {
+                                        component.material = asset;
+                                        resolve({ success: true, message: `Component property '${property}' updated successfully` });
+                                    } else {
+                                        resolve({ success: false, error: `Failed to load material: ${err2?.message || err?.message || 'unknown error'}` });
+                                    }
+                                });
+                            }
+                        });
                     });
                 } else {
                     component.material = value;

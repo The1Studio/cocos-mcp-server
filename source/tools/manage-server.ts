@@ -33,44 +33,30 @@ export class ManageServer extends BaseActionTool {
     };
 
     private async getIpList(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('server', 'query-ip-list').then((ipList: string[]) => {
-                resolve(successResult({
-                    ipList,
-                    count: ipList.length,
-                    message: 'IP list retrieved successfully'
-                }));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const ipList: string[] = await Editor.Message.request('server', 'query-ip-list') as string[];
+            return successResult({ ipList, count: ipList.length, message: 'IP list retrieved successfully' });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getSortedIpList(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('server', 'query-sort-ip-list').then((sortedIPList: string[]) => {
-                resolve(successResult({
-                    sortedIPList,
-                    count: sortedIPList.length,
-                    message: 'Sorted IP list retrieved successfully'
-                }));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const sortedIPList: string[] = await Editor.Message.request('server', 'query-sort-ip-list') as string[];
+            return successResult({ sortedIPList, count: sortedIPList.length, message: 'Sorted IP list retrieved successfully' });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getPort(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('server', 'query-port').then((port: number) => {
-                resolve(successResult({
-                    port,
-                    message: `Editor server is running on port ${port}`
-                }));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const port: number = await Editor.Message.request('server', 'query-port') as number;
+            return successResult({ port, message: `Editor server is running on port ${port}` });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getStatus(): Promise<ActionToolResult> {
@@ -101,7 +87,6 @@ export class ManageServer extends BaseActionTool {
                 status.portError = portResult.status === 'rejected' ? portResult.reason : portResult.value.error;
             }
 
-            status.mcpServerPort = 3000;
             status.editorVersion = (Editor as any).versions?.cocos || 'Unknown';
             status.platform = process.platform;
             status.nodeVersion = process.version;

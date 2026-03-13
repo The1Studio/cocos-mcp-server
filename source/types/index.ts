@@ -3,6 +3,7 @@ export interface MCPServerSettings {
     autoStart: boolean;
     enableDebugLog: boolean;
     allowedOrigins: string[];
+    /** Reserved for future use — not currently enforced (HTTP is stateless) */
     maxConnections: number;
 }
 
@@ -167,7 +168,8 @@ export function errorResult(error: string): ActionToolResult {
 
 // Tool configuration management interfaces
 export interface ToolConfig {
-    category: string;
+    /** @deprecated category field is unused in v2 flat tool architecture */
+    category?: string;
     name: string;
     enabled: boolean;
     description: string;

@@ -50,32 +50,55 @@ export function parseJsonPayload(val: any): any {
     }
 }
 
-/** Normalize Vec3-like input: accepts {x,y,z}, [x,y,z], or JSON string. */
+/** Normalize Vec3-like input: accepts {x,y,z}, [x,y,z], or JSON string. Missing fields default to 0. */
 export function normalizeVec3(val: any): { x: number; y: number; z: number } | undefined {
     if (!val) return undefined;
     const parsed = parseJsonPayload(val);
-    if (Array.isArray(parsed) && parsed.length >= 3) {
-        return { x: Number(parsed[0]), y: Number(parsed[1]), z: Number(parsed[2]) };
+    if (Array.isArray(parsed) && parsed.length >= 1) {
+        return {
+            x: Number(parsed[0] ?? 0),
+            y: Number(parsed[1] ?? 0),
+            z: Number(parsed[2] ?? 0)
+        };
     }
-    if (parsed && typeof parsed === 'object' && 'x' in parsed) {
-        return { x: Number(parsed.x), y: Number(parsed.y), z: Number(parsed.z) };
+    if (parsed && typeof parsed === 'object' && ('x' in parsed || 'y' in parsed || 'z' in parsed)) {
+        return {
+            x: Number(parsed.x ?? 0),
+            y: Number(parsed.y ?? 0),
+            z: Number(parsed.z ?? 0)
+        };
     }
     return undefined;
 }
 
-/** Normalize Vec4-like input for colors: accepts {r,g,b,a}, [r,g,b,a], or JSON string. */
+/** Normalize Vec4-like input for colors: accepts {r,g,b,a}, [r,g,b,a], or JSON string. Missing fields default to 0 (w defaults to 1). */
 export function normalizeVec4(val: any): { x: number; y: number; z: number; w: number } | undefined {
     if (!val) return undefined;
     const parsed = parseJsonPayload(val);
-    if (Array.isArray(parsed) && parsed.length >= 4) {
-        return { x: Number(parsed[0]), y: Number(parsed[1]), z: Number(parsed[2]), w: Number(parsed[3]) };
+    if (Array.isArray(parsed) && parsed.length >= 1) {
+        return {
+            x: Number(parsed[0] ?? 0),
+            y: Number(parsed[1] ?? 0),
+            z: Number(parsed[2] ?? 0),
+            w: Number(parsed[3] ?? 1)
+        };
     }
     if (parsed && typeof parsed === 'object') {
-        if ('r' in parsed) {
-            return { x: Number(parsed.r), y: Number(parsed.g), z: Number(parsed.b), w: Number(parsed.a ?? 1) };
+        if ('r' in parsed || 'g' in parsed || 'b' in parsed) {
+            return {
+                x: Number(parsed.r ?? 0),
+                y: Number(parsed.g ?? 0),
+                z: Number(parsed.b ?? 0),
+                w: Number(parsed.a ?? 1)
+            };
         }
-        if ('x' in parsed) {
-            return { x: Number(parsed.x), y: Number(parsed.y), z: Number(parsed.z), w: Number(parsed.w ?? 1) };
+        if ('x' in parsed || 'y' in parsed || 'z' in parsed) {
+            return {
+                x: Number(parsed.x ?? 0),
+                y: Number(parsed.y ?? 0),
+                z: Number(parsed.z ?? 0),
+                w: Number(parsed.w ?? 1)
+            };
         }
     }
     return undefined;

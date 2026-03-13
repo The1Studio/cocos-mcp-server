@@ -455,9 +455,26 @@ Intentional design choice:
 - Performance profiling tools
 - Team collaboration features
 
-## Release Notes (v2.0)
+## Release Notes
 
-**v2.0.0** — Major rewrite for action-based tools
+**Current Version**: v2.1.0 (2026-03-13)
+
+See [Project Changelog](./project-changelog.md) for complete version history and detailed release notes.
+
+### v2.1.0 — Security & Quality Release
+
+**Focus**: Security hardening and code quality improvements
+
+**Key Improvements**:
+- 6 critical security fixes (body size limits, CORS, XSS, path traversal, prototype pollution, script execution)
+- Removed `new Promise(async ...)` anti-pattern from 12+ files
+- Fixed JSON-RPC 2.0 compliance issues
+- Removed dead code and unused imports from 15+ files
+- Enhanced error messages and recovery
+
+**Breaking Changes**: None (fully backward compatible)
+
+### v2.0.0 — Major Rewrite (2026-03-12)
 
 **Breaking Changes**:
 - Tool names changed from `category_action` to `manage_category`

@@ -79,46 +79,79 @@ module.exports = Editor.Panel.define({
         updateToolsDisplay(this: any) {
             const container = this.$.toolsContainer;
 
+            // Clear container safely
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+
             if (!this.currentConfiguration) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>No configuration selected</h3>
-                        <p>Please select a configuration or create a new one</p>
-                    </div>
-                `;
+                const emptyDiv = document.createElement('div');
+                emptyDiv.className = 'empty-state';
+                const h3 = document.createElement('h3');
+                h3.textContent = 'No configuration selected';
+                const p = document.createElement('p');
+                p.textContent = 'Please select a configuration or create a new one';
+                emptyDiv.appendChild(h3);
+                emptyDiv.appendChild(p);
+                container.appendChild(emptyDiv);
                 return;
             }
 
             // v2: flat tool list — no categories
-            container.innerHTML = '';
-
             const toolListDiv = document.createElement('div');
             toolListDiv.className = 'tool-list';
 
             const enabledCount = this.currentConfiguration.tools.filter((t: any) => t.enabled).length;
             const totalCount = this.currentConfiguration.tools.length;
 
-            toolListDiv.innerHTML = `
-                <div class="category-header">
-                    <div class="category-name">All Tools</div>
-                    <div class="category-toggle">
-                        <span>${enabledCount}/${totalCount}</span>
-                    </div>
-                </div>
-                ${this.currentConfiguration.tools.map((tool: any) => `
-                    <div class="tool-item">
-                        <div class="tool-info">
-                            <div class="tool-name">${tool.name}</div>
-                            <div class="tool-description">${tool.description}</div>
-                        </div>
-                        <div class="tool-toggle">
-                            <input type="checkbox" class="checkbox tool-checkbox"
-                                   data-name="${tool.name}"
-                                   ${tool.enabled ? 'checked' : ''}>
-                        </div>
-                    </div>
-                `).join('')}
-            `;
+            // Category header (safe DOM creation)
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'category-header';
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'category-name';
+            nameDiv.textContent = 'All Tools';
+            const toggleDiv = document.createElement('div');
+            toggleDiv.className = 'category-toggle';
+            const countSpan = document.createElement('span');
+            countSpan.textContent = `${enabledCount}/${totalCount}`;
+            toggleDiv.appendChild(countSpan);
+            headerDiv.appendChild(nameDiv);
+            headerDiv.appendChild(toggleDiv);
+            toolListDiv.appendChild(headerDiv);
+
+            // Tool items (safe DOM creation — no innerHTML with user data)
+            for (const tool of this.currentConfiguration.tools) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'tool-item';
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'tool-info';
+
+                const toolNameDiv = document.createElement('div');
+                toolNameDiv.className = 'tool-name';
+                toolNameDiv.textContent = tool.name;
+
+                const toolDescDiv = document.createElement('div');
+                toolDescDiv.className = 'tool-description';
+                toolDescDiv.textContent = tool.description;
+
+                infoDiv.appendChild(toolNameDiv);
+                infoDiv.appendChild(toolDescDiv);
+
+                const toolToggleDiv = document.createElement('div');
+                toolToggleDiv.className = 'tool-toggle';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'checkbox tool-checkbox';
+                checkbox.dataset.name = tool.name;
+                checkbox.checked = !!tool.enabled;
+
+                toolToggleDiv.appendChild(checkbox);
+                itemDiv.appendChild(infoDiv);
+                itemDiv.appendChild(toolToggleDiv);
+                toolListDiv.appendChild(itemDiv);
+            }
 
             container.appendChild(toolListDiv);
             this.bindToolEvents();
@@ -308,6 +341,12 @@ module.exports = Editor.Panel.define({
         async selectAllTools(this: any) {
             if (!this.currentConfiguration) return;
 
+            // Snapshot current state BEFORE changing (for accurate rollback)
+            const snapshot = this.currentConfiguration.tools.map((tool: any) => ({
+                name: tool.name,
+                enabled: tool.enabled
+            }));
+
             const updates = this.currentConfiguration.tools.map((tool: any) => ({
                 name: tool.name,
                 enabled: true
@@ -330,10 +369,11 @@ module.exports = Editor.Panel.define({
                 console.error('Failed to select all tools:', error);
                 this.showError('Failed to select all tools');
 
-                // Rollback on failure
-                this.currentConfiguration.tools.forEach((tool: any) => {
-                    tool.enabled = false;
-                });
+                // Rollback to actual previous state (not assumed inverse)
+                for (const prev of snapshot) {
+                    const tool = this.currentConfiguration.tools.find((t: any) => t.name === prev.name);
+                    if (tool) tool.enabled = prev.enabled;
+                }
                 this.updateStatusBar();
                 this.updateToolsDisplay();
             }
@@ -341,6 +381,12 @@ module.exports = Editor.Panel.define({
 
         async deselectAllTools(this: any) {
             if (!this.currentConfiguration) return;
+
+            // Snapshot current state BEFORE changing (for accurate rollback)
+            const snapshot = this.currentConfiguration.tools.map((tool: any) => ({
+                name: tool.name,
+                enabled: tool.enabled
+            }));
 
             const updates = this.currentConfiguration.tools.map((tool: any) => ({
                 name: tool.name,
@@ -364,10 +410,11 @@ module.exports = Editor.Panel.define({
                 console.error('Failed to deselect all tools:', error);
                 this.showError('Failed to deselect all tools');
 
-                // Rollback on failure
-                this.currentConfiguration.tools.forEach((tool: any) => {
-                    tool.enabled = true;
-                });
+                // Rollback to actual previous state (not assumed inverse)
+                for (const prev of snapshot) {
+                    const tool = this.currentConfiguration.tools.find((t: any) => t.name === prev.name);
+                    if (tool) tool.enabled = prev.enabled;
+                }
                 this.updateStatusBar();
                 this.updateToolsDisplay();
             }

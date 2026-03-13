@@ -14,8 +14,9 @@ Complete documentation for Cocos MCP Server v2.0 (major rewrite with action-base
 2. **[Code Standards](./code-standards.md)** — Development patterns and conventions
 3. **[CLAUDE.md](../CLAUDE.md)** — Quick reference for developers
 
-### For Project Managers
+### For Project Managers & Stakeholders
 1. **[Project Overview & PDR](./project-overview-pdr.md)** — Requirements, features, roadmap
+2. **[Project Changelog](./project-changelog.md)** — Version history and release notes
 
 ---
 
@@ -28,6 +29,8 @@ Complete documentation for Cocos MCP Server v2.0 (major rewrite with action-base
 | **System Architecture** | Architecture, design patterns, data flows | Developers, architects | 400 lines |
 | **Code Standards** | Implementation patterns and conventions | Developers | 382 lines |
 | **Project Overview & PDR** | Project scope, requirements, roadmap | PMs, stakeholders | 493 lines |
+| **Project Changelog** | Version history, release notes, features | All | 200 lines |
+| **Codebase Summary** | Repository structure and metrics | Developers, architects | 350 lines |
 
 ---
 
@@ -186,9 +189,13 @@ docs/
 ├── system-architecture.md       (400 lines) - Full architecture
 ├── code-standards.md            (382 lines) - Dev standards & patterns
 ├── project-overview-pdr.md      (493 lines) - Project requirements
-└── index.md                     (Optional) - Additional navigation
+├── project-changelog.md         (200 lines) - Version history
+├── codebase-summary.md         (350 lines) - Repository metrics & structure
+├── journals/                    - Development journals
+└── opencode-setup.md           - OpenCode MCP client setup
 
 CLAUDE.md                        (186 lines) - Quick developer reference
+repomix-output.xml             - Complete packed repository (for AI analysis)
 ```
 
 ---
@@ -375,6 +382,8 @@ Look for `[MCPServer]` and tool-specific prefixes in console.
 3. **Architecture** → [System Architecture](./system-architecture.md)
 4. **Development** → [Code Standards](./code-standards.md)
 5. **Project Context** → [Project Overview](./project-overview-pdr.md)
+6. **Release Notes & Changes** → [Project Changelog](./project-changelog.md)
+7. **Repository Structure** → [Codebase Summary](./codebase-summary.md)
 
 ---
 
@@ -384,11 +393,13 @@ Look for `[MCPServer]` and tool-specific prefixes in console.
 - **README.EN.md** — User-facing features documentation
 - **package.json** — Project dependencies and scripts
 - **source/types/index.ts** — TypeScript type definitions
+- **repomix-output.xml** — Complete packed repository (for AI analysis)
 
 ---
 
-**Last Updated**: 2026-03-12
-**Version**: v2.0.0
+**Last Updated**: 2026-03-13
+**Version**: v2.1.0
 **Status**: Stable
 
 See [Project Overview & PDR](./project-overview-pdr.md) for detailed project information, requirements, and roadmap.
+See [Project Changelog](./project-changelog.md) for release history and version changes.

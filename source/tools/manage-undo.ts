@@ -34,52 +34,47 @@ export class ManageUndo extends BaseActionTool {
     };
 
     private async beginRecording(nodeUuid: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'begin-recording', nodeUuid).then((undoId: string) => {
-                resolve(successResult({ undoId }, 'Undo recording started'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const undoId: string = await Editor.Message.request('scene', 'begin-recording', nodeUuid) as string;
+            return successResult({ undoId }, 'Undo recording started');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async endRecording(undoId: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'end-recording', undoId).then(() => {
-                resolve(successResult(null, 'Undo recording ended'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('scene', 'end-recording', undoId);
+            return successResult(null, 'Undo recording ended');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async cancelRecording(undoId: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'cancel-recording', undoId).then(() => {
-                resolve(successResult(null, 'Undo recording cancelled'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('scene', 'cancel-recording', undoId);
+            return successResult(null, 'Undo recording cancelled');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async undo(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'undo').then(() => {
-                resolve(successResult(null, 'Undo performed'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('scene', 'undo');
+            return successResult(null, 'Undo performed');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async redo(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'redo').then(() => {
-                resolve(successResult(null, 'Redo performed'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('scene', 'redo');
+            return successResult(null, 'Redo performed');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 }

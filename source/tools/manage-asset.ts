@@ -4,6 +4,31 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
+ * Returns true if the path is safe for asset operations.
+ * Rejects traversal patterns and bare absolute paths (non-db:// form).
+ */
+function validateAssetPath(assetPath: string): boolean {
+    if (!assetPath || typeof assetPath !== 'string') return false;
+    // Allow db:// protocol paths (Cocos asset DB format)
+    if (assetPath.startsWith('db://')) return true;
+    // Reject traversal patterns in any form
+    if (assetPath.includes('..') || assetPath.startsWith('/') || assetPath.includes('\\..')) return false;
+    // Must start with assets/ for relative paths
+    return assetPath.startsWith('assets/');
+}
+
+function escapeCsvField(field: string): string {
+    if (typeof field !== 'string') return String(field);
+    // Escape formula injection prefixes
+    if (/^[=+\-@\t\r]/.test(field)) field = "'" + field;
+    // Wrap in quotes if contains comma, quote or newline
+    if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+        return '"' + field.replace(/"/g, '""') + '"';
+    }
+    return field;
+}
+
+/**
  * Consolidated asset management tool.
  * Combines ProjectTools (asset methods) + AssetAdvancedTools into one action-based tool.
  */
@@ -110,483 +135,302 @@ export class ManageAsset extends BaseActionTool {
     // ── From ProjectTools ────────────────────────────────────────────────────
 
     private async importAsset(sourcePath: string, targetFolder: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            if (!fs.existsSync(sourcePath)) {
-                resolve(errorResult('Source file not found'));
-                return;
-            }
-
+        if (!fs.existsSync(sourcePath)) return errorResult('Source file not found');
+        if (!validateAssetPath(targetFolder)) return errorResult('Invalid target folder path: must be db:// URL or assets/ relative path without traversal');
+        try {
             const fileName = path.basename(sourcePath);
-            const targetPath = targetFolder.startsWith('db://') ?
-                targetFolder : `db://assets/${targetFolder}`;
-
-            Editor.Message.request('asset-db', 'import-asset', sourcePath, `${targetPath}/${fileName}`).then((result: any) => {
-                resolve(successResult({
-                    uuid: result.uuid,
-                    path: result.url,
-                    message: `Asset imported: ${fileName}`
-                }));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+            const targetPath = targetFolder.startsWith('db://') ? targetFolder : `db://assets/${targetFolder}`;
+            const result: any = await Editor.Message.request('asset-db', 'import-asset', sourcePath, `${targetPath}/${fileName}`);
+            return successResult({ uuid: result.uuid, path: result.url, message: `Asset imported: ${fileName}` });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getAssetInfo(assetPath: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'query-asset-info', assetPath).then((assetInfo: any) => {
-                if (!assetInfo) {
-                    resolve(errorResult('Asset not found'));
-                    return;
-                }
-
-                const info: any = {
-                    name: assetInfo.name,
-                    uuid: assetInfo.uuid,
-                    path: assetInfo.url,
-                    type: assetInfo.type,
-                    size: assetInfo.size,
-                    isDirectory: assetInfo.isDirectory
-                };
-
-                if (assetInfo.meta) {
-                    info.meta = {
-                        ver: assetInfo.meta.ver,
-                        importer: assetInfo.meta.importer
-                    };
-                }
-
-                resolve(successResult(info));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const assetInfo: any = await Editor.Message.request('asset-db', 'query-asset-info', assetPath);
+            if (!assetInfo) return errorResult('Asset not found');
+            const info: any = {
+                name: assetInfo.name,
+                uuid: assetInfo.uuid,
+                path: assetInfo.url,
+                type: assetInfo.type,
+                size: assetInfo.size,
+                isDirectory: assetInfo.isDirectory
+            };
+            if (assetInfo.meta) {
+                info.meta = { ver: assetInfo.meta.ver, importer: assetInfo.meta.importer };
+            }
+            return successResult(info);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getAssets(type: string = 'all', folder: string = 'db://assets'): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
+        try {
             let pattern = `${folder}/**/*`;
-
             if (type !== 'all') {
                 const typeExtensions: Record<string, string> = {
-                    'scene': '.scene',
-                    'prefab': '.prefab',
-                    'script': '.{ts,js}',
-                    'texture': '.{png,jpg,jpeg,gif,tga,bmp,psd}',
-                    'material': '.mtl',
-                    'mesh': '.{fbx,obj,dae}',
-                    'audio': '.{mp3,ogg,wav,m4a}',
-                    'animation': '.{anim,clip}'
+                    'scene': '.scene', 'prefab': '.prefab', 'script': '.{ts,js}',
+                    'texture': '.{png,jpg,jpeg,gif,tga,bmp,psd}', 'material': '.mtl',
+                    'mesh': '.{fbx,obj,dae}', 'audio': '.{mp3,ogg,wav,m4a}', 'animation': '.{anim,clip}'
                 };
-
                 const extension = typeExtensions[type];
-                if (extension) {
-                    pattern = `${folder}/**/*${extension}`;
-                }
+                if (extension) pattern = `${folder}/**/*${extension}`;
             }
-
-            Editor.Message.request('asset-db', 'query-assets', { pattern }).then((results: any[]) => {
-                const assets = results.map(asset => ({
-                    name: asset.name,
-                    uuid: asset.uuid,
-                    path: asset.url,
-                    type: asset.type,
-                    size: asset.size || 0,
-                    isDirectory: asset.isDirectory || false
-                }));
-
-                resolve(successResult({
-                    type,
-                    folder,
-                    count: assets.length,
-                    assets
-                }));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+            const results: any[] = await Editor.Message.request('asset-db', 'query-assets', { pattern });
+            const assets = results.map(asset => ({
+                name: asset.name, uuid: asset.uuid, path: asset.url,
+                type: asset.type, size: asset.size || 0, isDirectory: asset.isDirectory || false
+            }));
+            return successResult({ type, folder, count: assets.length, assets });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async refreshAssets(folder?: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
+        try {
             const targetPath = folder || 'db://assets';
-
-            Editor.Message.request('asset-db', 'refresh-asset', targetPath).then(() => {
-                resolve(successResult(null, `Assets refreshed in: ${targetPath}`));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+            await Editor.Message.request('asset-db', 'refresh-asset', targetPath);
+            return successResult(null, `Assets refreshed in: ${targetPath}`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async createAsset(url: string, content: string | null = null, overwrite: boolean = false): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            const options = {
-                overwrite,
-                rename: !overwrite
-            };
-
-            Editor.Message.request('asset-db', 'create-asset', url, content, options).then((result: any) => {
-                if (result && result.uuid) {
-                    resolve(successResult({
-                        uuid: result.uuid,
-                        url: result.url,
-                        message: content === null ? 'Folder created successfully' : 'File created successfully'
-                    }));
-                } else {
-                    resolve(successResult({
-                        url,
-                        message: content === null ? 'Folder created successfully' : 'File created successfully'
-                    }));
-                }
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const options = { overwrite, rename: !overwrite };
+            const result: any = await Editor.Message.request('asset-db', 'create-asset', url, content, options);
+            const msg = content === null ? 'Folder created successfully' : 'File created successfully';
+            return successResult(result && result.uuid ? { uuid: result.uuid, url: result.url, message: msg } : { url, message: msg });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async copyAsset(source: string, target: string, overwrite: boolean = false): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            const options = { overwrite, rename: !overwrite };
-
-            Editor.Message.request('asset-db', 'copy-asset', source, target, options).then((result: any) => {
-                if (result && result.uuid) {
-                    resolve(successResult({
-                        uuid: result.uuid,
-                        url: result.url,
-                        message: 'Asset copied successfully'
-                    }));
-                } else {
-                    resolve(successResult({
-                        source,
-                        target,
-                        message: 'Asset copied successfully'
-                    }));
-                }
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const result: any = await Editor.Message.request('asset-db', 'copy-asset', source, target, { overwrite, rename: !overwrite });
+            return successResult(result && result.uuid
+                ? { uuid: result.uuid, url: result.url, message: 'Asset copied successfully' }
+                : { source, target, message: 'Asset copied successfully' });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async moveAsset(source: string, target: string, overwrite: boolean = false): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            const options = { overwrite, rename: !overwrite };
-
-            Editor.Message.request('asset-db', 'move-asset', source, target, options).then((result: any) => {
-                if (result && result.uuid) {
-                    resolve(successResult({
-                        uuid: result.uuid,
-                        url: result.url,
-                        message: 'Asset moved successfully'
-                    }));
-                } else {
-                    resolve(successResult({
-                        source,
-                        target,
-                        message: 'Asset moved successfully'
-                    }));
-                }
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const result: any = await Editor.Message.request('asset-db', 'move-asset', source, target, { overwrite, rename: !overwrite });
+            return successResult(result && result.uuid
+                ? { uuid: result.uuid, url: result.url, message: 'Asset moved successfully' }
+                : { source, target, message: 'Asset moved successfully' });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async deleteAsset(url: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'delete-asset', url).then(() => {
-                resolve(successResult({ url }, 'Asset deleted successfully'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('asset-db', 'delete-asset', url);
+            return successResult({ url }, 'Asset deleted successfully');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async saveAsset(url: string, content: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'save-asset', url, content).then((result: any) => {
-                if (result && result.uuid) {
-                    resolve(successResult({
-                        uuid: result.uuid,
-                        url: result.url
-                    }, 'Asset saved successfully'));
-                } else {
-                    resolve(successResult({ url }, 'Asset saved successfully'));
-                }
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const result: any = await Editor.Message.request('asset-db', 'save-asset', url, content);
+            return successResult(result && result.uuid ? { uuid: result.uuid, url: result.url } : { url }, 'Asset saved successfully');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async reimportAsset(url: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'reimport-asset', url).then(() => {
-                resolve(successResult({ url }, 'Asset reimported successfully'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('asset-db', 'reimport-asset', url);
+            return successResult({ url }, 'Asset reimported successfully');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async queryAssetPath(url: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'query-path', url).then((assetPath: string | null) => {
-                if (assetPath) {
-                    resolve(successResult({ url, path: assetPath }, 'Asset path retrieved successfully'));
-                } else {
-                    resolve(errorResult('Asset path not found'));
-                }
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const assetPath: string | null = await Editor.Message.request('asset-db', 'query-path', url) as string | null;
+            if (assetPath) return successResult({ url, path: assetPath }, 'Asset path retrieved successfully');
+            return errorResult('Asset path not found');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async queryAssetUuid(url: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'query-uuid', url).then((uuid: string | null) => {
-                if (uuid) {
-                    resolve(successResult({ url, uuid }, 'Asset UUID retrieved successfully'));
-                } else {
-                    resolve(errorResult('Asset UUID not found'));
-                }
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const uuid: string | null = await Editor.Message.request('asset-db', 'query-uuid', url) as string | null;
+            if (uuid) return successResult({ url, uuid }, 'Asset UUID retrieved successfully');
+            return errorResult('Asset UUID not found');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async queryAssetUrl(uuid: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'query-url', uuid).then((url: string | null) => {
-                if (url) {
-                    resolve(successResult({ uuid, url }, 'Asset URL retrieved successfully'));
-                } else {
-                    resolve(errorResult('Asset URL not found'));
-                }
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const url: string | null = await Editor.Message.request('asset-db', 'query-url', uuid) as string | null;
+            if (url) return successResult({ uuid, url }, 'Asset URL retrieved successfully');
+            return errorResult('Asset URL not found');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async findAssetByName(args: any): Promise<ActionToolResult> {
         const { name, exactMatch = false, assetType = 'all', folder = 'db://assets', maxResults = 20 } = args;
-
-        return new Promise(async (resolve) => {
-            try {
-                const allAssetsResult = await this.getAssets(assetType, folder);
-                if (!allAssetsResult.success || !allAssetsResult.data) {
-                    resolve(errorResult(`Failed to get assets: ${allAssetsResult.error}`));
-                    return;
-                }
-
-                const allAssets = allAssetsResult.data.assets as any[];
-                const matchedAssets: any[] = [];
-
-                for (const asset of allAssets) {
-                    const assetName = asset.name;
-                    const matches = exactMatch
-                        ? assetName === name
-                        : assetName.toLowerCase().includes(name.toLowerCase());
-
-                    if (matches) {
-                        try {
-                            const detailResult = await this.getAssetInfo(asset.path);
-                            if (detailResult.success) {
-                                matchedAssets.push({ ...asset, details: detailResult.data });
-                            } else {
-                                matchedAssets.push(asset);
-                            }
-                        } catch {
-                            matchedAssets.push(asset);
-                        }
-
-                        if (matchedAssets.length >= maxResults) break;
-                    }
-                }
-
-                resolve(successResult({
-                    searchTerm: name,
-                    exactMatch,
-                    assetType,
-                    folder,
-                    totalFound: matchedAssets.length,
-                    maxResults,
-                    assets: matchedAssets
-                }, `Found ${matchedAssets.length} assets matching '${name}'`));
-
-            } catch (error: any) {
-                resolve(errorResult(`Asset search failed: ${error.message}`));
+        try {
+            const allAssetsResult = await this.getAssets(assetType, folder);
+            if (!allAssetsResult.success || !allAssetsResult.data) {
+                return errorResult(`Failed to get assets: ${allAssetsResult.error}`);
             }
-        });
+            const allAssets = allAssetsResult.data.assets as any[];
+            const matchedAssets: any[] = [];
+            for (const asset of allAssets) {
+                const matches = exactMatch
+                    ? asset.name === name
+                    : asset.name.toLowerCase().includes(name.toLowerCase());
+                if (matches) {
+                    try {
+                        const detailResult = await this.getAssetInfo(asset.path);
+                        matchedAssets.push(detailResult.success ? { ...asset, details: detailResult.data } : asset);
+                    } catch {
+                        matchedAssets.push(asset);
+                    }
+                    if (matchedAssets.length >= maxResults) break;
+                }
+            }
+            return successResult({
+                searchTerm: name, exactMatch, assetType, folder,
+                totalFound: matchedAssets.length, maxResults, assets: matchedAssets
+            }, `Found ${matchedAssets.length} assets matching '${name}'`);
+        } catch (error: any) {
+            return errorResult(`Asset search failed: ${error.message}`);
+        }
     }
 
     private async getAssetDetails(assetPath: string, includeSubAssets: boolean = true): Promise<ActionToolResult> {
-        return new Promise(async (resolve) => {
-            try {
-                const assetInfoResult = await this.getAssetInfo(assetPath);
-                if (!assetInfoResult.success) {
-                    resolve(assetInfoResult);
-                    return;
-                }
-
-                const assetInfo = assetInfoResult.data;
-                const detailedInfo: any = { ...assetInfo, subAssets: [] };
-
-                if (includeSubAssets && assetInfo) {
-                    if (assetInfo.type === 'cc.ImageAsset' || assetPath.match(/\.(png|jpg|jpeg|gif|tga|bmp|psd)$/i)) {
-                        const baseUuid = assetInfo.uuid;
-                        const possibleSubAssets = [
-                            { type: 'spriteFrame', uuid: `${baseUuid}@f9941`, suffix: '@f9941' },
-                            { type: 'texture', uuid: `${baseUuid}@6c48a`, suffix: '@6c48a' },
-                            { type: 'texture2D', uuid: `${baseUuid}@6c48a`, suffix: '@6c48a' }
-                        ];
-
-                        for (const subAsset of possibleSubAssets) {
-                            try {
-                                const subAssetUrl = await Editor.Message.request('asset-db', 'query-url', subAsset.uuid);
-                                if (subAssetUrl) {
-                                    detailedInfo.subAssets.push({
-                                        type: subAsset.type,
-                                        uuid: subAsset.uuid,
-                                        url: subAssetUrl,
-                                        suffix: subAsset.suffix
-                                    });
-                                }
-                            } catch {
-                                // Sub-asset doesn't exist, skip it
+        try {
+            const assetInfoResult = await this.getAssetInfo(assetPath);
+            if (!assetInfoResult.success) return assetInfoResult;
+            const assetInfo = assetInfoResult.data;
+            const detailedInfo: any = { ...assetInfo, subAssets: [] };
+            if (includeSubAssets && assetInfo) {
+                if (assetInfo.type === 'cc.ImageAsset' || assetPath.match(/\.(png|jpg|jpeg|gif|tga|bmp|psd)$/i)) {
+                    const baseUuid = assetInfo.uuid;
+                    const possibleSubAssets = [
+                        { type: 'spriteFrame', uuid: `${baseUuid}@f9941`, suffix: '@f9941' },
+                        { type: 'texture', uuid: `${baseUuid}@6c48a`, suffix: '@6c48a' },
+                        { type: 'texture2D', uuid: `${baseUuid}@6c48a`, suffix: '@6c48a' }
+                    ];
+                    for (const subAsset of possibleSubAssets) {
+                        try {
+                            const subAssetUrl = await Editor.Message.request('asset-db', 'query-url', subAsset.uuid);
+                            if (subAssetUrl) {
+                                detailedInfo.subAssets.push({ type: subAsset.type, uuid: subAsset.uuid, url: subAssetUrl, suffix: subAsset.suffix });
                             }
-                        }
+                        } catch { /* sub-asset doesn't exist, skip */ }
                     }
                 }
-
-                resolve(successResult({
-                    assetPath,
-                    includeSubAssets,
-                    ...detailedInfo
-                }, `Asset details retrieved. Found ${detailedInfo.subAssets.length} sub-assets.`));
-
-            } catch (error: any) {
-                resolve(errorResult(`Failed to get asset details: ${error.message}`));
             }
-        });
+            return successResult({ assetPath, includeSubAssets, ...detailedInfo }, `Asset details retrieved. Found ${detailedInfo.subAssets.length} sub-assets.`);
+        } catch (error: any) {
+            return errorResult(`Failed to get asset details: ${error.message}`);
+        }
     }
 
     // ── From AssetAdvancedTools ───────────────────────────────────────────────
 
     private async saveAssetMeta(urlOrUUID: string, content: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'save-asset-meta', urlOrUUID, content).then((result: any) => {
-                resolve(successResult({
-                    uuid: result?.uuid,
-                    url: result?.url
-                }, 'Asset meta saved successfully'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const result: any = await Editor.Message.request('asset-db', 'save-asset-meta', urlOrUUID, content);
+            return successResult({ uuid: result?.uuid, url: result?.url }, 'Asset meta saved successfully');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async generateAvailableUrl(url: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'generate-available-url', url).then((availableUrl: string) => {
-                resolve(successResult({
-                    originalUrl: url,
-                    availableUrl,
-                    message: availableUrl === url ? 'URL is available' : 'Generated new available URL'
-                }));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
+        try {
+            const availableUrl: string = await Editor.Message.request('asset-db', 'generate-available-url', url) as string;
+            return successResult({
+                originalUrl: url, availableUrl,
+                message: availableUrl === url ? 'URL is available' : 'Generated new available URL'
             });
-        });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async queryAssetDbReady(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'query-ready').then((ready: boolean) => {
-                resolve(successResult({
-                    ready,
-                    message: ready ? 'Asset database is ready' : 'Asset database is not ready'
-                }));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const ready: boolean = await Editor.Message.request('asset-db', 'query-ready') as boolean;
+            return successResult({ ready, message: ready ? 'Asset database is ready' : 'Asset database is not ready' });
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async openAssetExternal(urlOrUUID: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'open-asset', urlOrUUID).then(() => {
-                resolve(successResult(null, 'Asset opened with external program'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('asset-db', 'open-asset', urlOrUUID);
+            return successResult(null, 'Asset opened with external program');
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async batchImportAssets(args: any): Promise<ActionToolResult> {
-        return new Promise(async (resolve) => {
-            try {
-                const overwrite: boolean = args.overwrite === true || args.overwrite === 'true';
-                const recursive: boolean = args.recursive === true || args.recursive === 'true';
-
-                if (!fs.existsSync(args.sourceDirectory)) {
-                    resolve(errorResult('Source directory does not exist'));
-                    return;
-                }
-
-                const files = this.getFilesFromDirectory(
-                    args.sourceDirectory,
-                    args.fileFilter || [],
-                    recursive
-                );
-
-                const importResults: any[] = [];
-                let successCount = 0;
-                let errorCount = 0;
-
-                for (const filePath of files) {
-                    try {
-                        const fileName = path.basename(filePath);
-                        const targetPath = `${args.targetDirectory}/${fileName}`;
-
-                        const result = await Editor.Message.request('asset-db', 'import-asset',
-                            filePath, targetPath, {
-                                overwrite,
-                                rename: !overwrite
-                            });
-
-                        importResults.push({ source: filePath, target: targetPath, success: true, uuid: result?.uuid });
-                        successCount++;
-                    } catch (err: any) {
-                        importResults.push({ source: filePath, success: false, error: err.message });
-                        errorCount++;
-                    }
-                }
-
-                resolve(successResult({
-                    totalFiles: files.length,
-                    successCount,
-                    errorCount,
-                    results: importResults
-                }, `Batch import completed: ${successCount} success, ${errorCount} errors`));
-            } catch (err: any) {
-                resolve(errorResult(err.message));
+        try {
+            const overwrite: boolean = args.overwrite === true || args.overwrite === 'true';
+            const recursive: boolean = args.recursive === true || args.recursive === 'true';
+            if (!validateAssetPath(args.targetDirectory || '')) {
+                return errorResult('Invalid targetDirectory: must be db:// URL or assets/ relative path without traversal');
             }
-        });
+            if (!fs.existsSync(args.sourceDirectory)) return errorResult('Source directory does not exist');
+            const files = this.getFilesFromDirectory(args.sourceDirectory, args.fileFilter || [], recursive);
+            const importResults: any[] = [];
+            let successCount = 0;
+            let errorCount = 0;
+            for (const filePath of files) {
+                try {
+                    const fileName = path.basename(filePath);
+                    const targetPath = `${args.targetDirectory}/${fileName}`;
+                    const result = await Editor.Message.request('asset-db', 'import-asset', filePath, targetPath, { overwrite, rename: !overwrite });
+                    importResults.push({ source: filePath, target: targetPath, success: true, uuid: (result as any)?.uuid });
+                    successCount++;
+                } catch (err: any) {
+                    importResults.push({ source: filePath, success: false, error: err.message });
+                    errorCount++;
+                }
+            }
+            return successResult({ totalFiles: files.length, successCount, errorCount, results: importResults },
+                `Batch import completed: ${successCount} success, ${errorCount} errors`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private getFilesFromDirectory(dirPath: string, fileFilter: string[], recursive: boolean): string[] {
         const files: string[] = [];
         const items = fs.readdirSync(dirPath);
-
         for (const item of items) {
             const fullPath = path.join(dirPath, item);
             const stat = fs.statSync(fullPath);
-
             if (stat.isFile()) {
                 if (fileFilter.length === 0 || fileFilter.some(ext => item.toLowerCase().endsWith(ext.toLowerCase()))) {
                     files.push(fullPath);
@@ -595,171 +439,113 @@ export class ManageAsset extends BaseActionTool {
                 files.push(...this.getFilesFromDirectory(fullPath, fileFilter, recursive));
             }
         }
-
         return files;
     }
 
     private async batchDeleteAssets(urls: string[]): Promise<ActionToolResult> {
-        return new Promise(async (resolve) => {
-            try {
-                const deleteResults: any[] = [];
-                let successCount = 0;
-                let errorCount = 0;
-
-                for (const url of urls) {
-                    try {
-                        await Editor.Message.request('asset-db', 'delete-asset', url);
-                        deleteResults.push({ url, success: true });
-                        successCount++;
-                    } catch (err: any) {
-                        deleteResults.push({ url, success: false, error: err.message });
-                        errorCount++;
-                    }
+        try {
+            const deleteResults: any[] = [];
+            let successCount = 0;
+            let errorCount = 0;
+            for (const url of urls) {
+                try {
+                    await Editor.Message.request('asset-db', 'delete-asset', url);
+                    deleteResults.push({ url, success: true });
+                    successCount++;
+                } catch (err: any) {
+                    deleteResults.push({ url, success: false, error: err.message });
+                    errorCount++;
                 }
-
-                resolve(successResult({
-                    totalAssets: urls.length,
-                    successCount,
-                    errorCount,
-                    results: deleteResults
-                }, `Batch delete completed: ${successCount} success, ${errorCount} errors`));
-            } catch (err: any) {
-                resolve(errorResult(err.message));
             }
-        });
+            return successResult({ totalAssets: urls.length, successCount, errorCount, results: deleteResults },
+                `Batch delete completed: ${successCount} success, ${errorCount} errors`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async validateAssetReferences(directory: string = 'db://assets'): Promise<ActionToolResult> {
-        return new Promise(async (resolve) => {
-            try {
-                const assets = await Editor.Message.request('asset-db', 'query-assets', { pattern: `${directory}/**/*` });
-
-                const brokenReferences: any[] = [];
-                const validReferences: any[] = [];
-
-                for (const asset of assets) {
-                    try {
-                        const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', asset.url);
-                        if (assetInfo) {
-                            validReferences.push({ url: asset.url, uuid: asset.uuid, name: asset.name });
-                        }
-                    } catch (err) {
-                        brokenReferences.push({
-                            url: asset.url,
-                            uuid: asset.uuid,
-                            name: asset.name,
-                            error: (err as Error).message
-                        });
-                    }
+        try {
+            const assets: any[] = await Editor.Message.request('asset-db', 'query-assets', { pattern: `${directory}/**/*` });
+            const brokenReferences: any[] = [];
+            const validReferences: any[] = [];
+            for (const asset of assets) {
+                try {
+                    const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', asset.url);
+                    if (assetInfo) validReferences.push({ url: asset.url, uuid: asset.uuid, name: asset.name });
+                } catch (err) {
+                    brokenReferences.push({ url: asset.url, uuid: asset.uuid, name: asset.name, error: (err as Error).message });
                 }
-
-                resolve(successResult({
-                    directory,
-                    totalAssets: assets.length,
-                    validReferences: validReferences.length,
-                    brokenReferences: brokenReferences.length,
-                    brokenAssets: brokenReferences
-                }, `Validation completed: ${brokenReferences.length} broken references found`));
-            } catch (err: any) {
-                resolve(errorResult(err.message));
             }
-        });
+            return successResult({
+                directory, totalAssets: assets.length,
+                validReferences: validReferences.length, brokenReferences: brokenReferences.length,
+                brokenAssets: brokenReferences
+            }, `Validation completed: ${brokenReferences.length} broken references found`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private async getAssetDependencies(_urlOrUUID: string, _direction: string = 'dependencies'): Promise<ActionToolResult> {
-        return errorResult(
-            'Asset dependency analysis requires additional APIs not available in current Cocos Creator MCP implementation. Consider using the Editor UI for dependency analysis.'
-        );
+        return errorResult('Asset dependency analysis requires additional APIs not available in current Cocos Creator MCP implementation. Consider using the Editor UI for dependency analysis.');
     }
 
     private async getUnusedAssets(_directory: string = 'db://assets', _excludeDirectories: string[] = []): Promise<ActionToolResult> {
-        return errorResult(
-            'Unused asset detection requires comprehensive project analysis not available in current Cocos Creator MCP implementation. Consider using the Editor UI or third-party tools for unused asset detection.'
-        );
+        return errorResult('Unused asset detection requires comprehensive project analysis not available in current Cocos Creator MCP implementation. Consider using the Editor UI or third-party tools for unused asset detection.');
     }
 
     private async compressTextures(_directory: string = 'db://assets', _format: string = 'auto', _quality: number = 0.8): Promise<ActionToolResult> {
-        return errorResult(
-            "Texture compression requires image processing capabilities not available in current Cocos Creator MCP implementation. Use the Editor's built-in texture compression settings or external tools."
-        );
+        return errorResult("Texture compression requires image processing capabilities not available in current Cocos Creator MCP implementation. Use the Editor's built-in texture compression settings or external tools.");
     }
 
     private async exportAssetManifest(directory: string = 'db://assets', format: string = 'json', includeMetadata: boolean = true): Promise<ActionToolResult> {
-        return new Promise(async (resolve) => {
-            try {
-                const assets = await Editor.Message.request('asset-db', 'query-assets', { pattern: `${directory}/**/*` });
-
-                const manifest: any[] = [];
-
-                for (const asset of assets) {
-                    const manifestEntry: any = {
-                        name: asset.name,
-                        url: asset.url,
-                        uuid: asset.uuid,
-                        type: asset.type,
-                        size: (asset as any).size || 0,
-                        isDirectory: asset.isDirectory || false
-                    };
-
-                    if (includeMetadata) {
-                        try {
-                            const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', asset.url);
-                            if (assetInfo && assetInfo.meta) {
-                                manifestEntry.meta = assetInfo.meta;
-                            }
-                        } catch {
-                            // Skip metadata if not available
-                        }
-                    }
-
-                    manifest.push(manifestEntry);
+        try {
+            const assets: any[] = await Editor.Message.request('asset-db', 'query-assets', { pattern: `${directory}/**/*` });
+            const manifest: any[] = [];
+            for (const asset of assets) {
+                const manifestEntry: any = {
+                    name: asset.name, url: asset.url, uuid: asset.uuid,
+                    type: asset.type, size: (asset as any).size || 0, isDirectory: asset.isDirectory || false
+                };
+                if (includeMetadata) {
+                    try {
+                        const assetInfo: any = await Editor.Message.request('asset-db', 'query-asset-info', asset.url);
+                        if (assetInfo && assetInfo.meta) manifestEntry.meta = assetInfo.meta;
+                    } catch { /* skip metadata if not available */ }
                 }
-
-                let exportData: string;
-                switch (format) {
-                    case 'csv':
-                        exportData = this.convertToCSV(manifest);
-                        break;
-                    case 'xml':
-                        exportData = this.convertToXML(manifest);
-                        break;
-                    default:
-                        exportData = JSON.stringify(manifest, null, 2);
-                }
-
-                resolve(successResult({
-                    directory,
-                    format,
-                    assetCount: manifest.length,
-                    includeMetadata,
-                    manifest: exportData
-                }, `Asset manifest exported with ${manifest.length} assets`));
-            } catch (err: any) {
-                resolve(errorResult(err.message));
+                manifest.push(manifestEntry);
             }
-        });
+            let exportData: string;
+            switch (format) {
+                case 'csv': exportData = this.convertToCSV(manifest); break;
+                case 'xml': exportData = this.convertToXML(manifest); break;
+                default: exportData = JSON.stringify(manifest, null, 2);
+            }
+            return successResult({ directory, format, assetCount: manifest.length, includeMetadata, manifest: exportData },
+                `Asset manifest exported with ${manifest.length} assets`);
+        } catch (err: any) {
+            return errorResult(err.message || String(err));
+        }
     }
 
     private convertToCSV(data: any[]): string {
         if (data.length === 0) return '';
-
         const headers = Object.keys(data[0]);
-        const csvRows = [headers.join(',')];
-
+        const csvRows = [headers.map(h => escapeCsvField(h)).join(',')];
         for (const row of data) {
             const values = headers.map(header => {
                 const value = row[header];
-                return typeof value === 'object' ? JSON.stringify(value) : String(value);
+                const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                return escapeCsvField(str);
             });
             csvRows.push(values.join(','));
         }
-
         return csvRows.join('\n');
     }
 
     private convertToXML(data: any[]): string {
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<assets>\n';
-
         for (const item of data) {
             xml += '  <asset>\n';
             for (const [key, value] of Object.entries(item)) {
@@ -770,7 +556,6 @@ export class ManageAsset extends BaseActionTool {
             }
             xml += '  </asset>\n';
         }
-
         xml += '</assets>';
         return xml;
     }

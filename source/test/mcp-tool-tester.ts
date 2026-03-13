@@ -1,3 +1,8 @@
+// TODO: These tests need to be rewritten for v2.0 action-based tools
+// v1 tool references below (scene_get_current_scene, node_create_node, node_delete_node, etc.) are no longer valid
+// v2 uses manage_* tools with action parameter via HTTP POST /mcp (not WebSocket)
+// v2 example: { name: "manage_node", arguments: { action: "create", name: "MyNode" } }
+
 declare const Editor: any;
 
 /**
