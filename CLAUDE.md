@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Cocos MCP Server v2.0 is a **Cocos Creator editor extension** that exposes an MCP (Model Context Protocol) HTTP server, allowing AI assistants to control the editor programmatically via action-based tools. It consolidates 127+ fine-grained tools into 21 action-oriented `manage_*` tools covering scene, node, component, prefab, asset, and project operations via JSON-RPC 2.0 over HTTP.
+Cocos MCP Server v2.0 is a **Cocos Creator editor extension** that exposes an MCP (Model Context Protocol) HTTP server, allowing AI assistants to control the editor programmatically via action-based tools. It consolidates 127+ fine-grained tools into 23 action-oriented `manage_*` tools covering scene, node, component, prefab, asset, and project operations via JSON-RPC 2.0 over HTTP.
 
 - **Runtime**: Node.js (CommonJS), bundled with Cocos Creator
 - **UI**: Vue 3 Composition API panels (English localization)
@@ -44,11 +44,12 @@ MCP request routing:
 
 V2.0 uses **action-based tools** — flat Map<string, ActionToolExecutor> architecture replacing the old category-prefix routing.
 
-**21 v2 tools** (each is an `ActionToolExecutor`):
+**23 v2 tools** (each is an `ActionToolExecutor`):
 - manage_scene, manage_node, manage_component, manage_prefab, manage_asset, manage_project, manage_debug
 - manage_preferences, manage_server, manage_broadcast, manage_scene_view, manage_node_hierarchy
 - manage_scene_query, manage_undo, manage_reference_image, manage_validation, manage_selection
 - manage_script, manage_material, manage_animation
+- manage_settings, manage_code_analysis
 
 **Base class**: `BaseActionTool` (`source/tools/base-action-tool.ts`)
 - Abstract properties: `name`, `description`, `inputSchema`, `actions`

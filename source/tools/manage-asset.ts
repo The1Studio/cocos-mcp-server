@@ -2,6 +2,7 @@ import { ActionToolResult, successResult, errorResult } from '../types';
 import { BaseActionTool } from './base-action-tool';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as assetStatsHelpers from './manage-asset-stats-helpers';
 
 /**
  * Returns true if the path is safe for asset operations.
@@ -34,13 +35,14 @@ function escapeCsvField(field: string): string {
  */
 export class ManageAsset extends BaseActionTool {
     readonly name = 'manage_asset';
-    readonly description = 'Manage assets in the project (files, textures, scripts, etc). Actions: import, get_info, list, refresh, create, copy, move, delete, save, reimport, query_path, query_uuid, query_url, find_by_name, get_details, save_meta, generate_url, query_db_ready, open_external, batch_import, batch_delete, validate_references, get_dependencies, get_unused, compress_textures, export_manifest. NOT for scene nodes — use manage_node. Use query_db_ready to check asset DB before batch ops.';
+    readonly description = 'Manage assets in the project (files, textures, scripts, etc). Actions: import, get_info, list, refresh, create, copy, move, delete, save, reimport, query_path, query_uuid, query_url, find_by_name, get_details, save_meta, generate_url, query_db_ready, open_external, batch_import, batch_delete, validate_references, get_dependencies, get_unused, compress_textures, export_manifest, get_audio_stats, get_texture_stats, update_meta. NOT for scene nodes — use manage_node. Use query_db_ready to check asset DB before batch ops.';
     readonly actions = [
         'import', 'get_info', 'list', 'refresh', 'create', 'copy', 'move', 'delete',
         'save', 'reimport', 'query_path', 'query_uuid', 'query_url', 'find_by_name',
         'get_details', 'save_meta', 'generate_url', 'query_db_ready', 'open_external',
         'batch_import', 'batch_delete', 'validate_references', 'get_dependencies',
-        'get_unused', 'compress_textures', 'export_manifest'
+        'get_unused', 'compress_textures', 'export_manifest',
+        'get_audio_stats', 'get_texture_stats', 'update_meta'
     ];
 
     readonly inputSchema = {
@@ -98,7 +100,9 @@ export class ManageAsset extends BaseActionTool {
                 default: 'auto'
             },
             quality: { type: 'number', description: 'Compression quality (0.1-1.0)', minimum: 0.1, maximum: 1.0, default: 0.8 },
-            includeMetadata: { type: 'boolean', description: 'Include asset metadata in manifest', default: true }
+            includeMetadata: { type: 'boolean', description: 'Include asset metadata in manifest', default: true },
+            metaData: { type: 'object', description: 'Meta properties to deep-merge (for update_meta)' },
+            presetId: { type: 'string', description: 'Texture compression preset ID from builder.json (for compress_textures)' }
         },
         required: ['action']
     };
@@ -128,8 +132,11 @@ export class ManageAsset extends BaseActionTool {
         validate_references: (args) => this.validateAssetReferences(args.directory),
         get_dependencies: (args) => this.getAssetDependencies(args.urlOrUUID, args.direction),
         get_unused: (args) => this.getUnusedAssets(args.directory, args.excludeDirectories),
-        compress_textures: (args) => this.compressTextures(args.directory, args.format, args.quality),
-        export_manifest: (args) => this.exportAssetManifest(args.directory, args.format, args.includeMetadata !== false)
+        compress_textures: (args) => assetStatsHelpers.compressTextures(args.directory, args.presetId, args.quality),
+        export_manifest: (args) => this.exportAssetManifest(args.directory, args.format, args.includeMetadata !== false),
+        get_audio_stats: (args) => assetStatsHelpers.getAudioStats(args.directory),
+        get_texture_stats: (args) => assetStatsHelpers.getTextureStats(args.directory),
+        update_meta: (args) => assetStatsHelpers.updateMeta(args.assetPath, args.metaData)
     };
 
     // ── From ProjectTools ────────────────────────────────────────────────────
@@ -493,10 +500,6 @@ export class ManageAsset extends BaseActionTool {
 
     private async getUnusedAssets(_directory: string = 'db://assets', _excludeDirectories: string[] = []): Promise<ActionToolResult> {
         return errorResult('Unused asset detection requires comprehensive project analysis not available in current Cocos Creator MCP implementation. Consider using the Editor UI or third-party tools for unused asset detection.');
-    }
-
-    private async compressTextures(_directory: string = 'db://assets', _format: string = 'auto', _quality: number = 0.8): Promise<ActionToolResult> {
-        return errorResult("Texture compression requires image processing capabilities not available in current Cocos Creator MCP implementation. Use the Editor's built-in texture compression settings or external tools.");
     }
 
     private async exportAssetManifest(directory: string = 'db://assets', format: string = 'json', includeMetadata: boolean = true): Promise<ActionToolResult> {

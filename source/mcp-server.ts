@@ -21,6 +21,8 @@ import { ManageSelection } from './tools/manage-selection';
 import { ManageScript } from './tools/manage-script';
 import { ManageMaterial } from './tools/manage-material';
 import { ManageAnimation } from './tools/manage-animation';
+import { ManageSettings } from './tools/manage-settings';
+import { ManageCodeAnalysis } from './tools/manage-code-analysis';
 import { CocosResources } from './resources/cocos-resources';
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB request body limit
@@ -63,6 +65,8 @@ export class MCPServer {
                 new ManageScript(),
                 new ManageMaterial(),
                 new ManageAnimation(),
+                new ManageSettings(),
+                new ManageCodeAnalysis(),
             ];
             for (const tool of tools) {
                 this.toolExecutors.set(tool.name, tool);
