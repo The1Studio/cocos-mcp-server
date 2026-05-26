@@ -146,8 +146,19 @@ async function applyComponentReference(
 
     let expectedComponentType = '';
     const currentComponentInfo = await getComponentInfo(nodeUuid, componentType);
-    if (currentComponentInfo.success && currentComponentInfo.data?.properties?.[property]) {
-        const propertyMeta = currentComponentInfo.data.properties[property];
+    // Walk dotted property paths through nested CCClass group dumps to find the metadata descriptor.
+    let propertyMeta: any = currentComponentInfo.success ? currentComponentInfo.data?.properties : undefined;
+    if (propertyMeta) {
+        const segments = property.split('.');
+        for (let i = 0; i < segments.length && propertyMeta; i++) {
+            propertyMeta = propertyMeta[segments[i]];
+            const isLeaf = i === segments.length - 1;
+            if (!isLeaf && propertyMeta && typeof propertyMeta === 'object' && 'value' in propertyMeta && typeof propertyMeta.value === 'object') {
+                propertyMeta = propertyMeta.value;
+            }
+        }
+    }
+    if (propertyMeta) {
         if (propertyMeta && typeof propertyMeta === 'object') {
             if (propertyMeta.type) {
                 expectedComponentType = propertyMeta.type;
