@@ -146,12 +146,27 @@ async function applyComponentReference(
 
     let expectedComponentType = '';
     const currentComponentInfo = await getComponentInfo(nodeUuid, componentType);
-    if (currentComponentInfo.success && currentComponentInfo.data?.properties?.[property]) {
-        const propertyMeta = currentComponentInfo.data.properties[property];
+    // Walk dotted property paths through nested CCClass group dumps to find the metadata descriptor.
+    let propertyMeta: any = currentComponentInfo.success ? currentComponentInfo.data?.properties : undefined;
+    if (propertyMeta) {
+        const segments = property.split('.');
+        for (let i = 0; i < segments.length && propertyMeta; i++) {
+            propertyMeta = propertyMeta[segments[i]];
+            const isLeaf = i === segments.length - 1;
+            if (!isLeaf && propertyMeta && typeof propertyMeta === 'object' && 'value' in propertyMeta && typeof propertyMeta.value === 'object') {
+                propertyMeta = propertyMeta.value;
+            }
+        }
+    }
+    // Treat 'Unknown' as missing — it appears when a previous assignment stored
+    // a value whose runtime type didn't match the @property declared type, leaving
+    // the dump's type field stale.
+    const isUsableType = (t: any) => typeof t === 'string' && t.length > 0 && t !== 'Unknown';
+    if (propertyMeta) {
         if (propertyMeta && typeof propertyMeta === 'object') {
-            if (propertyMeta.type) {
+            if (isUsableType(propertyMeta.type)) {
                 expectedComponentType = propertyMeta.type;
-            } else if (propertyMeta.ctor) {
+            } else if (isUsableType(propertyMeta.ctor)) {
                 expectedComponentType = propertyMeta.ctor;
             } else if (propertyMeta.extends && Array.isArray(propertyMeta.extends)) {
                 for (const extendType of propertyMeta.extends) {
@@ -164,13 +179,26 @@ async function applyComponentReference(
         }
     }
 
-    if (!expectedComponentType) {
-        throw new Error(`Unable to determine required component type for property '${property}' on component '${componentType}'. Property metadata may not contain type information.`);
-    }
-
     const targetNodeData = await Editor.Message.request('scene', 'query-node', targetNodeUuid);
     if (!targetNodeData || !targetNodeData.__comps__) {
         throw new Error(`Target node ${targetNodeUuid} not found or has no components`);
+    }
+
+    // Single-cc-component fallback: when expectedComponentType could not be inferred
+    // (e.g., stale 'Unknown' in dump and extends only lists cc.Component/cc.Object),
+    // and the target node has exactly one cc.* component, use it. Mirrors Cocos's
+    // drag-from-hierarchy auto-resolve behavior.
+    if (!expectedComponentType) {
+        const ccComps = (targetNodeData.__comps__ as any[])
+            .filter(c => typeof c.type === 'string' && c.type.startsWith('cc.')
+                && c.type !== 'cc.Component' && c.type !== 'cc.Object');
+        if (ccComps.length === 1) {
+            expectedComponentType = ccComps[0].type;
+        }
+    }
+
+    if (!expectedComponentType) {
+        throw new Error(`Unable to determine required component type for property '${property}' on component '${componentType}'. Property metadata may not contain type information.`);
     }
 
     let componentId: string | null = null;

@@ -41,37 +41,68 @@ export function isValidPropertyDescriptor(propData: any): boolean {
     }
 }
 
-/** Analyze a component's property to determine its type and current value */
+/** Analyze a component's property to determine its type and current value.
+ *  Supports dotted propertyName for nested CCClass groups (e.g., "cameraSection.mainCamera"). */
 export function analyzeProperty(component: any, propertyName: string): PropertyAnalysisResult {
     const availableProperties: string[] = [];
     let propertyValue: any = undefined;
     let propertyExists = false;
 
-    // Method 1: direct property access
-    if (Object.prototype.hasOwnProperty.call(component, propertyName)) {
+    // Method 1: direct property access (flat path only)
+    if (!propertyName.includes('.') && Object.prototype.hasOwnProperty.call(component, propertyName)) {
         propertyValue = component[propertyName];
         propertyExists = true;
     }
 
-    // Method 2: search nested properties structure (Cocos Creator component dump format)
+    // Method 2: search nested properties structure (Cocos Creator component dump format).
+    //  For dotted names like "cameraSection.mainCamera", walk segments through nested `.value` dumps.
     if (!propertyExists && component.properties && typeof component.properties === 'object') {
-        const valueObj = component.properties.value && typeof component.properties.value === 'object'
+        const rootValueObj = component.properties.value && typeof component.properties.value === 'object'
             ? component.properties.value
             : component.properties;
 
-        for (const [key, propData] of Object.entries(valueObj)) {
-            if (isValidPropertyDescriptor(propData)) {
-                const propInfo = propData as any;
-                availableProperties.push(key);
-                if (key === propertyName) {
-                    try {
-                        const propKeys = Object.keys(propInfo);
-                        propertyValue = propKeys.includes('value') ? propInfo.value : propInfo;
-                    } catch {
-                        propertyValue = propInfo;
+        const segments = propertyName.split('.');
+        let cursor: any = rootValueObj;
+
+        for (let i = 0; i < segments.length; i++) {
+            const segment = segments[i];
+            const isLeaf = i === segments.length - 1;
+
+            // Populate availableProperties at the relevant level (root or final container)
+            if (i === 0 || (i === segments.length - 1)) {
+                for (const [k, v] of Object.entries(cursor || {})) {
+                    if (v && typeof v === 'object') {
+                        const prefix = i === 0 ? '' : `${segments.slice(0, i).join('.')}.`;
+                        availableProperties.push(`${prefix}${k}`);
                     }
-                    propertyExists = true;
                 }
+            }
+
+            const descriptor = cursor ? cursor[segment] : undefined;
+            if (descriptor === undefined) {
+                cursor = undefined;
+                break;
+            }
+
+            if (isLeaf) {
+                if (isValidPropertyDescriptor(descriptor)) {
+                    const dKeys = Object.keys(descriptor);
+                    propertyValue = dKeys.includes('value') ? descriptor.value : descriptor;
+                } else {
+                    propertyValue = descriptor;
+                }
+                propertyExists = true;
+                break;
+            }
+
+            // Descend into the nested CCClass group: descriptor.value holds the inner dump.
+            if (descriptor && typeof descriptor === 'object' && 'value' in descriptor && typeof descriptor.value === 'object') {
+                cursor = descriptor.value;
+            } else if (descriptor && typeof descriptor === 'object') {
+                cursor = descriptor;
+            } else {
+                cursor = undefined;
+                break;
             }
         }
     }
@@ -324,7 +355,16 @@ export async function verifyComponentPropertyChange(
     try {
         const componentInfo = await getComponentInfo(nodeUuid, componentType);
         if (componentInfo.success && componentInfo.data) {
-            const propertyData = componentInfo.data.properties?.[property];
+            // Walk dotted property paths through nested CCClass group dumps.
+            const segments = property.split('.');
+            let propertyData: any = componentInfo.data.properties;
+            for (let i = 0; i < segments.length && propertyData; i++) {
+                propertyData = propertyData[segments[i]];
+                const isLeaf = i === segments.length - 1;
+                if (!isLeaf && propertyData && typeof propertyData === 'object' && 'value' in propertyData && typeof propertyData.value === 'object') {
+                    propertyData = propertyData.value;
+                }
+            }
             let actualValue = propertyData;
             if (propertyData && typeof propertyData === 'object' && 'value' in propertyData) {
                 actualValue = propertyData.value;
