@@ -6,16 +6,16 @@ import { attachScriptToNode } from './manage-component-script-attach';
 
 export class ManageComponent extends BaseActionTool {
     readonly name = 'manage_component';
-    readonly description = 'Manage components on scene nodes. Actions: add=add component to node, remove=remove component (use cid from get_all), get_all=list all components on node, get_info=get specific component details and properties, set_property=set a component property value, attach_script=attach a TypeScript/JavaScript script component, get_available=list available component types by category. NOTE: For node basic properties (name, active, layer) use manage_node action=set_property. For transforms (position, rotation, scale) use manage_node action=set_transform.';
-    readonly actions = ['add', 'remove', 'get_all', 'get_info', 'set_property', 'attach_script', 'get_available'];
+    readonly description = 'Manage components on scene nodes. Actions: add=add component to node, remove=remove component (use cid from get_all), get_all=list all components on node, get_info=get specific component details and properties, set_property=set a single component property value (supports dotted nested CCClass paths like "cameraSection.mainCamera"), set_properties_batch=set many properties on one component in a single call (each field set independently — one bad field does not abort the rest), attach_script=attach a TypeScript/JavaScript script component, get_available=list available component types by category. NOTE: For node basic properties (name, active, layer) use manage_node action=set_property. For transforms (position, rotation, scale) use manage_node action=set_transform.';
+    readonly actions = ['add', 'remove', 'get_all', 'get_info', 'set_property', 'set_properties_batch', 'attach_script', 'get_available'];
 
     readonly inputSchema = {
         type: 'object',
         properties: {
             action: {
                 type: 'string',
-                enum: ['add', 'remove', 'get_all', 'get_info', 'set_property', 'attach_script', 'get_available'],
-                description: 'Action to perform: add=add component to node, remove=remove component (use cid from get_all), get_all=list all components, get_info=get component details, set_property=set a property value, attach_script=attach a script file, get_available=list available types'
+                enum: ['add', 'remove', 'get_all', 'get_info', 'set_property', 'set_properties_batch', 'attach_script', 'get_available'],
+                description: 'Action to perform: add=add component to node, remove=remove component (use cid from get_all), get_all=list all components, get_info=get component details, set_property=set a single property value (dotted nested paths supported), set_properties_batch=set many properties at once, attach_script=attach a script file, get_available=list available types'
             },
             nodeUuid: {
                 type: 'string',
@@ -27,7 +27,7 @@ export class ManageComponent extends BaseActionTool {
             },
             property: {
                 type: 'string',
-                description: '[set_property] Property name to set. Examples: cc.Label → string, fontSize, color; cc.Sprite → spriteFrame, color; cc.UITransform → contentSize, anchorPoint.'
+                description: '[set_property] Property name to set. Supports dotted nested CCClass paths (e.g., "cameraSection.mainCamera"). Examples: cc.Label → string, fontSize, color; cc.Sprite → spriteFrame, color; cc.UITransform → contentSize, anchorPoint.'
             },
             propertyType: {
                 type: 'string',
@@ -41,6 +41,33 @@ export class ManageComponent extends BaseActionTool {
             },
             value: {
                 description: '[set_property] Property value. Format depends on propertyType: string="text", number=42, boolean=true, color={"r":255,"g":0,"b":0,"a":255} or "#FF0000", vec2={"x":100,"y":50}, vec3={"x":1,"y":2,"z":3}, size={"width":100,"height":50}, node/component/spriteFrame/prefab/asset="uuid-string", nodeArray=["uuid1","uuid2"], colorArray=[{"r":255,...}], numberArray=[1,2,3], stringArray=["a","b"]'
+            },
+            properties: {
+                type: 'array',
+                description: '[set_properties_batch] Array of property entries to set on the SAME component in one call. Each entry: {property, propertyType, value} with the same semantics as set_property. Supports dotted nested CCClass paths per entry (e.g., "cameraSection.mainCamera"). Each entry is applied independently — a failure on one field does not abort the others; the result reports per-field success/error.',
+                items: {
+                    type: 'object',
+                    properties: {
+                        property: {
+                            type: 'string',
+                            description: 'Property name to set. Supports dotted nested CCClass paths (e.g., "cameraSection.mainCamera").'
+                        },
+                        propertyType: {
+                            type: 'string',
+                            enum: [
+                                'string', 'number', 'boolean', 'integer', 'float',
+                                'color', 'vec2', 'vec3', 'size',
+                                'node', 'component', 'spriteFrame', 'prefab', 'asset',
+                                'nodeArray', 'colorArray', 'numberArray', 'stringArray'
+                            ],
+                            description: 'Property data type for correct value conversion. Must match the actual property type.'
+                        },
+                        value: {
+                            description: 'Property value. Same format rules as set_property value (depends on propertyType).'
+                        }
+                    },
+                    required: ['property', 'propertyType', 'value']
+                }
             },
             scriptPath: {
                 type: 'string',
@@ -62,6 +89,7 @@ export class ManageComponent extends BaseActionTool {
         get_all: (args) => this.getComponents(args.nodeUuid),
         get_info: (args) => this.getComponentInfo(args.nodeUuid, args.componentType),
         set_property: (args) => this.setComponentProperty(args),
+        set_properties_batch: (args) => this.setComponentPropertiesBatch(args),
         attach_script: (args) => attachScriptToNode(args.nodeUuid, args.scriptPath, (uuid) => this.getComponents(uuid)),
         get_available: (args) => Promise.resolve(getAvailableComponentsList(args.category))
     };
@@ -247,104 +275,225 @@ export class ManageComponent extends BaseActionTool {
             return errorResult('nodeUuid, componentType, property, propertyType, and value are required for action=set_property');
         }
 
-        try {
-            console.log(`[ManageComponent] Setting ${componentType}.${property} (type: ${propertyType}) = ${JSON.stringify(value)} on node ${nodeUuid}`);
+        // Step 0: Detect if user is trying to set a node property; redirect with guidance
+        const nodeRedirectResult = redirectNodePropertyAccess(args);
+        if (nodeRedirectResult) {
+            return nodeRedirectResult;
+        }
 
-            // Step 0: Detect if user is trying to set a node property; redirect with guidance
-            const nodeRedirectResult = redirectNodePropertyAccess(args);
-            if (nodeRedirectResult) {
-                return nodeRedirectResult;
+        // Step 1: Resolve the target component (and its raw __comps__ index) once.
+        const resolution = await this.resolveTargetComponent(nodeUuid, componentType, property);
+        if (!resolution.ok) {
+            return resolution.result;
+        }
+
+        // Step 2: Apply the single property using the shared per-field logic.
+        const fieldResult = await this.applySingleProperty(
+            nodeUuid, componentType, resolution.targetComponent, resolution.rawComponentIndex,
+            { property, propertyType, value }
+        );
+
+        if (!fieldResult.success) {
+            return errorResult(fieldResult.error || `Failed to set property '${property}'`);
+        }
+
+        return successResult({
+            nodeUuid,
+            componentType,
+            property,
+            actualValue: fieldResult.actualValue,
+            changeVerified: fieldResult.changeVerified
+        }, `Successfully set ${componentType}.${property}`);
+    }
+
+    /**
+     * Set multiple properties on a SINGLE component in one call.
+     * The target component is resolved once; each property entry is then applied
+     * independently via the same per-field logic used by set_property — so a failure
+     * on one field does not abort the rest. Dotted nested CCClass paths work per entry.
+     */
+    private async setComponentPropertiesBatch(args: any): Promise<ActionToolResult> {
+        const { nodeUuid, componentType, properties } = args;
+
+        if (!nodeUuid || !componentType) {
+            return errorResult('nodeUuid and componentType are required for action=set_properties_batch');
+        }
+        if (!Array.isArray(properties) || properties.length === 0) {
+            return errorResult('properties must be a non-empty array of {property, propertyType, value} entries for action=set_properties_batch');
+        }
+
+        // Resolve the target component once for the whole batch.
+        const resolution = await this.resolveTargetComponent(nodeUuid, componentType, undefined);
+        if (!resolution.ok) {
+            return resolution.result;
+        }
+
+        const results: Array<{ property: string; success: boolean; actualValue?: any; changeVerified?: boolean; error?: string }> = [];
+
+        for (const entry of properties) {
+            const property = entry?.property;
+            const propertyType = entry?.propertyType;
+            const value = entry?.value;
+
+            if (!property || propertyType === undefined || value === undefined) {
+                results.push({
+                    property: property || '(missing)',
+                    success: false,
+                    error: 'Each entry requires property, propertyType, and value'
+                });
+                continue;
             }
 
-            // Step 1: Get all components on the node
-            const componentsResponse = await this.getComponents(nodeUuid);
-            if (!componentsResponse.success || !componentsResponse.data) {
-                return errorResult(`Failed to get components for node '${nodeUuid}': ${componentsResponse.error}`);
+            try {
+                const fieldResult = await this.applySingleProperty(
+                    nodeUuid, componentType, resolution.targetComponent, resolution.rawComponentIndex,
+                    { property, propertyType, value }
+                );
+                results.push({
+                    property,
+                    success: fieldResult.success,
+                    actualValue: fieldResult.actualValue,
+                    changeVerified: fieldResult.changeVerified,
+                    error: fieldResult.error
+                });
+            } catch (err: any) {
+                // Defensive: one bad field must never abort the batch.
+                results.push({ property, success: false, error: err?.message || String(err) });
             }
+        }
 
-            const allComponents = componentsResponse.data.components;
+        const succeeded = results.filter(r => r.success).length;
+        const failed = results.length - succeeded;
+        const message = `set_properties_batch on ${componentType}: ${succeeded}/${results.length} field(s) set${failed > 0 ? `, ${failed} failed` : ''}`;
 
-            // Step 2: Find the target component
-            let targetComponent = null;
-            const availableTypes: string[] = [];
-            for (let i = 0; i < allComponents.length; i++) {
-                const comp = allComponents[i];
-                availableTypes.push(comp.type);
-                if (comp.type === componentType) {
-                    targetComponent = comp;
-                    break;
-                }
+        return successResult({
+            nodeUuid,
+            componentType,
+            total: results.length,
+            succeeded,
+            failed,
+            results
+        }, message);
+    }
+
+    /**
+     * Resolve a component on a node into its dump (targetComponent) and its raw __comps__ index.
+     * When `property` is provided, a missing component yields an LLM-friendly suggestion.
+     */
+    private async resolveTargetComponent(
+        nodeUuid: string,
+        componentType: string,
+        property: string | undefined
+    ): Promise<
+        | { ok: true; targetComponent: any; rawComponentIndex: number }
+        | { ok: false; result: ActionToolResult }
+    > {
+        // Get all components (dump form) on the node.
+        const componentsResponse = await this.getComponents(nodeUuid);
+        if (!componentsResponse.success || !componentsResponse.data) {
+            return { ok: false, result: errorResult(`Failed to get components for node '${nodeUuid}': ${componentsResponse.error}`) };
+        }
+
+        const allComponents = componentsResponse.data.components;
+        let targetComponent = null;
+        const availableTypes: string[] = [];
+        for (let i = 0; i < allComponents.length; i++) {
+            const comp = allComponents[i];
+            availableTypes.push(comp.type);
+            if (comp.type === componentType) {
+                targetComponent = comp;
+                break;
             }
+        }
 
-            if (!targetComponent) {
-                const instruction = generateComponentSuggestion(componentType, availableTypes, property);
-                return {
+        if (!targetComponent) {
+            const instruction = generateComponentSuggestion(componentType, availableTypes, property || '');
+            return {
+                ok: false,
+                result: {
                     success: false,
                     error: `Component '${componentType}' not found on node. Available components: ${availableTypes.join(', ')}`,
                     instruction
-                };
-            }
+                }
+            };
+        }
 
-            // Step 3: Analyze the property to get original value and type info
+        // Get raw node data to build the correct __comps__ path.
+        const rawNodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
+        if (!rawNodeData || !rawNodeData.__comps__) {
+            return { ok: false, result: errorResult('Failed to get raw node data for property setting') };
+        }
+
+        let rawComponentIndex = -1;
+        for (let i = 0; i < rawNodeData.__comps__.length; i++) {
+            const comp = rawNodeData.__comps__[i] as any;
+            const compType = comp.__type__ || comp.cid || comp.type || 'Unknown';
+            if (compType === componentType) {
+                rawComponentIndex = i;
+                break;
+            }
+        }
+
+        if (rawComponentIndex === -1) {
+            return { ok: false, result: errorResult('Could not find component index for setting property') };
+        }
+
+        return { ok: true, targetComponent, rawComponentIndex };
+    }
+
+    /**
+     * Apply ONE property value to an already-resolved component.
+     * Shared by set_property (single) and set_properties_batch (per entry).
+     * Returns a per-field result rather than throwing, so callers can aggregate.
+     * Dotted nested CCClass paths (e.g., "cameraSection.mainCamera") are supported
+     * because analyzeProperty / applyPropertyToEditor / verifyComponentPropertyChange
+     * all walk dotted segments.
+     */
+    private async applySingleProperty(
+        nodeUuid: string,
+        componentType: string,
+        targetComponent: any,
+        rawComponentIndex: number,
+        field: { property: string; propertyType: string; value: any }
+    ): Promise<{ success: boolean; actualValue?: any; changeVerified?: boolean; error?: string }> {
+        const { property, propertyType, value } = field;
+        try {
+            console.log(`[ManageComponent] Setting ${componentType}.${property} (type: ${propertyType}) = ${JSON.stringify(value)} on node ${nodeUuid}`);
+
+            // Analyze the property to get original value and type info (supports dotted paths).
             let propertyInfo;
             try {
                 propertyInfo = analyzeProperty(targetComponent, property);
             } catch (analyzeError: any) {
-                return errorResult(`Failed to analyze property '${property}': ${analyzeError.message}`);
+                return { success: false, error: `Failed to analyze property '${property}': ${analyzeError.message}` };
             }
 
             if (!propertyInfo.exists) {
-                return errorResult(`Property '${property}' not found on component '${componentType}'. Available properties: ${propertyInfo.availableProperties.join(', ')}`);
+                return { success: false, error: `Property '${property}' not found on component '${componentType}'. Available properties: ${propertyInfo.availableProperties.join(', ')}` };
             }
 
-            // Step 4: Convert value based on explicit propertyType
+            // Convert value based on explicit propertyType.
             const originalValue = propertyInfo.originalValue;
             const processedValue: any = convertPropertyValue(propertyType, value);
 
-            // Step 5: Get raw node data to build the correct __comps__ path
-            const rawNodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
-            if (!rawNodeData || !rawNodeData.__comps__) {
-                return errorResult('Failed to get raw node data for property setting');
-            }
-
-            // Find the component index in the raw __comps__ array
-            let rawComponentIndex = -1;
-            for (let i = 0; i < rawNodeData.__comps__.length; i++) {
-                const comp = rawNodeData.__comps__[i] as any;
-                const compType = comp.__type__ || comp.cid || comp.type || 'Unknown';
-                if (compType === componentType) {
-                    rawComponentIndex = i;
-                    break;
-                }
-            }
-
-            if (rawComponentIndex === -1) {
-                return errorResult('Could not find component index for setting property');
-            }
-
+            // Build the (possibly dotted) component property path and apply via type-aware Editor API.
             const propertyPath = `__comps__.${rawComponentIndex}.${property}`;
-
-            // Step 6: Apply the property via type-aware Editor API calls
             const actualExpectedValue = await applyPropertyToEditor(
                 { nodeUuid, propertyPath, rawComponentIndex, componentType, property, propertyType, value, processedValue },
                 (uuid, type) => this.getComponentInfo(uuid, type)
             );
 
-            // Wait for editor to complete the update, then verify
+            // Wait for editor to complete the update, then verify.
             await new Promise(r => setTimeout(r, 200));
-            const verification = await verifyComponentPropertyChange(nodeUuid, componentType, property, originalValue, actualExpectedValue, (uuid, type) => this.getComponentInfo(uuid, type));
+            const verification = await verifyComponentPropertyChange(
+                nodeUuid, componentType, property, originalValue, actualExpectedValue,
+                (uuid, type) => this.getComponentInfo(uuid, type)
+            );
 
-            return successResult({
-                nodeUuid,
-                componentType,
-                property,
-                actualValue: verification.actualValue,
-                changeVerified: verification.verified
-            }, `Successfully set ${componentType}.${property}`);
-
+            return { success: true, actualValue: verification.actualValue, changeVerified: verification.verified };
         } catch (error: any) {
-            console.error(`[ManageComponent] Error setting property:`, error);
-            return errorResult(`Failed to set property: ${error.message}`);
+            console.error(`[ManageComponent] Error setting property '${property}':`, error);
+            return { success: false, error: `Failed to set property '${property}': ${error.message}` };
         }
     }
 
