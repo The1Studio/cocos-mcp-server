@@ -396,13 +396,34 @@ export class ManageComponent extends BaseActionTool {
 
         const allComponents = componentsResponse.data.components;
         let targetComponent = null;
+        let resolvedIndex = -1;
         const availableTypes: string[] = [];
         for (let i = 0; i < allComponents.length; i++) {
             const comp = allComponents[i];
             availableTypes.push(comp.type);
             if (comp.type === componentType) {
                 targetComponent = comp;
+                resolvedIndex = i;
                 break;
+            }
+        }
+
+        // Fallback: componentType may be a readable class name (e.g. "MyController")
+        // while the dump only exposes the script's cid. Resolve via the scene script,
+        // which has the live cc.js class registry, then map back to the dump component
+        // at the same index (query-node __comps__ order matches node.components order).
+        if (!targetComponent) {
+            try {
+                const byName: any = await Editor.Message.request('scene', 'execute-scene-script', {
+                    name: 'cocos-mcp-server', method: 'resolveComponentByName', args: [nodeUuid, componentType]
+                });
+                const index = byName?.success ? byName.data?.index : undefined;
+                if (typeof index === 'number' && index >= 0 && index < allComponents.length) {
+                    resolvedIndex = index;
+                    targetComponent = allComponents[index];
+                }
+            } catch {
+                // Scene script unavailable — fall through to the not-found error below.
             }
         }
 
@@ -432,6 +453,11 @@ export class ManageComponent extends BaseActionTool {
                 rawComponentIndex = i;
                 break;
             }
+        }
+        // Class-name resolution path: the cid won't equal componentType, so reuse the
+        // index resolved above (dump order == raw __comps__ order).
+        if (rawComponentIndex === -1 && resolvedIndex >= 0 && resolvedIndex < rawNodeData.__comps__.length) {
+            rawComponentIndex = resolvedIndex;
         }
 
         if (rawComponentIndex === -1) {

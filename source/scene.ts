@@ -53,6 +53,50 @@ export const methods: { [key: string]: (...any: any) => any } = {
     },
 
     /**
+     * Resolve a component on a node by its readable class name to its index.
+     *
+     * The editor `query-node` dump exposes a user script's cid (a compressed UUID),
+     * not its class name, so callers that only know the class name (e.g. set_property
+     * with componentType="MyController") cannot match it against the dump. The running
+     * scene HAS the live cc.js class registry, so we resolve the class here and return
+     * the component's index in node.components — which matches the dump's __comps__ order.
+     */
+    resolveComponentByName(nodeUuid: string, className: string) {
+        try {
+            const { director, js } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const node = scene.getChildByUuid(nodeUuid);
+            if (!node) {
+                return { success: false, error: `Node with UUID ${nodeUuid} not found` };
+            }
+
+            const ComponentClass = js.getClassByName(className);
+            if (!ComponentClass) {
+                return { success: false, error: `Component type ${className} not found` };
+            }
+
+            const component = node.getComponent(ComponentClass);
+            if (!component) {
+                return { success: false, error: `Component ${className} not found on node` };
+            }
+
+            return {
+                success: true,
+                data: {
+                    index: node.components.indexOf(component),
+                    className: component.constructor && component.constructor.name
+                }
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
      * Remove component from a node
      */
     removeComponentFromNode(nodeUuid: string, componentType: string) {

@@ -147,6 +147,86 @@ describe('ManageComponent', () => {
         expect(result.error).toMatch(/not found on node/i);
     });
 
+    // Regression: theonekit-cocos#62 — set_property with a vec3 {x,y,z} object value.
+    // set_property and set_properties_batch share applySingleProperty/convertPropertyValue,
+    // so a valid vec3 object must be accepted (it was previously rejected on this path).
+    it('set_property accepts a vec3 {x,y,z} object value', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        const dump = {
+            __comps__: [
+                {
+                    __type__: 'cc.BoxCollider', type: 'cc.BoxCollider', enabled: true,
+                    value: { uuid: { value: 'c1' }, size: { name: 'size', value: { x: 1, y: 1, z: 1 }, type: 'cc.Vec3' } }
+                }
+            ]
+        };
+        mockRequest.mockImplementation((_m: string, action: string) => {
+            if (action === 'query-node') return Promise.resolve(dump);
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('set_property', {
+            nodeUuid: NODE_UUID, componentType: 'cc.BoxCollider',
+            property: 'size', propertyType: 'vec3', value: { x: 2, y: 3, z: 4 }
+        });
+
+        expect(result.success).toBe(true);
+        const setCalls = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'set-property');
+        expect(setCalls.length).toBeGreaterThan(0);
+    });
+
+    // Regression: theonekit-cocos#62 — set_property with the script CLASS NAME as
+    // componentType. The dump exposes a cid, so the class name is resolved via the
+    // scene script (resolveComponentByName) and mapped to the raw __comps__ index.
+    it('set_property resolves a class-name componentType via the scene script', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        const CID = '8575caQ9/JPuZXXSk7zJTxS';
+        const dump = {
+            __comps__: [
+                {
+                    __type__: CID, type: CID, enabled: true,
+                    value: { uuid: { value: 'c1' }, speed: { name: 'speed', value: 1, type: 'Number' } }
+                }
+            ]
+        };
+        mockRequest.mockImplementation((_m: string, action: string, payload: any) => {
+            if (action === 'query-node') return Promise.resolve(dump);
+            if (action === 'execute-scene-script' && payload?.method === 'resolveComponentByName') {
+                return Promise.resolve({ success: true, data: { index: 0, className: 'Match3BoardController' } });
+            }
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('set_property', {
+            nodeUuid: NODE_UUID, componentType: 'Match3BoardController',
+            property: 'speed', propertyType: 'number', value: 5
+        });
+
+        expect(result.success).toBe(true);
+        const setCalls = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'set-property');
+        expect(setCalls.some((c: any[]) => c[2].path === '__comps__.0.speed')).toBe(true);
+    });
+
+    it('set_property errors when a class-name componentType resolves to nothing', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        const dump = { __comps__: [{ __type__: 'cc.Sprite', type: 'cc.Sprite', enabled: true, value: {} }] };
+        mockRequest.mockImplementation((_m: string, action: string, payload: any) => {
+            if (action === 'query-node') return Promise.resolve(dump);
+            if (action === 'execute-scene-script' && payload?.method === 'resolveComponentByName') {
+                return Promise.resolve({ success: false, error: 'Component type NopeController not found' });
+            }
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('set_property', {
+            nodeUuid: NODE_UUID, componentType: 'NopeController',
+            property: 'speed', propertyType: 'number', value: 5
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/not found on node/i);
+    });
+
     it('set_property still supports a dotted nested CCClass path end-to-end', async () => {
         const mockRequest = (global as any).Editor.Message.request as jest.Mock;
         mockRequest.mockImplementation((_module: string, action: string) => {
