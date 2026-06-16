@@ -3,37 +3,59 @@
  * Extracted from ManageNode to keep manage-node.ts under 200 lines.
  */
 
-/** Determine if a node is a 2D node based on its components and position */
+/**
+ * Component type substrings that identify a 2D (UI) node.
+ * `cc.UITransform` is the canonical marker — Cocos auto-adds it to every UI
+ * component (Sprite/Label/Button/...), so its presence is the reliable 2D signal.
+ */
+const COMPONENT_TYPES_2D = [
+    'cc.UITransform',
+    'cc.Canvas',
+    'cc.Sprite',
+    'cc.Label',
+    'cc.Button',
+    'cc.Layout',
+    'cc.Widget',
+    'cc.Mask',
+    'cc.Graphics'
+];
+
+/** Component type substrings that identify a 3D node. */
+const COMPONENT_TYPES_3D = [
+    'cc.MeshRenderer',
+    'cc.Camera',
+    'cc.Light',
+    'cc.DirectionalLight',
+    'cc.PointLight',
+    'cc.SpotLight'
+];
+
+function matchesAnyType(componentType: string, list: string[]): boolean {
+    return !!componentType && list.some(t => componentType.includes(t));
+}
+
+/** True if the component type is a 2D/UI component. */
+export function is2DComponentType(componentType: string): boolean {
+    return matchesAnyType(componentType, COMPONENT_TYPES_2D);
+}
+
+/** True if the component type is a 3D component. */
+export function is3DComponentType(componentType: string): boolean {
+    return matchesAnyType(componentType, COMPONENT_TYPES_3D);
+}
+
+/**
+ * Determine if a node is a 2D node based on its components.
+ *
+ * In Cocos Creator 3.x every Node has a full 3D transform; "2D" is a UI context
+ * proven by the presence of a 2D/UI component. A 3D node legitimately sits at the
+ * origin (z = 0), so node position MUST NOT be used to infer 2D-ness — doing so
+ * misclassifies any 3D node at z≈0 (e.g. a DirectionalLight at the origin) and
+ * silently strips its z position and x/y rotation. Default is therefore 3D.
+ */
 export function is2DNode(nodeInfo: any): boolean {
     const components = nodeInfo.components || [];
-
-    const has2DComponents = components.some((comp: any) =>
-        comp.type && (
-            comp.type.includes('cc.Sprite') ||
-            comp.type.includes('cc.Label') ||
-            comp.type.includes('cc.Button') ||
-            comp.type.includes('cc.Layout') ||
-            comp.type.includes('cc.Widget') ||
-            comp.type.includes('cc.Mask') ||
-            comp.type.includes('cc.Graphics')
-        )
-    );
-    if (has2DComponents) return true;
-
-    const has3DComponents = components.some((comp: any) =>
-        comp.type && (
-            comp.type.includes('cc.MeshRenderer') ||
-            comp.type.includes('cc.Camera') ||
-            comp.type.includes('cc.Light') ||
-            comp.type.includes('cc.DirectionalLight') ||
-            comp.type.includes('cc.PointLight') ||
-            comp.type.includes('cc.SpotLight')
-        )
-    );
-    if (has3DComponents) return false;
-
-    const position = nodeInfo.position;
-    if (position && Math.abs(position.z) < 0.001) return true;
+    if (components.some((comp: any) => is2DComponentType(comp.type))) return true;
     return false;
 }
 
@@ -86,20 +108,8 @@ export function normalizeTransformValue(
 /** Classify a component type as '2D', '3D', or 'generic' */
 export function getComponentCategory(componentType: string): string {
     if (!componentType) return 'unknown';
-
-    if (componentType.includes('cc.Sprite') || componentType.includes('cc.Label') ||
-        componentType.includes('cc.Button') || componentType.includes('cc.Layout') ||
-        componentType.includes('cc.Widget') || componentType.includes('cc.Mask') ||
-        componentType.includes('cc.Graphics')) {
-        return '2D';
-    }
-
-    if (componentType.includes('cc.MeshRenderer') || componentType.includes('cc.Camera') ||
-        componentType.includes('cc.Light') || componentType.includes('cc.DirectionalLight') ||
-        componentType.includes('cc.PointLight') || componentType.includes('cc.SpotLight')) {
-        return '3D';
-    }
-
+    if (is2DComponentType(componentType)) return '2D';
+    if (is3DComponentType(componentType)) return '3D';
     return 'generic';
 }
 
