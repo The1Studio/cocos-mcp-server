@@ -1,7 +1,7 @@
 import { BaseActionTool } from './base-action-tool';
 import { ActionToolResult, NodeInfo, successResult, errorResult } from '../types';
 import { coerceBool, coerceInt, normalizeVec3 } from '../utils/normalize';
-import { is2DNode, normalizeTransformValue, getComponentCategory, getNodePath, searchNodeInTree } from './manage-node-transform-helpers';
+import { is2DNode, is2DComponentType, is3DComponentType, normalizeTransformValue, getComponentCategory, getNodePath, searchNodeInTree } from './manage-node-transform-helpers';
 
 export class ManageNode extends BaseActionTool {
 
@@ -609,28 +609,9 @@ export class ManageNode extends BaseActionTool {
 
             const detectionReasons: string[] = [];
 
-            const twoDComponents = components.filter((comp: any) =>
-                comp.type && (
-                    comp.type.includes('cc.Sprite') ||
-                    comp.type.includes('cc.Label') ||
-                    comp.type.includes('cc.Button') ||
-                    comp.type.includes('cc.Layout') ||
-                    comp.type.includes('cc.Widget') ||
-                    comp.type.includes('cc.Mask') ||
-                    comp.type.includes('cc.Graphics')
-                )
-            );
+            const twoDComponents = components.filter((comp: any) => is2DComponentType(comp.type));
 
-            const threeDComponents = components.filter((comp: any) =>
-                comp.type && (
-                    comp.type.includes('cc.MeshRenderer') ||
-                    comp.type.includes('cc.Camera') ||
-                    comp.type.includes('cc.Light') ||
-                    comp.type.includes('cc.DirectionalLight') ||
-                    comp.type.includes('cc.PointLight') ||
-                    comp.type.includes('cc.SpotLight')
-                )
-            );
+            const threeDComponents = components.filter((comp: any) => is3DComponentType(comp.type));
 
             if (twoDComponents.length > 0) {
                 detectionReasons.push(`Has 2D components: ${twoDComponents.map((c: any) => c.type).join(', ')}`);
@@ -639,15 +620,10 @@ export class ManageNode extends BaseActionTool {
                 detectionReasons.push(`Has 3D components: ${threeDComponents.map((c: any) => c.type).join(', ')}`);
             }
 
-            const position = nodeInfo.position;
-            if (position && Math.abs(position.z) < 0.001) {
-                detectionReasons.push('Z position is ~0 (likely 2D)');
-            } else if (position && Math.abs(position.z) > 0.001) {
-                detectionReasons.push(`Z position is ${position.z} (likely 3D)`);
-            }
-
-            if (detectionReasons.length === 0) {
-                detectionReasons.push('No specific indicators found, defaulting based on heuristics');
+            // Node position is NOT used to infer 2D-ness: a 3D node legitimately sits
+            // at the origin (z = 0). Absent a 2D/UI component, the node is treated as 3D.
+            if (twoDComponents.length === 0) {
+                detectionReasons.push('No 2D/UI component found; treated as 3D (full x, y, z transform)');
             }
 
             return successResult({
