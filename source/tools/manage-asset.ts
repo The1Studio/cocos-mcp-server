@@ -113,7 +113,7 @@ export class ManageAsset extends BaseActionTool {
         move: (args) => this.moveAsset(args.source, args.target, args.overwrite === true || args.overwrite === 'true'),
         delete: (args) => this.deleteAsset(args.url),
         save: (args) => this.saveAsset(args.url || args.urlOrUUID, args.content),
-        reimport: (args) => this.reimportAsset(args.url || args.urlOrUUID),
+        reimport: (args) => this.reimportAsset(args.url || args.urlOrUUID || args.assetPath),
         query_path: (args) => this.queryAssetPath(args.url || args.urlOrUUID),
         query_uuid: (args) => this.queryAssetUuid(args.url),
         query_url: (args) => this.queryAssetUrl(args.uuid),
@@ -253,6 +253,9 @@ export class ManageAsset extends BaseActionTool {
     }
 
     private async reimportAsset(url: string): Promise<ActionToolResult> {
+        if (!url || typeof url !== 'string' || url.trim() === '') {
+            return errorResult('reimport requires a url, urlOrUUID, or assetPath');
+        }
         try {
             await Editor.Message.request('asset-db', 'reimport-asset', url);
             return successResult({ url }, 'Asset reimported successfully');
