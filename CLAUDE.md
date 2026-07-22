@@ -20,7 +20,9 @@ npm run build      # TypeScript compilation (source/ → dist/)
 npm run watch      # Watch mode for development
 ```
 
-Verify changes compile cleanly with `npm run build`. No linter or test runner is configured.
+Verify changes compile cleanly with `npm run build`, then run the Jest suite with `npm test`.
+
+**IMPORTANT — commit the rebuilt `dist/` with your `source/` change.** `dist/` is tracked in git and is what Cocos Creator actually loads (there is no build step on the consumer side). A source-only commit ships a stale compiled artifact, so the fix never takes effect. Always `npm run build` and stage the updated `dist/**` files in the SAME commit/PR as the `source/**` change (see PRs #4, #5 for the correct pattern).
 
 ## Architecture (v2.0)
 
