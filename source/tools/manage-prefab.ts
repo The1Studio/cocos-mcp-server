@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import { ActionToolResult, successResult, errorResult, PrefabInfo } from '../types';
 import { BaseActionTool } from './base-action-tool';
 import { normalizeVec3 } from '../utils/normalize';
@@ -349,8 +350,13 @@ export class ManagePrefab extends BaseActionTool {
             const assetInfo: any = await Editor.Message.request('asset-db', 'query-asset-meta', uuid);
             if (!assetInfo) return { success: false, error: 'Prefab not found' };
             const url = assetInfo.url || '';
+            // asset-db has no 'read-asset' message; resolve the db URL to a
+            // filesystem path and read the .prefab file directly (same pattern
+            // as manage-script / manage-animation).
+            const filePath = await Editor.Message.request('asset-db', 'query-path', url) as string | null;
+            if (!filePath) return { success: false, error: 'Could not resolve prefab file path on disk' };
             try {
-                const content: string = await Editor.Message.request('asset-db', 'read-asset', url);
+                const content: string = fs.readFileSync(filePath, 'utf-8');
                 try {
                     const prefabData = JSON.parse(content);
                     const validationResult = this.creationService.validatePrefabFormat(prefabData);
