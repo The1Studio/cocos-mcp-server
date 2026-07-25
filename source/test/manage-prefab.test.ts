@@ -77,4 +77,145 @@ describe('ManagePrefab', () => {
             fs.unlinkSync(tmpFile);
         });
     });
+
+    describe('update action (#12 — apply-prefab argument shape)', () => {
+        const ROOT_UUID = 'root-uuid-1111';
+        const ASSET_UUID = 'asset-uuid-2222';
+
+        /** Node dump shaped like Cocos Creator 3.8.7's `query-node` result for a prefab instance. */
+        const nodeDump = { __prefab__: { rootUuid: ROOT_UUID, uuid: ASSET_UUID } };
+
+        function writePrefabFile(): string {
+            const tmpFile = path.join(os.tmpdir(), `t1k-prefab-apply-${process.pid}-${Date.now()}.prefab`);
+            fs.writeFileSync(tmpFile, JSON.stringify([{ __type__: 'cc.Prefab' }]), 'utf-8');
+            return tmpFile;
+        }
+
+        it('returns error when nodeUuid is missing', async () => {
+            const result = await tool.execute('update', {});
+            expect(result.success).toBe(false);
+        });
+
+        it('passes the instance root uuid POSITIONALLY, never as a { node } object', async () => {
+            const tmpFile = writePrefabFile();
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(nodeDump)                          // query-node
+                .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab' }) // query-asset-meta
+                .mockResolvedValueOnce(tmpFile)                           // query-path
+                .mockImplementationOnce(async () => {                     // apply-prefab
+                    fs.writeFileSync(tmpFile, JSON.stringify([{ __type__: 'cc.Prefab', v: 2 }]), 'utf-8');
+                    const future = Date.now() + 5000;
+                    fs.utimesSync(tmpFile, new Date(future), new Date(future));
+                    return true;
+                });
+
+            const result = await tool.execute('update', { nodeUuid: 'child-uuid-9999' });
+
+            expect(result.success).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'apply-prefab', ROOT_UUID);
+            // The bug: the old code sent an object, which resolved without writing anything.
+            expect(mockRequest).not.toHaveBeenCalledWith('scene', 'apply-prefab', { node: 'child-uuid-9999' });
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('reports failure when apply-prefab resolves false', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(nodeDump)
+                .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab' })
+                .mockResolvedValueOnce(null)   // path unresolvable
+                .mockResolvedValueOnce(false); // apply-prefab rejected
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/rejected apply-prefab/i);
+        });
+
+        it('reports failure when the prefab file was never rewritten', async () => {
+            const tmpFile = writePrefabFile();
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(nodeDump)
+                .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab' })
+                .mockResolvedValueOnce(tmpFile)
+                .mockResolvedValueOnce(undefined); // resolves, writes nothing — the #12 symptom
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/was not rewritten/i);
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('errors when the node is not part of a prefab instance', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce({ name: 'PlainNode' });
+
+            const result = await tool.execute('update', { nodeUuid: 'plain-node' });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/not part of a prefab instance/i);
+        });
+    });
+
+    describe('revert action (#13 — scene:revert-prefab does not exist in 3.8.7)', () => {
+        const ROOT_UUID = 'root-uuid-3333';
+        const ASSET_UUID = 'asset-uuid-4444';
+        const nodeDump = { __prefab__: { rootUuid: ROOT_UUID, uuid: ASSET_UUID } };
+
+        it('returns error when nodeUuid is missing', async () => {
+            const result = await tool.execute('revert', {});
+            expect(result.success).toBe(false);
+        });
+
+        it('uses restore-prefab with positional (rootUuid, assetUuid) — never revert-prefab', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(nodeDump) // query-node
+                .mockResolvedValueOnce(true);    // restore-prefab
+
+            const result = await tool.execute('revert', { nodeUuid: 'child-uuid-8888' });
+
+            expect(result.success).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'restore-prefab', ROOT_UUID, ASSET_UUID);
+            const calledMessages = mockRequest.mock.calls.map((c: any[]) => c[1]);
+            expect(calledMessages).not.toContain('revert-prefab');
+        });
+
+        it('prefers an explicitly supplied assetUuid', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce(nodeDump).mockResolvedValueOnce(true);
+
+            await tool.execute('revert', { nodeUuid: ROOT_UUID, assetUuid: 'explicit-asset' });
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'restore-prefab', ROOT_UUID, 'explicit-asset');
+        });
+
+        it('errors when the prefab asset cannot be resolved', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce({ __prefab__: { rootUuid: ROOT_UUID } });
+
+            const result = await tool.execute('revert', { nodeUuid: ROOT_UUID });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/could not resolve the prefab asset/i);
+        });
+
+        it('reports failure when restore-prefab resolves false', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce(nodeDump).mockResolvedValueOnce(false);
+
+            const result = await tool.execute('revert', { nodeUuid: ROOT_UUID });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/rejected restore-prefab/i);
+        });
+
+        it('restore action shares the same corrected implementation', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce(nodeDump).mockResolvedValueOnce(true);
+
+            const result = await tool.execute('restore', { nodeUuid: ROOT_UUID });
+            expect(result.success).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'restore-prefab', ROOT_UUID, ASSET_UUID);
+        });
+    });
 });
