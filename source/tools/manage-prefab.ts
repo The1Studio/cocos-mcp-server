@@ -8,7 +8,7 @@ export class ManagePrefab extends BaseActionTool {
     private readonly creationService = new PrefabCreationService();
 
     readonly name = 'manage_prefab';
-    readonly description = 'Manage prefabs in the project. Actions: list=list all prefabs, load=load prefab by path, instantiate=instantiate prefab in scene, create=create prefab from node, update=apply node changes to prefab, revert=revert prefab instance to original, get_info=get prefab details, validate=validate prefab file format, duplicate=duplicate a prefab, restore=restore prefab node using asset (with undo). Prerequisites: project must be open in Cocos Creator.';
+    readonly description = 'Manage prefabs in the project. Actions: list=list all prefabs, load=load prefab by path, instantiate=instantiate prefab in scene, create=create prefab from node, update=apply node changes to the prefab asset (verifies the asset was written), revert=revert prefab instance to the asset state (alias of restore), get_info=get prefab details, validate=validate prefab file format, duplicate=duplicate a prefab, restore=restore prefab node using asset (with undo). For update/revert/restore, nodeUuid may be any node in the instance — the instance root is resolved automatically. Prerequisites: project must be open in Cocos Creator.';
     readonly actions = ['list', 'load', 'instantiate', 'create', 'update', 'revert', 'get_info', 'validate', 'duplicate', 'restore'];
 
     readonly inputSchema = {
@@ -17,7 +17,7 @@ export class ManagePrefab extends BaseActionTool {
             action: {
                 type: 'string',
                 enum: ['list', 'load', 'instantiate', 'create', 'update', 'revert', 'get_info', 'validate', 'duplicate', 'restore'],
-                description: 'Action to perform: list=list all prefabs in project, load=load prefab by uuid, instantiate=instantiate prefab in scene, create=create prefab from node, update=apply node changes to existing prefab, revert=revert prefab instance to original, get_info=get detailed prefab info, validate=validate prefab file format, duplicate=duplicate a prefab, restore=restore prefab node using prefab asset (built-in undo)'
+                description: 'Action to perform: list=list all prefabs in project, load=load prefab by uuid, instantiate=instantiate prefab in scene, create=create prefab from node, update=apply node changes to existing prefab, revert=revert prefab instance to the asset state (alias of restore), get_info=get detailed prefab info, validate=validate prefab file format, duplicate=duplicate a prefab, restore=restore prefab node using prefab asset (built-in undo)'
             },
             uuid: {
                 type: 'string',
@@ -29,7 +29,7 @@ export class ManagePrefab extends BaseActionTool {
             },
             nodeUuid: {
                 type: 'string',
-                description: 'Scene node UUID (for create, update, revert, restore_node actions)'
+                description: 'Scene node UUID (for create, update, revert, restore actions). For update/revert/restore this may be any node inside the prefab instance; the instance root is resolved from it.'
             },
             savePath: {
                 type: 'string',
@@ -81,7 +81,7 @@ export class ManagePrefab extends BaseActionTool {
             },
             assetUuid: {
                 type: 'string',
-                description: 'Prefab asset UUID to use when restoring node (for restore_node action, optional)'
+                description: 'Prefab asset UUID to restore from (for revert and restore actions, optional — resolved from the node when omitted)'
             }
         },
         required: ['action']
@@ -144,9 +144,10 @@ export class ManagePrefab extends BaseActionTool {
     }
 
     private async handleRevert(args: Record<string, any>): Promise<ActionToolResult> {
-        const { nodeUuid } = args;
+        const { nodeUuid, assetUuid } = args;
         if (!nodeUuid) return errorResult('nodeUuid is required');
-        const result = await this.revertPrefab(nodeUuid);
+        // `revert` and `restore` are the same editor operation — see restorePrefabNode.
+        const result = await this.restorePrefabNode(nodeUuid, assetUuid);
         if (result.success) return successResult(result.data, result.message);
         return errorResult(result.error || 'Failed to revert prefab');
     }
@@ -304,27 +305,112 @@ export class ManagePrefab extends BaseActionTool {
         }
     }
 
-    private async updatePrefab(nodeUuid: string): Promise<any> {
+    /**
+     * Resolve the prefab-instance context for a node.
+     *
+     * Cocos Creator drives both prefab messages from the node dump's `__prefab__`
+     * block — `rootUuid` (the prefab-instance ROOT, not whichever descendant the
+     * caller happened to pass) and `uuid` (the backing prefab asset). See 3.8.7
+     * `resources/3d/engine/editor/inspector/contributions/node.js`:
+     *   request('scene', 'apply-prefab', prefab.rootUuid)
+     *   request('scene', 'restore-prefab', prefab.rootUuid, prefab.uuid)
+     */
+    private async resolvePrefabContext(nodeUuid: string): Promise<any> {
+        let nodeData: any;
         try {
-            // Get node info to find associated prefab
-            const nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
-            if (!nodeData) {
-                return { success: false, error: 'Node not found' };
-            }
-
-            // Apply changes to prefab using the node's prefab connection
-            await Editor.Message.request('scene', 'apply-prefab', { node: nodeUuid });
-
-            return { success: true, message: 'Prefab updated successfully', data: { nodeUuid } };
+            nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
         } catch (err: any) {
-            return { success: false, error: err.message };
+            return { success: false, error: `Failed to query node ${nodeUuid}: ${err.message}` };
+        }
+        if (!nodeData) return { success: false, error: 'Node not found' };
+
+        const prefab = nodeData.__prefab__;
+        if (!prefab) {
+            return { success: false, error: `Node ${nodeUuid} is not part of a prefab instance` };
+        }
+        return {
+            success: true,
+            rootUuid: prefab.rootUuid || nodeUuid,
+            assetUuid: prefab.uuid || prefab.prefabStateInfo?.assetUuid
+        };
+    }
+
+    /** Resolve a prefab asset's on-disk path, or null when it cannot be determined. */
+    private async resolvePrefabFilePath(assetUuid?: string): Promise<string | null> {
+        if (!assetUuid) return null;
+        try {
+            const meta: any = await Editor.Message.request('asset-db', 'query-asset-meta', assetUuid);
+            if (!meta?.url) return null;
+            return (await Editor.Message.request('asset-db', 'query-path', meta.url)) as string | null;
+        } catch {
+            return null;
         }
     }
 
-    private async revertPrefab(nodeUuid: string): Promise<any> {
+    private statMtimeMs(filePath: string | null): number | null {
+        if (!filePath) return null;
         try {
-            await Editor.Message.request('scene', 'revert-prefab', { node: nodeUuid });
-            return { success: true, message: 'Prefab instance reverted successfully', data: { nodeUuid } };
+            return fs.statSync(filePath).mtimeMs;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Poll for the prefab file to be rewritten; asset-db may flush shortly after the message resolves. */
+    private async waitForPrefabWrite(filePath: string, baselineMs: number, timeoutMs = 2000): Promise<number | null> {
+        const deadline = Date.now() + timeoutMs;
+        let mtime = this.statMtimeMs(filePath);
+        while (mtime !== null && mtime <= baselineMs && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            mtime = this.statMtimeMs(filePath);
+        }
+        return mtime;
+    }
+
+    private async updatePrefab(nodeUuid: string): Promise<any> {
+        try {
+            const context = await this.resolvePrefabContext(nodeUuid);
+            if (!context.success) return context;
+            const { rootUuid, assetUuid } = context;
+
+            const prefabPath = await this.resolvePrefabFilePath(assetUuid);
+            const mtimeBefore = this.statMtimeMs(prefabPath);
+
+            // `scene:apply-prefab` takes the instance root uuid as a POSITIONAL string
+            // and resolves to a boolean. The old `{ node: uuid }` object form resolved
+            // without throwing but never wrote the asset — a silent no-op reported as
+            // success (#12).
+            const applied = await (Editor.Message.request as any)('scene', 'apply-prefab', rootUuid);
+            if (applied === false) {
+                return {
+                    success: false,
+                    error: `Editor rejected apply-prefab for node ${rootUuid}. Confirm it is a prefab-instance root with a valid asset link.`,
+                    data: { nodeUuid, rootUuid, assetUuid, prefabPath }
+                };
+            }
+
+            // Verify the asset was actually written rather than trusting a non-throwing
+            // message. `unverified` means the path could not be resolved, not that the
+            // write failed.
+            let persisted: boolean | 'unverified' = 'unverified';
+            if (prefabPath !== null && mtimeBefore !== null) {
+                const mtimeAfter = await this.waitForPrefabWrite(prefabPath, mtimeBefore);
+                if (mtimeAfter !== null) persisted = mtimeAfter > mtimeBefore;
+            }
+
+            if (persisted === false) {
+                return {
+                    success: false,
+                    error: `apply-prefab reported no error but ${prefabPath} was not rewritten. The node may have no overrides to apply, or its prefab link is stale.`,
+                    data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted }
+                };
+            }
+
+            return {
+                success: true,
+                message: 'Prefab updated successfully',
+                data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted }
+            };
         } catch (err: any) {
             return { success: false, error: err.message };
         }
@@ -388,12 +474,39 @@ export class ManagePrefab extends BaseActionTool {
         };
     }
 
+    /**
+     * Restore (a.k.a. revert) a prefab instance to its asset state.
+     *
+     * Backs both `action=restore` and `action=revert`. Cocos Creator 3.8.7 exposes
+     * no `scene:revert-prefab` message at all — `restore-prefab` is what the editor
+     * itself uses for the inspector's Revert button (#13). It takes positional
+     * `(rootUuid, assetUuid)`, returns a boolean, and records its own undo entry.
+     */
     private async restorePrefabNode(nodeUuid: string, assetUuid?: string): Promise<any> {
-        if (!nodeUuid) return { success: false, error: 'nodeUuid is required for action=restore' };
+        if (!nodeUuid) return { success: false, error: 'nodeUuid is required' };
         try {
-            // Use official restore-prefab API with positional args to restore the prefab node (includes built-in undo record)
-            await (Editor.Message.request as any)('scene', 'restore-prefab', nodeUuid, assetUuid);
-            return { success: true, data: { nodeUuid, assetUuid }, message: 'Prefab node restored successfully' };
+            const context = await this.resolvePrefabContext(nodeUuid);
+            if (!context.success) return context;
+
+            const rootUuid = context.rootUuid;
+            const resolvedAssetUuid = assetUuid || context.assetUuid;
+            if (!resolvedAssetUuid) {
+                return { success: false, error: `Could not resolve the prefab asset for node ${nodeUuid}. Pass assetUuid explicitly.` };
+            }
+
+            const restored = await (Editor.Message.request as any)('scene', 'restore-prefab', rootUuid, resolvedAssetUuid);
+            if (restored === false) {
+                return {
+                    success: false,
+                    error: `Editor rejected restore-prefab for node ${rootUuid}. Confirm it is a prefab-instance root with a valid asset link.`,
+                    data: { nodeUuid, rootUuid, assetUuid: resolvedAssetUuid }
+                };
+            }
+            return {
+                success: true,
+                data: { nodeUuid, rootUuid, assetUuid: resolvedAssetUuid },
+                message: 'Prefab instance restored from asset successfully'
+            };
         } catch (error: any) {
             return { success: false, error: `Failed to restore prefab node: ${error.message}` };
         }
