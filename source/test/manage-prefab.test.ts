@@ -218,4 +218,100 @@ describe('ManagePrefab', () => {
             expect(mockRequest).toHaveBeenCalledWith('scene', 'restore-prefab', ROOT_UUID, ASSET_UUID);
         });
     });
+
+    describe('instantiate action (#15 — false-success envelope with no nodeUuid)', () => {
+        const PREFAB_UUID = 'a20d75f5-d599-4f64-8792-b99253e0c91e';
+        const assetInfo = { name: 'meteor', url: 'db://assets/meteor.prefab' };
+
+        it('returns error when prefabUuid is missing', async () => {
+            const result = await tool.execute('instantiate', {});
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/prefabUuid is required/i);
+        });
+
+        it('fails when the uuid is absent from the asset DB — never a success envelope', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockRejectedValueOnce(new Error('asset not found')); // query-asset-info
+
+            const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/not found in the asset DB/i);
+            expect(result.instruction).toMatch(/refresh/i);
+            const calledMessages = mockRequest.mock.calls.map((c: any[]) => c[1]);
+            expect(calledMessages).not.toContain('create-node');
+        });
+
+        it('fails when query-asset-info resolves null for an unimported uuid', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce(null); // query-asset-info
+
+            const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toContain(PREFAB_UUID);
+        });
+
+        it('fails when create-node returns no node uuid', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(assetInfo)  // query-asset-info
+                .mockResolvedValueOnce(undefined); // create-node
+
+            const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/returned no node uuid/i);
+        });
+
+        it('fails when create-node returns an empty array', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(assetInfo) // query-asset-info
+                .mockResolvedValueOnce([]);       // create-node
+
+            const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+            expect(result.success).toBe(false);
+        });
+
+        it('succeeds with a non-empty nodeUuid when the prefab resolves', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(assetInfo)      // query-asset-info
+                .mockResolvedValueOnce('new-node-777'); // create-node
+
+            const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+
+            expect(result.success).toBe(true);
+            expect(result.data.nodeUuid).toBe('new-node-777');
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'create-node', expect.objectContaining({
+                assetUuid: PREFAB_UUID,
+                name: 'meteor'
+            }));
+        });
+
+        it('applies rotation and scale after a successful create-node', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(assetInfo)
+                .mockResolvedValueOnce(['new-node-888']);
+
+            const result = await tool.execute('instantiate', {
+                prefabUuid: PREFAB_UUID,
+                rotation: { x: 0, y: 90, z: 0 },
+                scale: { x: 2, y: 2, z: 2 }
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.data.nodeUuid).toBe('new-node-888');
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'set-property', expect.objectContaining({
+                uuid: 'new-node-888',
+                path: 'eulerAngles'
+            }));
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'set-property', expect.objectContaining({
+                uuid: 'new-node-888',
+                path: 'scale'
+            }));
+        });
+    });
 });
