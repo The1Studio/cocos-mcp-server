@@ -122,7 +122,9 @@ export class ManagePrefab extends BaseActionTool {
         const scale = normalizeVec3(args.scale);
         const result = await this.instantiatePrefabByUuid({ prefabUuid, parentUuid, position, rotation, scale });
         if (result.success) return successResult(result.data, result.message);
-        return errorResult(result.error || 'Failed to instantiate prefab');
+        const failure = errorResult(result.error || 'Failed to instantiate prefab');
+        if (result.instruction) failure.instruction = result.instruction;
+        return failure;
     }
 
     private async handleCreate(args: Record<string, any>): Promise<ActionToolResult> {
@@ -215,7 +217,16 @@ export class ManagePrefab extends BaseActionTool {
         try {
             const { prefabUuid, parentUuid, position, rotation, scale } = args;
 
+            // An unresolvable uuid must be fatal: create-node silently returns nothing for it,
+            // which previously produced a success envelope with no nodeUuid (#15).
             const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', prefabUuid).catch(() => null);
+            if (!assetInfo) {
+                return {
+                    success: false,
+                    error: `Prefab uuid '${prefabUuid}' not found in the asset DB`,
+                    instruction: 'Verify the uuid, and refresh the asset DB (manage_asset action=refresh) if the .prefab file was written outside the editor.'
+                };
+            }
 
             const createNodeOptions: any = {
                 assetUuid: prefabUuid
@@ -238,22 +249,30 @@ export class ManagePrefab extends BaseActionTool {
             const nodeUuid = await Editor.Message.request('scene', 'create-node', createNodeOptions);
             const uuid = Array.isArray(nodeUuid) ? nodeUuid[0] : nodeUuid;
 
+            // Never report success without a node id — the caller would build on a scene
+            // that silently lacks the node (#15).
+            if (!uuid) {
+                return {
+                    success: false,
+                    error: `create-node returned no node uuid for prefab '${prefabUuid}' — nothing was instantiated`,
+                    instruction: 'Ensure a scene is open and the prefab asset is valid, then retry.'
+                };
+            }
+
             // Apply rotation and scale if provided
-            if (uuid) {
-                if (rotation) {
-                    await Editor.Message.request('scene', 'set-property', {
-                        uuid,
-                        path: 'eulerAngles',
-                        dump: { value: rotation, type: 'cc.Vec3' }
-                    }).catch(() => {/* non-fatal */});
-                }
-                if (scale) {
-                    await Editor.Message.request('scene', 'set-property', {
-                        uuid,
-                        path: 'scale',
-                        dump: { value: scale, type: 'cc.Vec3' }
-                    }).catch(() => {/* non-fatal */});
-                }
+            if (rotation) {
+                await Editor.Message.request('scene', 'set-property', {
+                    uuid,
+                    path: 'eulerAngles',
+                    dump: { value: rotation, type: 'cc.Vec3' }
+                }).catch(() => {/* non-fatal */});
+            }
+            if (scale) {
+                await Editor.Message.request('scene', 'set-property', {
+                    uuid,
+                    path: 'scale',
+                    dump: { value: scale, type: 'cc.Vec3' }
+                }).catch(() => {/* non-fatal */});
             }
 
             return {
