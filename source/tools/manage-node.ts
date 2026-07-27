@@ -170,11 +170,13 @@ export class ManageNode extends BaseActionTool {
             }
 
             let finalAssetUuid = args.assetUuid;
+            let assetType: string | undefined;
             if (args.assetPath && !finalAssetUuid) {
                 try {
                     const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', args.assetPath);
                     if (assetInfo && assetInfo.uuid) {
                         finalAssetUuid = assetInfo.uuid;
+                        assetType = assetInfo.type;
                         console.log(`Asset path '${args.assetPath}' resolved to UUID: ${finalAssetUuid}`);
                     } else {
                         return errorResult(`Asset not found at path: ${args.assetPath}`);
@@ -192,6 +194,25 @@ export class ManageNode extends BaseActionTool {
 
             if (finalAssetUuid) {
                 createNodeOptions.assetUuid = finalAssetUuid;
+
+                // `type` selects the createNodeFromAsset() branch that instantiates a
+                // linked instance (e.g. a prefab's cc.PrefabInfo/PrefabInstance). Without
+                // it, 3.8.7's node manager falls back to a plain node built from the
+                // asset's raw dump — a flattened, unlinked copy that reports success
+                // but carries no prefab link. Resolve it when not already known from the
+                // assetPath lookup above.
+                if (!assetType) {
+                    try {
+                        const info = await Editor.Message.request('asset-db', 'query-asset-info', finalAssetUuid);
+                        assetType = info?.type;
+                    } catch (err) {
+                        console.warn(`Failed to resolve asset type for '${finalAssetUuid}':`, err);
+                    }
+                }
+                if (assetType) {
+                    createNodeOptions.type = assetType;
+                }
+
                 if (coerceBool(args.unlinkPrefab)) {
                     createNodeOptions.unlinkPrefab = true;
                 }

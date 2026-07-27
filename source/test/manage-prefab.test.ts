@@ -221,7 +221,7 @@ describe('ManagePrefab', () => {
 
     describe('instantiate action (#15 — false-success envelope with no nodeUuid)', () => {
         const PREFAB_UUID = 'a20d75f5-d599-4f64-8792-b99253e0c91e';
-        const assetInfo = { name: 'meteor', url: 'db://assets/meteor.prefab' };
+        const assetInfo = { name: 'meteor', url: 'db://assets/meteor.prefab', type: 'cc.Prefab' };
 
         it('returns error when prefabUuid is missing', async () => {
             const result = await tool.execute('instantiate', {});
@@ -288,6 +288,44 @@ describe('ManagePrefab', () => {
                 assetUuid: PREFAB_UUID,
                 name: 'meteor'
             }));
+        });
+
+        it('passes the asset db type so create-node links a PrefabInstance instead of a flattened copy', async () => {
+            // Regression test: 3.8.7's NodeManager.createNodeFromAsset() picks the
+            // linked-instance branch based on options.type. Omitting it (as the old
+            // code did) falls back to a plain-dump node with no cc.PrefabInfo — the
+            // "instantiate reports success but produces an unlinked copy" bug.
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(assetInfo)      // query-asset-info
+                .mockResolvedValueOnce('new-node-999'); // create-node
+
+            const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+
+            expect(result.success).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'create-node', expect.objectContaining({
+                assetUuid: PREFAB_UUID,
+                type: 'cc.Prefab'
+            }));
+        });
+
+        it('passes position as a top-level CreateNodeOptions field, never as an unused dump wrapper', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(assetInfo)
+                .mockResolvedValueOnce('new-node-555');
+
+            const result = await tool.execute('instantiate', {
+                prefabUuid: PREFAB_UUID,
+                position: { x: 1, y: 2, z: 3 }
+            });
+
+            expect(result.success).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'create-node', expect.objectContaining({
+                position: { x: 1, y: 2, z: 3 }
+            }));
+            const createNodeCall = mockRequest.mock.calls.find((c: any[]) => c[1] === 'create-node');
+            expect(createNodeCall?.[2]).not.toHaveProperty('dump');
         });
 
         it('applies rotation and scale after a successful create-node', async () => {
