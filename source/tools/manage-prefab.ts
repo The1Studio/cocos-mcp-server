@@ -229,7 +229,13 @@ export class ManagePrefab extends BaseActionTool {
             }
 
             const createNodeOptions: any = {
-                assetUuid: prefabUuid
+                assetUuid: prefabUuid,
+                // `type` selects the createNodeFromAsset() branch that instantiates a
+                // linked PrefabInstance. Without it, 3.8.7's node manager falls back to
+                // building a plain node from the asset's raw dump — a flattened,
+                // unlinked copy that reports success but carries no cc.PrefabInfo (see
+                // NodeManager.createNodeFromAsset jsdoc: "options.type: 资源类型").
+                type: assetInfo.type
             };
 
             if (parentUuid) {
@@ -241,9 +247,10 @@ export class ManagePrefab extends BaseActionTool {
             }
 
             if (position) {
-                createNodeOptions.dump = {
-                    position: { value: position }
-                };
+                // `position` is a documented top-level CreateNodeOptions field; `dump`
+                // is explicitly commented out as unused in @cocos/creator-types — it was
+                // silently ignored, so instantiated prefabs never picked up this position.
+                createNodeOptions.position = position;
             }
 
             const nodeUuid = await Editor.Message.request('scene', 'create-node', createNodeOptions);
