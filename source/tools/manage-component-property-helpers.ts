@@ -200,6 +200,35 @@ export const ASSET_REFERENCE_PROPERTY_TYPES = [
     'particleAsset', 'sceneAsset'
 ] as const;
 
+/**
+ * Explicit propertyType -> Cocos asset class for the Editor `set-property` dump `type` field.
+ *
+ * Resolved from the propertyType itself, NOT from the property name. The legacy name-based
+ * heuristic in `applyPropertyToEditor` mis-resolves any asset property whose name lacks the
+ * matching keyword — a `cc.Material` property called `skin` resolved to `cc.SpriteFrame`.
+ *
+ * The generic `asset` and `string` spellings carry no type information, so they deliberately
+ * have NO entry here and keep using the name heuristic (unchanged behaviour for existing callers).
+ */
+export const ASSET_TYPE_BY_PROPERTY_TYPE: Readonly<Record<string, string>> = {
+    material: 'cc.Material',
+    texture: 'cc.Texture2D',
+    spriteFrame: 'cc.SpriteFrame',
+    spriteAtlas: 'cc.SpriteAtlas',
+    prefab: 'cc.Prefab',
+    audioClip: 'cc.AudioClip',
+    font: 'cc.Font',
+    animationClip: 'cc.AnimationClip',
+    mesh: 'cc.Mesh',
+    skeleton: 'cc.Skeleton',
+    physicsMaterial: 'cc.PhysicsMaterial',
+    renderTexture: 'cc.RenderTexture',
+    textAsset: 'cc.TextAsset',
+    jsonAsset: 'cc.JsonAsset',
+    particleAsset: 'cc.ParticleAsset',
+    sceneAsset: 'cc.SceneAsset'
+};
+
 /** Every propertyType convertPropertyValue accepts — used to build an actionable error message. */
 export const SUPPORTED_PROPERTY_TYPES = [
     'string', 'number', 'integer', 'float', 'boolean',
