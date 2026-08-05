@@ -1,6 +1,6 @@
 import { ActionToolResult, successResult, errorResult } from '../types';
 import { BaseActionTool } from './base-action-tool';
-import { analyzeProperty, generateComponentSuggestion, convertPropertyValue, getAvailableComponentsList, redirectNodePropertyAccess, verifyComponentPropertyChange } from './manage-component-property-helpers';
+import { analyzeProperty, generateComponentSuggestion, convertPropertyValue, getAvailableComponentsList, redirectNodePropertyAccess, verifyComponentPropertyChange, SUPPORTED_PROPERTY_TYPES } from './manage-component-property-helpers';
 import { applyPropertyToEditor } from './manage-component-editor-apply';
 import { attachScriptToNode } from './manage-component-script-attach';
 
@@ -31,16 +31,11 @@ export class ManageComponent extends BaseActionTool {
             },
             propertyType: {
                 type: 'string',
-                enum: [
-                    'string', 'number', 'boolean', 'integer', 'float',
-                    'color', 'vec2', 'vec3', 'size',
-                    'node', 'component', 'spriteFrame', 'prefab', 'asset',
-                    'nodeArray', 'colorArray', 'numberArray', 'stringArray'
-                ],
-                description: '[set_property] Property data type for correct value conversion. Must match the actual property type.'
+                enum: [...SUPPORTED_PROPERTY_TYPES],
+                description: '[set_property] Property data type for correct value conversion. Must match the actual property type. Use "asset" as the generic fallback for any Cocos asset-reference property (spriteFrame/material/texture/etc. are also accepted directly and behave identically).'
             },
             value: {
-                description: '[set_property] Property value. Format depends on propertyType: string="text", number=42, boolean=true, color={"r":255,"g":0,"b":0,"a":255} or "#FF0000", vec2={"x":100,"y":50}, vec3={"x":1,"y":2,"z":3}, size={"width":100,"height":50}, node/component/spriteFrame/prefab/asset="uuid-string", nodeArray=["uuid1","uuid2"], colorArray=[{"r":255,...}], numberArray=[1,2,3], stringArray=["a","b"]'
+                description: '[set_property] Property value. Format depends on propertyType: string="text", number=42, boolean=true, color={"r":255,"g":0,"b":0,"a":255} or "#FF0000", vec2={"x":100,"y":50}, vec3={"x":1,"y":2,"z":3}, size={"width":100,"height":50}, node/component/asset (or any specific asset type: spriteFrame/prefab/material/texture/spriteAtlas/audioClip/font/animationClip/mesh/skeleton/physicsMaterial/renderTexture/textAsset/jsonAsset/particleAsset/sceneAsset)="uuid-string", nodeArray=["uuid1","uuid2"], colorArray=[{"r":255,...}], numberArray=[1,2,3], stringArray=["a","b"]'
             },
             properties: {
                 type: 'array',
@@ -54,13 +49,8 @@ export class ManageComponent extends BaseActionTool {
                         },
                         propertyType: {
                             type: 'string',
-                            enum: [
-                                'string', 'number', 'boolean', 'integer', 'float',
-                                'color', 'vec2', 'vec3', 'size',
-                                'node', 'component', 'spriteFrame', 'prefab', 'asset',
-                                'nodeArray', 'colorArray', 'numberArray', 'stringArray'
-                            ],
-                            description: 'Property data type for correct value conversion. Must match the actual property type.'
+                            enum: [...SUPPORTED_PROPERTY_TYPES],
+                            description: 'Property data type for correct value conversion. Must match the actual property type. Use "asset" as the generic fallback for any Cocos asset-reference property (spriteFrame/material/texture/etc. are also accepted directly and behave identically).'
                         },
                         value: {
                             description: 'Property value. Same format rules as set_property value (depends on propertyType).'
