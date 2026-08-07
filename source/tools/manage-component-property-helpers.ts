@@ -5,6 +5,28 @@
 
 import { ActionToolResult, successResult } from '../types';
 
+/**
+ * Return a component dump's property map.
+ *
+ * `scene:query-node` shapes each `__comps__` entry as
+ * `{ __type__, cid, type, enabled, value: { <prop>: { name, value, type } } }` — the live
+ * property values live under `value`. The fallback covers dumps that inline their
+ * properties instead of nesting them.
+ */
+export function extractComponentPropertyDump(component: any): Record<string, any> {
+    if (component?.value && typeof component.value === 'object') return component.value;
+
+    const properties: Record<string, any> = {};
+    if (!component || typeof component !== 'object') return properties;
+    const excludeKeys = ['__type__', 'enabled', 'node', '_id', '__scriptAsset', 'uuid', 'name', '_name', '_objFlags', '_enabled', 'type', 'readonly', 'visible', 'cid', 'editor', 'extends'];
+    for (const key in component) {
+        if (!excludeKeys.includes(key) && !key.startsWith('_')) {
+            properties[key] = component[key];
+        }
+    }
+    return properties;
+}
+
 export interface PropertyAnalysisResult {
     exists: boolean;
     type: string;

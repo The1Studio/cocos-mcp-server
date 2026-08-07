@@ -1,6 +1,6 @@
 import { ActionToolResult, successResult, errorResult } from '../types';
 import { BaseActionTool } from './base-action-tool';
-import { analyzeProperty, generateComponentSuggestion, convertPropertyValue, getAvailableComponentsList, redirectNodePropertyAccess, verifyComponentPropertyChange } from './manage-component-property-helpers';
+import { analyzeProperty, extractComponentPropertyDump, generateComponentSuggestion, convertPropertyValue, getAvailableComponentsList, redirectNodePropertyAccess, verifyComponentPropertyChange } from './manage-component-property-helpers';
 import { applyPropertyToEditor } from './manage-component-editor-apply';
 import { attachScriptToNode } from './manage-component-script-attach';
 
@@ -253,19 +253,7 @@ export class ManageComponent extends BaseActionTool {
     }
 
     private extractComponentProperties(component: any): Record<string, any> {
-        // If the component has a value property, it contains all actual component properties
-        if (component.value && typeof component.value === 'object') {
-            return component.value;
-        }
-        // Fallback: extract properties directly from the component object
-        const properties: Record<string, any> = {};
-        const excludeKeys = ['__type__', 'enabled', 'node', '_id', '__scriptAsset', 'uuid', 'name', '_name', '_objFlags', '_enabled', 'type', 'readonly', 'visible', 'cid', 'editor', 'extends'];
-        for (const key in component) {
-            if (!excludeKeys.includes(key) && !key.startsWith('_')) {
-                properties[key] = component[key];
-            }
-        }
-        return properties;
+        return extractComponentPropertyDump(component);
     }
 
     private async setComponentProperty(args: any): Promise<ActionToolResult> {
