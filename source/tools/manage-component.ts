@@ -6,7 +6,7 @@ import { attachScriptToNode } from './manage-component-script-attach';
 
 export class ManageComponent extends BaseActionTool {
     readonly name = 'manage_component';
-    readonly description = 'Manage components on scene nodes. Actions: add=add component to node, remove=remove component (use cid from get_all), get_all=list all components on node, get_info=get specific component details and properties, set_property=set a single component property value (supports dotted nested CCClass paths like "cameraSection.mainCamera"), set_properties_batch=set many properties on one component in a single call (each field set independently — one bad field does not abort the rest), attach_script=attach a TypeScript/JavaScript script component, get_available=list available component types by category. NOTE: For node basic properties (name, active, layer) use manage_node action=set_property. For transforms (position, rotation, scale) use manage_node action=set_transform.';
+    readonly description = 'Manage components on scene nodes. Actions: add=add component to node, remove=remove component (use the cid or uuid from get_all), get_all=list all components on node, get_info=get specific component details and properties, set_property=set a single component property value (supports dotted nested CCClass paths like "cameraSection.mainCamera"), set_properties_batch=set many properties on one component in a single call (each field set independently — one bad field does not abort the rest), attach_script=attach a TypeScript/JavaScript script component, get_available=list available component types by category. NOTE: For node basic properties (name, active, layer) use manage_node action=set_property. For transforms (position, rotation, scale) use manage_node action=set_transform.';
     readonly actions = ['add', 'remove', 'get_all', 'get_info', 'set_property', 'set_properties_batch', 'attach_script', 'get_available'];
 
     readonly inputSchema = {
@@ -15,7 +15,7 @@ export class ManageComponent extends BaseActionTool {
             action: {
                 type: 'string',
                 enum: ['add', 'remove', 'get_all', 'get_info', 'set_property', 'set_properties_batch', 'attach_script', 'get_available'],
-                description: 'Action to perform: add=add component to node, remove=remove component (use cid from get_all), get_all=list all components, get_info=get component details, set_property=set a single property value (dotted nested paths supported), set_properties_batch=set many properties at once, attach_script=attach a script file, get_available=list available types'
+                description: 'Action to perform: add=add component to node, remove=remove component (use the cid or uuid from get_all), get_all=list all components, get_info=get component details, set_property=set a single property value (dotted nested paths supported), set_properties_batch=set many properties at once, attach_script=attach a script file, get_available=list available types'
             },
             nodeUuid: {
                 type: 'string',
@@ -23,7 +23,7 @@ export class ManageComponent extends BaseActionTool {
             },
             componentType: {
                 type: 'string',
-                description: '[add] Component type to add (e.g., cc.Sprite, cc.Label, cc.Button). [remove] Component cid (the type field from get_all — NOT script name). [get_info, set_property] Component type to target.'
+                description: '[add] Component type to add (e.g., cc.Sprite, cc.Label, cc.Button). [remove] Component cid (the type field from get_all — NOT script name), or the component uuid field from get_all. [get_info, set_property] Component type to target.'
             },
             property: {
                 type: 'string',
@@ -146,30 +146,46 @@ export class ManageComponent extends BaseActionTool {
         if (!nodeUuid || !componentType) {
             return errorResult('nodeUuid and componentType are required for action=remove');
         }
-        // Get all components to verify the cid exists
+        // Get all components so we can resolve componentType to the component's OWN uuid.
         const allComponentsInfo = await this.getComponents(nodeUuid);
         if (!allComponentsInfo.success || !allComponentsInfo.data?.components) {
             return errorResult(`Failed to get components for node '${nodeUuid}': ${allComponentsInfo.error}`);
         }
-        // Match by type field (cid) only
-        const exists = allComponentsInfo.data.components.some((comp: any) => comp.type === componentType);
-        if (!exists) {
-            return errorResult(`Component cid '${componentType}' not found on node '${nodeUuid}'. Use action=get_all to get the type field (cid) for componentType.`);
+        const allComponents: any[] = allComponentsInfo.data.components;
+
+        // Accept either the type field (cid, e.g. "cc.Sprite" or a script cid) — the
+        // ergonomic form — or the component's own uuid, for callers that already have it.
+        const target = allComponents.find((comp: any) => comp.type === componentType)
+            || allComponents.find((comp: any) => comp.uuid && comp.uuid === componentType);
+        if (!target) {
+            const availableTypes = allComponents.map((comp: any) => comp.type).join(', ');
+            return errorResult(`Component '${componentType}' not found on node '${nodeUuid}'. Available components: ${availableTypes}. Use action=get_all to get the type field (cid) or uuid for componentType.`);
         }
+
+        // The editor's 'remove-component' takes the COMPONENT's uuid (RemoveComponentOptions
+        // is { uuid: string } — its `component` field is an unused parameter). Passing the
+        // node uuid here is what made removal silently fail.
+        const componentUuid = target.uuid;
+        if (!componentUuid) {
+            return errorResult(`Could not resolve the component uuid for '${componentType}' on node '${nodeUuid}'. The editor requires the component's own uuid to remove it.`);
+        }
+
         try {
             await Editor.Message.request('scene', 'remove-component', {
-                uuid: nodeUuid,
-                component: componentType
+                uuid: componentUuid
             });
-            // Re-query to confirm removal
+            // Wait for the editor to finish removing the component
+            await new Promise(r => setTimeout(r, 100));
+            // Re-query to confirm removal — match on the resolved component uuid so a node
+            // carrying two components of the same type reports accurately.
             const afterRemoveInfo = await this.getComponents(nodeUuid);
-            const stillExists = afterRemoveInfo.success && afterRemoveInfo.data?.components?.some((comp: any) => comp.type === componentType);
+            const stillExists = afterRemoveInfo.success && afterRemoveInfo.data?.components?.some((comp: any) => comp.uuid === componentUuid);
             if (stillExists) {
-                return errorResult(`Component cid '${componentType}' was not removed from node '${nodeUuid}'.`);
+                return errorResult(`Component '${componentType}' (uuid ${componentUuid}) was not removed from node '${nodeUuid}'.`);
             } else {
                 return successResult(
-                    { nodeUuid, componentType },
-                    `Component cid '${componentType}' removed successfully from node '${nodeUuid}'`
+                    { nodeUuid, componentType, componentUuid },
+                    `Component '${componentType}' (uuid ${componentUuid}) removed successfully from node '${nodeUuid}'`
                 );
             }
         } catch (err: any) {
@@ -184,7 +200,9 @@ export class ManageComponent extends BaseActionTool {
             if (nodeData && nodeData.__comps__) {
                 const components = nodeData.__comps__.map((comp: any) => ({
                     type: comp.__type__ || comp.cid || comp.type || 'Unknown',
-                    uuid: comp.uuid?.value || comp.uuid || null,
+                    // The dump nests the component's own uuid under value.uuid.value; the
+                    // top-level comp.uuid does not exist, so read the dump form first.
+                    uuid: comp.value?.uuid?.value || comp.uuid?.value || comp.uuid || null,
                     enabled: comp.enabled !== undefined ? comp.enabled : true,
                     properties: this.extractComponentProperties(comp)
                 }));
