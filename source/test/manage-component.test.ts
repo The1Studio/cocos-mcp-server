@@ -227,6 +227,93 @@ describe('ManageComponent', () => {
         expect(result.error).toMatch(/not found on node/i);
     });
 
+    // Regression: 'remove' passed the NODE uuid to the editor's remove-component, but
+    // RemoveComponentOptions is { uuid: <COMPONENT uuid> } (its `component` field is an
+    // unused parameter), so the editor rejected every removal. The tool must resolve the
+    // component's own uuid from the dump and send THAT.
+    function makeRemovableDump(remaining?: string[]) {
+        const comps = [
+            { __type__: 'cc.UITransform', enabled: true, value: { uuid: { value: 'comp-uitransform' } } },
+            { __type__: 'cc.MissingScript', enabled: true, value: { uuid: { value: 'comp-missing' } } }
+        ];
+        if (!remaining) return { __comps__: comps };
+        return { __comps__: comps.filter(c => remaining.includes(c.value.uuid.value)) };
+    }
+
+    it('get_all exposes each component own uuid from the dump', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        mockRequest.mockImplementation((_m: string, action: string) => {
+            if (action === 'query-node') return Promise.resolve(makeRemovableDump());
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('get_all', { nodeUuid: NODE_UUID });
+
+        expect(result.success).toBe(true);
+        expect(result.data.components.map((c: any) => c.uuid)).toEqual(['comp-uitransform', 'comp-missing']);
+    });
+
+    it('remove sends the COMPONENT uuid (not the node uuid) to remove-component', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        let removed = false;
+        mockRequest.mockImplementation((_m: string, action: string) => {
+            if (action === 'query-node') return Promise.resolve(removed ? makeRemovableDump(['comp-uitransform']) : makeRemovableDump());
+            if (action === 'remove-component') { removed = true; return Promise.resolve({}); }
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('remove', { nodeUuid: NODE_UUID, componentType: 'cc.MissingScript' });
+
+        expect(result.success).toBe(true);
+        expect(result.data.componentUuid).toBe('comp-missing');
+        const removeCalls = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'remove-component');
+        expect(removeCalls.length).toBe(1);
+        expect(removeCalls[0][2]).toEqual({ uuid: 'comp-missing' });
+    });
+
+    it('remove also accepts a component uuid directly (backward compatible)', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        let removed = false;
+        mockRequest.mockImplementation((_m: string, action: string) => {
+            if (action === 'query-node') return Promise.resolve(removed ? makeRemovableDump(['comp-uitransform']) : makeRemovableDump());
+            if (action === 'remove-component') { removed = true; return Promise.resolve({}); }
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('remove', { nodeUuid: NODE_UUID, componentType: 'comp-missing' });
+
+        expect(result.success).toBe(true);
+        const removeCalls = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'remove-component');
+        expect(removeCalls[0][2]).toEqual({ uuid: 'comp-missing' });
+    });
+
+    it('remove reports failure when the component is still present afterwards', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        mockRequest.mockImplementation((_m: string, action: string) => {
+            if (action === 'query-node') return Promise.resolve(makeRemovableDump());
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('remove', { nodeUuid: NODE_UUID, componentType: 'cc.MissingScript' });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/was not removed/i);
+    });
+
+    it('remove errors with the available list when the component is absent', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        mockRequest.mockImplementation((_m: string, action: string) => {
+            if (action === 'query-node') return Promise.resolve(makeRemovableDump(['comp-uitransform']));
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('remove', { nodeUuid: NODE_UUID, componentType: 'cc.MissingScript' });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/not found on node/i);
+        expect(result.error).toMatch(/cc\.UITransform/);
+    });
+
     it('set_property still supports a dotted nested CCClass path end-to-end', async () => {
         const mockRequest = (global as any).Editor.Message.request as jest.Mock;
         mockRequest.mockImplementation((_module: string, action: string) => {
