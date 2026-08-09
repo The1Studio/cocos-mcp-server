@@ -188,10 +188,65 @@ export function parseColorString(colorStr: string): { r: number; g: number; b: n
 }
 
 /**
+ * Cocos asset-reference property types. Every one of these serializes identically as
+ * `{ uuid }` (issue #26 — propertyType="material" and friends previously fell through to
+ * `Unsupported property type`, even though the existing spriteFrame/prefab/asset coercion
+ * already produces the correct shape for them).
+ */
+export const ASSET_REFERENCE_PROPERTY_TYPES = [
+    'spriteFrame', 'prefab', 'asset',
+    'material', 'texture', 'spriteAtlas', 'audioClip', 'font', 'animationClip',
+    'mesh', 'skeleton', 'physicsMaterial', 'renderTexture', 'textAsset', 'jsonAsset',
+    'particleAsset', 'sceneAsset'
+] as const;
+
+/**
+ * Explicit propertyType -> Cocos asset class for the Editor `set-property` dump `type` field.
+ *
+ * Resolved from the propertyType itself, NOT from the property name. The legacy name-based
+ * heuristic in `applyPropertyToEditor` mis-resolves any asset property whose name lacks the
+ * matching keyword — a `cc.Material` property called `skin` resolved to `cc.SpriteFrame`.
+ *
+ * The generic `asset` and `string` spellings carry no type information, so they deliberately
+ * have NO entry here and keep using the name heuristic (unchanged behaviour for existing callers).
+ */
+export const ASSET_TYPE_BY_PROPERTY_TYPE: Readonly<Record<string, string>> = {
+    material: 'cc.Material',
+    texture: 'cc.Texture2D',
+    spriteFrame: 'cc.SpriteFrame',
+    spriteAtlas: 'cc.SpriteAtlas',
+    prefab: 'cc.Prefab',
+    audioClip: 'cc.AudioClip',
+    font: 'cc.Font',
+    animationClip: 'cc.AnimationClip',
+    mesh: 'cc.Mesh',
+    skeleton: 'cc.Skeleton',
+    physicsMaterial: 'cc.PhysicsMaterial',
+    renderTexture: 'cc.RenderTexture',
+    textAsset: 'cc.TextAsset',
+    jsonAsset: 'cc.JsonAsset',
+    particleAsset: 'cc.ParticleAsset',
+    sceneAsset: 'cc.SceneAsset'
+};
+
+/** Every propertyType convertPropertyValue accepts — used to build an actionable error message. */
+export const SUPPORTED_PROPERTY_TYPES = [
+    'string', 'number', 'integer', 'float', 'boolean',
+    'color', 'vec2', 'vec3', 'size',
+    'node', 'component',
+    ...ASSET_REFERENCE_PROPERTY_TYPES,
+    'nodeArray', 'colorArray', 'numberArray', 'stringArray'
+] as const;
+
+/**
  * Convert a raw LLM-supplied value to the correct format for a given propertyType.
  * Throws if the value format is invalid for the given type.
  */
 export function convertPropertyValue(propertyType: string, value: any): any {
+    if ((ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType)) {
+        if (typeof value === 'string') return { uuid: value };
+        throw new Error(`${propertyType} value must be a string UUID`);
+    }
     switch (propertyType) {
         case 'string':
             return String(value);
@@ -225,9 +280,6 @@ export function convertPropertyValue(propertyType: string, value: any): any {
         case 'component':
             if (typeof value === 'string') return value; // resolved to __id__ later
             throw new Error('Component reference value must be a string (node UUID containing the target component)');
-        case 'spriteFrame': case 'prefab': case 'asset':
-            if (typeof value === 'string') return { uuid: value };
-            throw new Error(`${propertyType} value must be a string UUID`);
         case 'nodeArray':
             if (Array.isArray(value)) return value.map((item: any) => { if (typeof item === 'string') return { uuid: item }; throw new Error('NodeArray items must be string UUIDs'); });
             throw new Error('NodeArray value must be an array');
@@ -246,7 +298,7 @@ export function convertPropertyValue(propertyType: string, value: any): any {
             if (Array.isArray(value)) return value.map((item: any) => String(item));
             throw new Error('StringArray value must be an array');
         default:
-            throw new Error(`Unsupported property type: ${propertyType}`);
+            throw new Error(`Unsupported property type: ${propertyType}. Supported types: ${SUPPORTED_PROPERTY_TYPES.join(', ')}`);
     }
 }
 

@@ -5,6 +5,29 @@
  */
 
 import { ActionToolResult } from '../types';
+import { ASSET_REFERENCE_PROPERTY_TYPES, ASSET_TYPE_BY_PROPERTY_TYPE } from './manage-component-property-helpers';
+
+/** Property-name substrings that mark a bare `string` value as an asset reference. */
+const NAME_HINTED_ASSET_KEYWORDS = ['spriteFrame', 'texture', 'material', 'font', 'clip', 'prefab'];
+
+/**
+ * Resolve the Cocos asset class for the Editor `set-property` dump `type` field.
+ *
+ * An explicit propertyType (`material`, `mesh`, …) wins, because it is authoritative.
+ * Only the generic `asset` / `string` spellings — which carry no type information — fall back
+ * to the property-name heuristic, so existing callers using those keep their exact behaviour.
+ */
+export function resolveAssetType(propertyType: string, property: string): string {
+    const explicit = ASSET_TYPE_BY_PROPERTY_TYPE[propertyType];
+    if (explicit) return explicit;
+
+    const name = property.toLowerCase();
+    if (name.includes('texture')) return 'cc.Texture2D';
+    if (name.includes('material')) return 'cc.Material';
+    if (name.includes('font')) return 'cc.Font';
+    if (name.includes('clip')) return 'cc.AudioClip';
+    return 'cc.SpriteFrame';
+}
 
 export interface ApplyPropertyArgs {
     nodeUuid: string;
@@ -29,15 +52,13 @@ export async function applyPropertyToEditor(
     const { nodeUuid, propertyPath, rawComponentIndex, componentType, property, propertyType, value, processedValue } = args;
     let actualExpectedValue = processedValue;
 
-    if (propertyType === 'asset' || propertyType === 'spriteFrame' || propertyType === 'prefab' ||
-        (propertyType === 'string' && ['spriteFrame', 'texture', 'material', 'font', 'clip', 'prefab'].some(k => property.toLowerCase().includes(k)))) {
+    // EVERY asset-reference propertyType must land here. Falling through to the terminal `else`
+    // sends a dump with no `type` field — the same shape that makes the nodeArray path fail
+    // (issue #18) — so an accepted-but-typeless propertyType would silently not apply.
+    if ((ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType) ||
+        (propertyType === 'string' && NAME_HINTED_ASSET_KEYWORDS.some(k => property.toLowerCase().includes(k)))) {
 
-        let assetType = 'cc.SpriteFrame';
-        if (property.toLowerCase().includes('texture')) assetType = 'cc.Texture2D';
-        else if (property.toLowerCase().includes('material')) assetType = 'cc.Material';
-        else if (property.toLowerCase().includes('font')) assetType = 'cc.Font';
-        else if (property.toLowerCase().includes('clip')) assetType = 'cc.AudioClip';
-        else if (propertyType === 'prefab') assetType = 'cc.Prefab';
+        const assetType = resolveAssetType(propertyType, property);
 
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid, path: propertyPath,
