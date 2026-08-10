@@ -200,9 +200,39 @@ async function applyComponentReference(
         }
     }
 
-    const targetNodeData = await Editor.Message.request('scene', 'query-node', targetNodeUuid);
+    // `query-node` REJECTS on some editor builds and resolves falsy on others; both mean
+    // the same thing here — the value is not a node uuid.
+    let targetNodeData: any = null;
+    try {
+        targetNodeData = await Editor.Message.request('scene', 'query-node', targetNodeUuid);
+    } catch {
+        targetNodeData = null;
+    }
+
     if (!targetNodeData || !targetNodeData.__comps__) {
-        throw new Error(`Target node ${targetNodeUuid} not found or has no components`);
+        // The caller may have passed the COMPONENT's own uuid — the `uuid` field that
+        // manage_component get_all / get_info return, and the obvious thing to reach for
+        // when wiring a @property(SomeComponent) reference. Accept that spelling instead
+        // of reporting a correct uuid as a missing node.
+        const direct = await queryComponentByUuid(targetNodeUuid);
+        if (!direct) {
+            throw new Error(
+                `'${targetNodeUuid}' is neither a node uuid nor a component uuid. ` +
+                `Pass the uuid of the NODE that holds the component, or the component's own ` +
+                `uuid from manage_component action=get_all.`
+            );
+        }
+
+        const directType = expectedComponentType || direct.type;
+        if (!directType) {
+            throw new Error(`Unable to determine required component type for property '${property}' on component '${componentType}'. Property metadata may not contain type information.`);
+        }
+
+        await Editor.Message.request('scene', 'set-property', {
+            uuid: nodeUuid, path: propertyPath,
+            dump: { value: { uuid: direct.uuid }, type: directType }
+        });
+        return { uuid: direct.uuid };
     }
 
     // Single-cc-component fallback: when expectedComponentType could not be inferred
@@ -251,4 +281,25 @@ async function applyComponentReference(
     });
 
     return { uuid: componentId };
+}
+
+/**
+ * Look a uuid up as a COMPONENT rather than a node.
+ *
+ * `query-component` answers for a component's own uuid and returns the same dump shape as
+ * one `__comps__` entry, so `value.uuid.value` and `type` read exactly as they do on the
+ * node path. Returns null for anything that is not a live component — including a uuid
+ * that names nothing at all — so the caller can report both accepted spellings.
+ */
+async function queryComponentByUuid(uuid: string): Promise<{ uuid: string; type: string } | null> {
+    try {
+        const comp: any = await Editor.Message.request('scene', 'query-component', uuid);
+        if (!comp) return null;
+
+        const resolvedUuid = comp.value?.uuid?.value || comp.uuid?.value || comp.uuid || uuid;
+        const type = comp.type || comp.cid || comp.__type__ || '';
+        return { uuid: resolvedUuid, type };
+    } catch {
+        return null;
+    }
 }
