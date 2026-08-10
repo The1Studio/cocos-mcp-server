@@ -335,4 +335,126 @@ describe('ManageComponent', () => {
         const setCalls = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'set-property');
         expect(setCalls.some((c: any[]) => c[2].path === '__comps__.0.cameraSection.fov')).toBe(true);
     });
+
+    /**
+     * action=add on a custom `@ccclass` script.
+     *
+     * The editor's `create-component` accepts the readable class name, but `query-node`
+     * lists the component under its COMPRESSED CID — the first five hex characters of the
+     * script asset uuid plus a base64 tail. Matching the caller's class name against that
+     * cid never succeeds, so a successful add was reported as a failure and the "already
+     * exists" pre-check never fired either. The class name survives in exactly one place
+     * in the dump: `value.name`, formatted `${nodeName}<${className}>`.
+     */
+    describe('add — custom @ccclass scripts listed by cid', () => {
+        const SCRIPT_CLASS = 'HeroDragController';
+        const SCRIPT_CID = '24d05TGdPBKkICc8RTV2vQZ';
+
+        /** A node dump whose only script component is exposed under its cid. */
+        function dumpWithScript() {
+            return {
+                __comps__: [
+                    {
+                        __type__: SCRIPT_CID,
+                        enabled: true,
+                        value: {
+                            uuid: { value: 'script-comp-uuid' },
+                            name: { value: `Gameplay<${SCRIPT_CLASS}>` }
+                        }
+                    }
+                ]
+            };
+        }
+
+        it('reports success when the added script is listed under its cid, not its class name', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            let created = false;
+            mockRequest.mockImplementation((_module: string, action: string) => {
+                if (action === 'create-component') {
+                    created = true;
+                    return Promise.resolve({});
+                }
+                if (action === 'query-node') {
+                    return Promise.resolve(created ? dumpWithScript() : { __comps__: [] });
+                }
+                return Promise.resolve({});
+            });
+
+            const result = await tool.execute('add', { nodeUuid: NODE_UUID, componentType: SCRIPT_CLASS });
+
+            expect(result.success).toBe(true);
+            expect(result.data.componentVerified).toBe(true);
+            expect(result.data.existing).toBe(false);
+        });
+
+        // The caller's next call needs the cid (get_info / set_property / remove all take it),
+        // so returning it here is what stops them going hunting for it.
+        it('returns the resolved cid and the component uuid so the caller can address it', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            let created = false;
+            mockRequest.mockImplementation((_module: string, action: string) => {
+                if (action === 'create-component') {
+                    created = true;
+                    return Promise.resolve({});
+                }
+                if (action === 'query-node') {
+                    return Promise.resolve(created ? dumpWithScript() : { __comps__: [] });
+                }
+                return Promise.resolve({});
+            });
+
+            const result = await tool.execute('add', { nodeUuid: NODE_UUID, componentType: SCRIPT_CLASS });
+
+            expect(result.data.resolvedType).toBe(SCRIPT_CID);
+            expect(result.data.componentUuid).toBe('script-comp-uuid');
+        });
+
+        // The dangerous half of the bug: a caller who reads the false failure and retries
+        // silently ends up with two copies of the component on the node.
+        it('does not add a duplicate when the script is already present under its cid', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockImplementation((_module: string, action: string) => {
+                if (action === 'query-node') return Promise.resolve(dumpWithScript());
+                return Promise.resolve({});
+            });
+
+            const result = await tool.execute('add', { nodeUuid: NODE_UUID, componentType: SCRIPT_CLASS });
+
+            expect(result.success).toBe(true);
+            expect(result.data.existing).toBe(true);
+            const createCalls = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'create-component');
+            expect(createCalls).toHaveLength(0);
+        });
+
+        it('still matches a built-in component by its exact type', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockImplementation((_module: string, action: string) => {
+                if (action === 'query-node') {
+                    return Promise.resolve({
+                        __comps__: [{ __type__: 'cc.Sprite', enabled: true, value: { uuid: { value: 'sprite-uuid' } } }]
+                    });
+                }
+                return Promise.resolve({});
+            });
+
+            const result = await tool.execute('add', { nodeUuid: NODE_UUID, componentType: 'cc.Sprite' });
+
+            expect(result.success).toBe(true);
+            expect(result.data.existing).toBe(true);
+        });
+
+        // A genuinely failed add must stay a failure — the fix must not make `add` optimistic.
+        it('still reports a failure when the component really is absent afterwards', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockImplementation((_module: string, action: string) => {
+                if (action === 'query-node') return Promise.resolve({ __comps__: [] });
+                return Promise.resolve({});
+            });
+
+            const result = await tool.execute('add', { nodeUuid: NODE_UUID, componentType: SCRIPT_CLASS });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/not found on node after addition/i);
+        });
+    });
 });
