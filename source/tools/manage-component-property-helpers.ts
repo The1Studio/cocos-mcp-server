@@ -235,7 +235,7 @@ export const SUPPORTED_PROPERTY_TYPES = [
     'color', 'vec2', 'vec3', 'size',
     'node', 'component',
     ...ASSET_REFERENCE_PROPERTY_TYPES,
-    'nodeArray', 'colorArray', 'numberArray', 'stringArray'
+    'nodeArray', 'colorArray', 'numberArray', 'stringArray', 'componentArray'
 ] as const;
 
 /**
@@ -280,6 +280,12 @@ export function convertPropertyValue(propertyType: string, value: any): any {
         case 'component':
             if (typeof value === 'string') return value; // resolved to __id__ later
             throw new Error('Component reference value must be a string (node UUID containing the target component)');
+        case 'componentArray':
+            if (Array.isArray(value)) return value.map((item: any) => {
+                if (typeof item === 'string') return item; // each resolved to a component __id__ later
+                throw new Error('ComponentArray items must be string node UUIDs (each containing the target component)');
+            });
+            throw new Error('ComponentArray value must be an array');
         case 'nodeArray':
             if (Array.isArray(value)) return value.map((item: any) => { if (typeof item === 'string') return { uuid: item }; throw new Error('NodeArray items must be string UUIDs'); });
             throw new Error('NodeArray value must be an array');
