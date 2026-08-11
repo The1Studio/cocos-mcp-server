@@ -1,4 +1,5 @@
 import { join } from 'path';
+import { findNodeByUuidDeep } from './scene-node-lookup';
 module.paths.push(join(Editor.App.path, 'node_modules'));
 
 export const methods: { [key: string]: (...any: any) => any } = {
@@ -29,7 +30,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             }
 
             // Find node by UUID
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) {
                 return { success: false, error: `Node with UUID ${nodeUuid} not found` };
             }
@@ -69,7 +70,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
                 return { success: false, error: 'No active scene' };
             }
 
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) {
                 return { success: false, error: `Node with UUID ${nodeUuid} not found` };
             }
@@ -107,7 +108,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
                 return { success: false, error: 'No active scene' };
             }
 
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) {
                 return { success: false, error: `Node with UUID ${nodeUuid} not found` };
             }
@@ -143,7 +144,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const node = new Node(name);
             
             if (parentUuid) {
-                const parent = scene.getChildByUuid(parentUuid);
+                const parent = findNodeByUuidDeep(scene, parentUuid);
                 if (parent) {
                     parent.addChild(node);
                 } else {
@@ -174,7 +175,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
                 return { success: false, error: 'No active scene' };
             }
 
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) {
                 return { success: false, error: `Node with UUID ${nodeUuid} not found` };
             }
@@ -297,7 +298,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
                 return { success: false, error: 'No active scene' };
             }
 
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) {
                 return { success: false, error: `Node with UUID ${nodeUuid} not found` };
             }
@@ -385,7 +386,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
                 return { success: false, error: 'No active scene' };
             }
 
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) {
                 return { success: false, error: `Node with UUID ${nodeUuid} not found` };
             }
@@ -415,7 +416,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             if (!scene) {
                 return { success: false, error: 'No active scene' };
             }
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) {
                 return { success: false, error: `Node with UUID ${nodeUuid} not found` };
             }
@@ -525,7 +526,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js, Color } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const className = (methods as any)._getLightClassName(type);
             const LightClass = js.getClassByName(className);
@@ -542,7 +543,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js, Color } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const lightTypes = ['DirectionalLight', 'SphereLight', 'SpotLight'];
             let light: any = null;
@@ -567,7 +568,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const lightTypes = ['DirectionalLight', 'SphereLight', 'SpotLight'];
             for (const t of lightTypes) {
@@ -620,7 +621,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const lightTypes = ['DirectionalLight', 'SphereLight', 'SpotLight'];
             for (const t of lightTypes) {
@@ -640,7 +641,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const CameraClass = js.getClassByName('Camera');
             if (!CameraClass) return { success: false, error: 'Camera class not found' };
@@ -668,7 +669,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js, Rect, Camera } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const CameraClass = js.getClassByName('Camera') || Camera;
             const cam = node.getComponent(CameraClass);
@@ -733,7 +734,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const is2D = (methods as any)._is2DNode(node, js);
             const className = is2D ? 'RigidBody2D' : 'RigidBody';
@@ -758,7 +759,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const is2D = (methods as any)._is2DNode(node, js);
             const classMap3D: Record<string, string> = { box: 'BoxCollider', sphere: 'SphereCollider', capsule: 'CapsuleCollider' };
@@ -783,7 +784,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             if (['__proto__', 'constructor', 'prototype'].includes(property)) {
                 return { success: false, error: `Setting '${property}' is not allowed` };
@@ -803,7 +804,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js, Vec3, Size } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             if (['__proto__', 'constructor', 'prototype'].includes(property)) {
                 return { success: false, error: `Setting '${property}' is not allowed` };
@@ -835,7 +836,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const physicsNames = ['RigidBody', 'RigidBody2D', 'BoxCollider', 'SphereCollider', 'CapsuleCollider', 'BoxCollider2D', 'CircleCollider2D', 'PolygonCollider2D'];
             const removed: string[] = [];
@@ -854,7 +855,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const info: any = { rigidbody: null, colliders: [] };
             for (const rbName of ['RigidBody', 'RigidBody2D']) {
@@ -904,7 +905,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js, assetManager } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const AudioSourceClass = js.getClassByName('AudioSource');
             if (!AudioSourceClass) return { success: false, error: 'AudioSource class not found' };
@@ -923,7 +924,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js, assetManager } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const AudioSourceClass = js.getClassByName('AudioSource');
             if (!AudioSourceClass) return { success: false, error: 'AudioSource class not found' };
@@ -948,7 +949,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const AudioSourceClass = js.getClassByName('AudioSource');
             if (!AudioSourceClass) return { success: false, error: 'AudioSource class not found' };
@@ -971,7 +972,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const AudioSourceClass = js.getClassByName('AudioSource');
             if (!AudioSourceClass) return { success: false, error: 'AudioSource class not found' };
@@ -1015,7 +1016,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const className = is2d ? 'ParticleSystem2D' : 'ParticleSystem';
             const PSClass = js.getClassByName(className);
@@ -1030,7 +1031,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             if (['__proto__', 'constructor', 'prototype'].includes(property)) {
                 return { success: false, error: `Setting '${property}' is not allowed` };
@@ -1050,7 +1051,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const PSClass = js.getClassByName('ParticleSystem');
             if (!PSClass) return { success: false, error: 'ParticleSystem not found (3D only for emission control)' };
@@ -1071,7 +1072,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const PSClass = js.getClassByName('ParticleSystem');
             if (!PSClass) return { success: false, error: 'ParticleSystem not found (3D only for shape)' };
@@ -1092,7 +1093,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js, assetManager } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const PSClass = js.getClassByName('ParticleSystem');
             if (!PSClass) return { success: false, error: 'ParticleSystem not found' };
@@ -1113,7 +1114,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             for (const cls of ['ParticleSystem', 'ParticleSystem2D']) {
                 const PSClass = js.getClassByName(cls);
@@ -1164,7 +1165,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             for (const cls of ['ParticleSystem', 'ParticleSystem2D']) {
                 const PSClass = js.getClassByName(cls);
@@ -1196,7 +1197,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, tween, Vec3 } = cc;
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             let t = tween(node);
             for (const step of steps) {
@@ -1221,7 +1222,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, tween, Vec3 } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const target: Record<string, any> = {};
             if (properties.position) target.position = new Vec3(properties.position.x ?? 0, properties.position.y ?? 0, properties.position.z ?? 0);
@@ -1237,7 +1238,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, tween, Vec3 } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const target: Record<string, any> = {};
             if (properties.position) target.position = new Vec3(properties.position.x ?? 0, properties.position.y ?? 0, properties.position.z ?? 0);
@@ -1253,7 +1254,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, tween } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             tween(node).delay(duration).start();
             return { success: true, data: { nodeUuid, duration } };
@@ -1265,7 +1266,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, Tween } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             if (Tween && typeof Tween.stopAllByTarget === 'function') {
                 Tween.stopAllByTarget(node);
@@ -1281,7 +1282,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const TiledMap = js.getClassByName('TiledMap');
             if (!TiledMap) return { success: false, error: 'TiledMap class not found' };
@@ -1311,7 +1312,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const TiledMap = js.getClassByName('TiledMap');
             if (!TiledMap) return { success: false, error: 'TiledMap class not found' };
@@ -1328,7 +1329,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const TiledMap = js.getClassByName('TiledMap');
             if (!TiledMap) return { success: false, error: 'TiledMap class not found' };
@@ -1346,7 +1347,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const TiledMap = js.getClassByName('TiledMap');
             if (!TiledMap) return { success: false, error: 'TiledMap class not found' };
@@ -1364,7 +1365,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const TiledMap = js.getClassByName('TiledMap');
             if (!TiledMap) return { success: false, error: 'TiledMap class not found' };
@@ -1387,7 +1388,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { sp = require('cc').sp; if (!sp) throw new Error('not found'); } catch { return { success: false, error: 'Spine module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.getComponent(sp.Skeleton);
             if (!comp) return { success: false, error: 'No sp.Skeleton component on node' };
@@ -1405,7 +1406,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { sp = require('cc').sp; if (!sp) throw new Error('not found'); } catch { return { success: false, error: 'Spine module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.getComponent(sp.Skeleton);
             if (!comp) return { success: false, error: 'No sp.Skeleton component on node' };
@@ -1421,7 +1422,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { sp = require('cc').sp; if (!sp) throw new Error('not found'); } catch { return { success: false, error: 'Spine module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.getComponent(sp.Skeleton);
             if (!comp) return { success: false, error: 'No sp.Skeleton component on node' };
@@ -1437,7 +1438,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { sp = require('cc').sp; if (!sp) throw new Error('not found'); } catch { return { success: false, error: 'Spine module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.getComponent(sp.Skeleton);
             if (!comp) return { success: false, error: 'No sp.Skeleton component on node' };
@@ -1468,7 +1469,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { sp = require('cc').sp; if (!sp) throw new Error('not found'); } catch { return { success: false, error: 'Spine module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.addComponent(sp.Skeleton);
             assetManager.loadAny(skeletonDataUuid, (err: any, asset: any) => { if (!err && asset) comp.skeletonData = asset; });
@@ -1485,7 +1486,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { db = require('cc').dragonBones; if (!db) throw new Error('not found'); } catch { return { success: false, error: 'DragonBones module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.getComponent(db.ArmatureDisplay);
             if (!comp) return { success: false, error: 'No ArmatureDisplay component on node' };
@@ -1503,7 +1504,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { db = require('cc').dragonBones; if (!db) throw new Error('not found'); } catch { return { success: false, error: 'DragonBones module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.getComponent(db.ArmatureDisplay);
             if (!comp) return { success: false, error: 'No ArmatureDisplay component on node' };
@@ -1519,7 +1520,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { db = require('cc').dragonBones; if (!db) throw new Error('not found'); } catch { return { success: false, error: 'DragonBones module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.getComponent(db.ArmatureDisplay);
             if (!comp) return { success: false, error: 'No ArmatureDisplay component on node' };
@@ -1535,7 +1536,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { db = require('cc').dragonBones; if (!db) throw new Error('not found'); } catch { return { success: false, error: 'DragonBones module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.getComponent(db.ArmatureDisplay);
             if (!comp) return { success: false, error: 'No ArmatureDisplay component on node' };
@@ -1566,7 +1567,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             try { db = require('cc').dragonBones; if (!db) throw new Error('not found'); } catch { return { success: false, error: 'DragonBones module not available in this project' }; }
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const comp = node.addComponent(db.ArmatureDisplay);
             assetManager.loadAny([dragonBonesAssetUuid, dragonBonesAtlasAssetUuid], (err: any, assets: any[]) => {
@@ -1583,7 +1584,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const Terrain = js.getClassByName('Terrain');
             if (!Terrain) return { success: false, error: 'Terrain class not found — 3D only' };
@@ -1599,7 +1600,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const Terrain = js.getClassByName('Terrain');
             if (!Terrain) return { success: false, error: 'Terrain class not found — 3D only' };
@@ -1617,7 +1618,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const Terrain = js.getClassByName('Terrain');
             if (!Terrain) return { success: false, error: 'Terrain class not found — 3D only' };
@@ -1634,7 +1635,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js, assetManager } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const Terrain = js.getClassByName('Terrain');
             if (!Terrain) return { success: false, error: 'Terrain class not found — 3D only' };
@@ -1654,7 +1655,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const Terrain = js.getClassByName('Terrain');
             if (!Terrain) return { success: false, error: 'Terrain class not found — 3D only' };
@@ -1670,7 +1671,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const Terrain = js.getClassByName('Terrain');
             if (!Terrain) return { success: false, error: 'Terrain class not found — 3D only' };
@@ -1794,7 +1795,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const MeshRenderer = js.getClassByName('MeshRenderer');
             if (!MeshRenderer) return { success: false, error: 'MeshRenderer not available — 3D only' };
@@ -1818,7 +1819,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const MeshRenderer = js.getClassByName('MeshRenderer');
             if (!MeshRenderer) return { success: false, error: 'MeshRenderer not available — 3D only' };
@@ -1916,7 +1917,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const VideoPlayer = js.getClassByName('VideoPlayer');
             if (!VideoPlayer) return { success: false, error: 'VideoPlayer component not available' };
@@ -1931,7 +1932,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const VideoPlayer = js.getClassByName('VideoPlayer');
             if (!VideoPlayer) return { success: false, error: 'VideoPlayer not available' };
@@ -1949,7 +1950,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const VideoPlayer = js.getClassByName('VideoPlayer');
             if (!VideoPlayer) return { success: false, error: 'VideoPlayer not available' };
@@ -1971,7 +1972,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const { director, js } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
-            const node = scene.getChildByUuid(nodeUuid);
+            const node = findNodeByUuidDeep(scene, nodeUuid);
             if (!node) return { success: false, error: `Node ${nodeUuid} not found` };
             const VideoPlayer = js.getClassByName('VideoPlayer');
             if (!VideoPlayer) return { success: false, error: 'VideoPlayer not available' };
@@ -2047,5 +2048,22 @@ export const methods: { [key: string]: (...any: any) => any } = {
             }
             return { success: true, data: { enabled, interval } };
         } catch (error: any) { return { success: false, error: error.message }; }
+    },
+
+    /**
+     * Evaluate arbitrary JavaScript in the scene context and return its result.
+     * Dangerous-pattern denylisting (require('child_process'), process.exit, eval(,
+     * Function() happens client-side in ManageDebug.validateScript before this is
+     * ever invoked — this method only runs already-approved scripts.
+     */
+    eval(code: string) {
+        try {
+            // eslint-disable-next-line no-new-func
+            const fn = new Function(code);
+            const result = fn();
+            return { success: true, data: { result } };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
     },
 };
