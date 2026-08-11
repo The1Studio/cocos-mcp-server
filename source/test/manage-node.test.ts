@@ -106,4 +106,52 @@ describe('ManageNode', () => {
             expect(createNodeCall?.[2]).not.toHaveProperty('assetUuid');
         });
     });
+
+    // Regression: issue #33 — `move` awaited `set-parent` and reported success
+    // unconditionally, with no read-back confirming the reparent actually took effect
+    // (e.g. blocked by a prefab-instance root constraint).
+    describe('move action (read-back verification, issue #33)', () => {
+        function mockGetNodeInfo(mockRequest: jest.Mock, parentUuid: string | null) {
+            mockRequest.mockResolvedValueOnce({
+                uuid: { value: 'node-1' },
+                name: { value: 'Node' },
+                parent: parentUuid ? { value: { uuid: parentUuid } } : undefined,
+            });
+        }
+
+        it('reports success and returns the verified parent when the reparent took effect', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce({}); // set-parent
+            mockGetNodeInfo(mockRequest, 'new-parent-1'); // getNodeInfo read-back
+
+            const result = await tool.execute('move', { nodeUuid: 'node-1', newParentUuid: 'new-parent-1' });
+
+            expect(result.success).toBe(true);
+            expect(result.data.nodeUuid).toBe('node-1');
+            expect(result.data.newParentUuid).toBe('new-parent-1');
+        });
+
+        it('reports failure when the read-back parent does not match the requested parent', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce({}); // set-parent (resolves but did not actually move)
+            mockGetNodeInfo(mockRequest, 'old-parent-1'); // getNodeInfo read-back still shows old parent
+
+            const result = await tool.execute('move', { nodeUuid: 'node-1', newParentUuid: 'new-parent-1' });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/did not take effect/i);
+        });
+
+        it('reports failure when the read-back itself fails', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce({}) // set-parent
+                .mockResolvedValueOnce(null); // query-node fails to find the node
+
+            const result = await tool.execute('move', { nodeUuid: 'node-1', newParentUuid: 'new-parent-1' });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/could not be verified/i);
+        });
+    });
 });
