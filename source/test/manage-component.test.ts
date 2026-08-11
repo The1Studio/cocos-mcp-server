@@ -37,6 +37,44 @@ describe('ManageComponent', () => {
         };
     }
 
+    /**
+     * A `query-node` mock that mutates a cloned dump in place when `set-property` is
+     * called, so the tool's post-write verification re-read (issue #34 — `set_property`
+     * previously reported success without checking the write actually persisted)
+     * reflects the write instead of always reading back the pre-write value.
+     *
+     * `path` is of the form `__comps__.<index>.<segment>[.<segment>...]`. Flat fields
+     * store their value directly (`{ name, value, type }`); nested CCClass groups nest
+     * one level deeper under `.value` (see `makeNodeDump()`'s `cameraSection`).
+     */
+    function statefulComponentMock(mockRequest: jest.Mock, initialDump: any, extra?: (action: string, payload: any) => any) {
+        const dump = JSON.parse(JSON.stringify(initialDump));
+        mockRequest.mockImplementation((_module: string, action: string, payload: any) => {
+            if (action === 'query-node') return Promise.resolve(dump);
+            if (action === 'set-property') {
+                const segments: string[] = payload.path.split('.');
+                const compIndex = Number(segments[1]);
+                let cursor: any = dump.__comps__[compIndex].value;
+                for (let i = 2; i < segments.length; i++) {
+                    const isLeaf = i === segments.length - 1;
+                    const seg = segments[i];
+                    if (isLeaf) {
+                        cursor[seg].value = payload.dump.value;
+                    } else {
+                        cursor = cursor[seg].value;
+                    }
+                }
+                return Promise.resolve({});
+            }
+            if (extra) {
+                const result = extra(action, payload);
+                if (result !== undefined) return Promise.resolve(result);
+            }
+            return Promise.resolve({});
+        });
+        return dump;
+    }
+
     beforeEach(() => {
         tool = new ManageComponent();
         jest.clearAllMocks();
@@ -72,12 +110,8 @@ describe('ManageComponent', () => {
 
     it('set_properties_batch sets multiple fields in one call and reports per-field success', async () => {
         const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-        // Every query-node returns the same dump; set-property resolves; verification re-reads dump.
-        mockRequest.mockImplementation((_module: string, action: string) => {
-            if (action === 'query-node') return Promise.resolve(makeNodeDump());
-            if (action === 'set-property') return Promise.resolve({});
-            return Promise.resolve({});
-        });
+        // query-node reflects each set-property write, so post-write verification passes.
+        statefulComponentMock(mockRequest, makeNodeDump());
 
         const result = await tool.execute('set_properties_batch', {
             nodeUuid: NODE_UUID,
@@ -102,11 +136,7 @@ describe('ManageComponent', () => {
 
     it('set_properties_batch does not abort on a single bad field', async () => {
         const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-        mockRequest.mockImplementation((_module: string, action: string) => {
-            if (action === 'query-node') return Promise.resolve(makeNodeDump());
-            if (action === 'set-property') return Promise.resolve({});
-            return Promise.resolve({});
-        });
+        statefulComponentMock(mockRequest, makeNodeDump());
 
         const result = await tool.execute('set_properties_batch', {
             nodeUuid: NODE_UUID,
@@ -160,10 +190,7 @@ describe('ManageComponent', () => {
                 }
             ]
         };
-        mockRequest.mockImplementation((_m: string, action: string) => {
-            if (action === 'query-node') return Promise.resolve(dump);
-            return Promise.resolve({});
-        });
+        statefulComponentMock(mockRequest, dump);
 
         const result = await tool.execute('set_property', {
             nodeUuid: NODE_UUID, componentType: 'cc.BoxCollider',
@@ -189,12 +216,11 @@ describe('ManageComponent', () => {
                 }
             ]
         };
-        mockRequest.mockImplementation((_m: string, action: string, payload: any) => {
-            if (action === 'query-node') return Promise.resolve(dump);
+        statefulComponentMock(mockRequest, dump, (action, payload) => {
             if (action === 'execute-scene-script' && payload?.method === 'resolveComponentByName') {
-                return Promise.resolve({ success: true, data: { index: 0, className: 'Match3BoardController' } });
+                return { success: true, data: { index: 0, className: 'Match3BoardController' } };
             }
-            return Promise.resolve({});
+            return undefined;
         });
 
         const result = await tool.execute('set_property', {
@@ -316,11 +342,7 @@ describe('ManageComponent', () => {
 
     it('set_property still supports a dotted nested CCClass path end-to-end', async () => {
         const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-        mockRequest.mockImplementation((_module: string, action: string) => {
-            if (action === 'query-node') return Promise.resolve(makeNodeDump());
-            if (action === 'set-property') return Promise.resolve({});
-            return Promise.resolve({});
-        });
+        statefulComponentMock(mockRequest, makeNodeDump());
 
         const result = await tool.execute('set_property', {
             nodeUuid: NODE_UUID,
@@ -334,5 +356,31 @@ describe('ManageComponent', () => {
         expect(result.data.property).toBe('cameraSection.fov');
         const setCalls = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'set-property');
         expect(setCalls.some((c: any[]) => c[2].path === '__comps__.0.cameraSection.fov')).toBe(true);
+    });
+
+    // Regression: issue #34 — applySingleProperty returned `{ success: true }` unconditionally,
+    // discarding the verification.verified read-back it had just computed. A write that the
+    // editor silently did not persist (e.g. a resolved `set-property` promise on a readonly-in-
+    // this-context field) was reported as a success.
+    it('set_property reports failure when the write does not verify', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        // query-node ALWAYS returns the original dump — simulates a set-property call that
+        // resolves but never actually persists on the editor side.
+        mockRequest.mockImplementation((_module: string, action: string) => {
+            if (action === 'query-node') return Promise.resolve(makeNodeDump());
+            if (action === 'set-property') return Promise.resolve({});
+            return Promise.resolve({});
+        });
+
+        const result = await tool.execute('set_property', {
+            nodeUuid: NODE_UUID,
+            componentType: COMP_TYPE,
+            property: 'title',
+            propertyType: 'string',
+            value: 'New Title'
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/did not verify/i);
     });
 });
