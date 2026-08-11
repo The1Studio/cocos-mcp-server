@@ -7,10 +7,10 @@ import { BaseActionTool } from './base-action-tool';
  */
 export class ManageProject extends BaseActionTool {
     readonly name = 'manage_project';
-    readonly description = 'Manage project build, run, preview, and settings. Actions: run, build, get_info, get_settings, get_build_settings, open_build_panel, check_builder_status, start_preview, stop_preview. For asset operations use manage_asset instead.';
+    readonly description = 'Manage project build, run, preview, and settings. Actions: run, build, get_info, get_settings, get_build_settings, open_build_panel, check_builder_status. For asset operations use manage_asset instead.';
     readonly actions = [
         'run', 'build', 'get_info', 'get_settings', 'get_build_settings',
-        'open_build_panel', 'check_builder_status', 'start_preview', 'stop_preview'
+        'open_build_panel', 'check_builder_status'
     ];
 
     readonly inputSchema = {
@@ -36,11 +36,6 @@ export class ManageProject extends BaseActionTool {
                 description: 'Settings category for get_settings',
                 enum: ['general', 'physics', 'render', 'assets'],
                 default: 'general'
-            },
-            port: {
-                type: 'number',
-                description: 'Preview server port (for start_preview)',
-                default: 7456
             }
         },
         required: ['action']
@@ -53,11 +48,7 @@ export class ManageProject extends BaseActionTool {
         get_settings: (args) => this.getProjectSettings(args.type),
         get_build_settings: (_args) => this.getBuildSettings(),
         open_build_panel: (_args) => this.openBuildPanel(),
-        check_builder_status: (_args) => this.checkBuilderStatus(),
-        start_preview: (args) => this.startPreviewServer(
-            args.port !== undefined ? parseInt(String(args.port), 10) : 7456
-        ),
-        stop_preview: (_args) => this.stopPreviewServer()
+        check_builder_status: (_args) => this.checkBuilderStatus()
     };
 
     private async runProject(platform: string = 'browser'): Promise<ActionToolResult> {
@@ -123,9 +114,7 @@ export class ManageProject extends BaseActionTool {
                 builderReady: ready,
                 availableActions: [
                     'Open build panel with open_build_panel',
-                    'Check builder status with check_builder_status',
-                    'Start preview server with start_preview',
-                    'Stop preview server with stop_preview'
+                    'Check builder status with check_builder_status'
                 ],
                 limitation: 'Full build configuration requires direct Editor UI access'
             }, 'Build settings are limited in MCP plugin environment');
@@ -155,25 +144,4 @@ export class ManageProject extends BaseActionTool {
         }
     }
 
-    private async startPreviewServer(_port: number = 7456): Promise<ActionToolResult> {
-        return {
-            success: false,
-            error: 'Preview server control is not supported through MCP API',
-            isError: true,
-            data: {
-                instruction: 'Please start the preview server manually using the editor menu: Project > Preview, or use the preview panel in the editor'
-            }
-        };
-    }
-
-    private async stopPreviewServer(): Promise<ActionToolResult> {
-        return {
-            success: false,
-            error: 'Preview server control is not supported through MCP API',
-            isError: true,
-            data: {
-                instruction: 'Please stop the preview server manually using the preview panel in the editor'
-            }
-        };
-    }
 }
