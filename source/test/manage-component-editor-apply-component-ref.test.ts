@@ -143,6 +143,35 @@ describe('applyPropertyToEditor — component references', () => {
         expect(setPropertyPayload().dump.type).toBe(EXPECTED_TYPE);
     });
 
+    // Regression: the node path below only ever links a component whose type EXACTLY
+    // matches the declared property type — its search loop rejects anything else. The
+    // direct component-uuid path computed `expectedComponentType || direct.type`, which
+    // only falls back to direct.type when expectedComponentType is empty; it never
+    // compared the two when expectedComponentType WAS known, so a wrong-typed component
+    // (e.g. a cc.Sprite's own uuid handed to a property typed HeroDragController) linked
+    // unrejected.
+    it('rejects a component uuid whose type does not match the declared property type', async () => {
+        requestMock.mockImplementation((_m: string, action: string, arg: any) => {
+            if (action === 'query-node') return Promise.resolve(undefined);
+            if (action === 'query-component' && arg === TARGET_COMPONENT_UUID) {
+                return Promise.resolve({
+                    type: 'cc.Sprite',
+                    value: { uuid: { value: TARGET_COMPONENT_UUID } }
+                });
+            }
+            return Promise.resolve(undefined);
+        });
+
+        await expect(
+            applyPropertyToEditor(
+                { ...baseArgs, value: TARGET_COMPONENT_UUID, processedValue: TARGET_COMPONENT_UUID },
+                getComponentInfo
+            )
+        ).rejects.toThrow(/is a 'cc\.Sprite', but property 'heroDrag'.*requires a 'HeroDragController'/);
+
+        expect(requestMock.mock.calls.filter((c: any[]) => c[1] === 'set-property')).toHaveLength(0);
+    });
+
     // A genuinely bad uuid must still fail — and say which two spellings are valid.
     it('reports both accepted spellings when the uuid is neither', async () => {
         requestMock.mockImplementation(() => Promise.resolve(undefined));
