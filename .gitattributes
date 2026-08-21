@@ -1,0 +1,16 @@
+# Normalize all text files to LF in the repository.
+# Without this, a Windows contributor's checkout re-commits CRLF and every
+# rebuilt dist/ file churns on the next cross-OS build (see issue #19).
+* text=auto eol=lf
+
+# Binary assets — never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+
+# dist/ is generated. Keep it out of diffs/merge conflicts; rebuild with
+# `npm run build` rather than hand-resolving.
+dist/** -diff
