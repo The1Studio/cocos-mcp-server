@@ -428,8 +428,32 @@ export async function verifyComponentPropertyChange(
                 actualValue = propertyData.value;
             }
 
+            // Extracts a reference's uuid regardless of whether the editor's dump wraps it
+            // as a plain string ({ uuid: 'x' }) or as a nested leaf descriptor
+            // ({ uuid: { value: 'x' } }) — the same ambiguity the single-reference branch
+            // below already tolerates.
+            const extractUuid = (ref: any): string => {
+                if (!ref || typeof ref !== 'object' || !('uuid' in ref)) return '';
+                const raw = ref.uuid;
+                if (raw && typeof raw === 'object' && 'value' in raw) return raw.value || '';
+                return raw || '';
+            };
+
             let verified = false;
-            if (typeof expectedValue === 'object' && expectedValue !== null && 'uuid' in expectedValue) {
+            if (Array.isArray(expectedValue)) {
+                // nodeArray / componentArray: every element is itself a { uuid } reference.
+                // Compare by per-element uuid (order-preserving), never by deep-equaling the
+                // whole array — the editor's read-back dump may carry extra per-element
+                // metadata (e.g. an internal object id) that a plain component/node reference
+                // write never included, which would fail a JSON.stringify comparison even
+                // though every reference resolved correctly.
+                const actualArr = Array.isArray(actualValue) ? actualValue : [];
+                verified = actualArr.length === expectedValue.length &&
+                    expectedValue.every((exp: any, idx: number) => {
+                        const expUuid = extractUuid(exp);
+                        return expUuid !== '' && expUuid === extractUuid(actualArr[idx]);
+                    });
+            } else if (typeof expectedValue === 'object' && expectedValue !== null && 'uuid' in expectedValue) {
                 const actualUuid = actualValue && typeof actualValue === 'object' && 'uuid' in actualValue ? actualValue.uuid : '';
                 const expectedUuid = expectedValue.uuid || '';
                 verified = actualUuid === expectedUuid && expectedUuid !== '';

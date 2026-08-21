@@ -383,4 +383,85 @@ describe('ManageComponent', () => {
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/did not verify/i);
     });
+
+    // Regression: verifyComponentPropertyChange's array branch used to deep-equal the
+    // WHOLE array (JSON.stringify(actual) === JSON.stringify(expected)). applyComponentReferenceArray
+    // resolves componentArray writes to a FLAT `{ uuid: 'x' }` per element, but the editor's
+    // own dump convention wraps reference uuids as a nested leaf descriptor
+    // (`{ uuid: { value: 'x' } }` — see getComponents()'s own `comp.value?.uuid?.value` unwrap
+    // a few lines above in the same file). A correct write therefore read back with a
+    // structurally different — but semantically identical — shape, and the deep-equal
+    // reported every componentArray write as unverified. This test pins the fix: compare
+    // arrays by per-element uuid, not by exact deep equality.
+    describe('set_property — componentArray verification (array read-back may nest uuids)', () => {
+        const CTRL_NODE = 'ctrl-node';
+        const CTRL_TYPE = 'WaypointController';
+
+        function ctrlDump(waypoints: any[]) {
+            return {
+                __comps__: [
+                    {
+                        __type__: CTRL_TYPE,
+                        type: CTRL_TYPE,
+                        enabled: true,
+                        value: {
+                            uuid: { value: 'ctrl-uuid' },
+                            waypoints: { name: 'waypoints', type: 'WaypointMarker', isArray: true, value: waypoints }
+                        }
+                    }
+                ]
+            };
+        }
+
+        function targetDump(compUuid: string) {
+            return { __comps__: [{ type: 'WaypointMarker', value: { uuid: { value: compUuid } } }] };
+        }
+
+        it('reports success when the read-back wraps each element uuid as { value }', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            // The host node always reads back as already-resolved, with each element's uuid
+            // nested per the editor's real dump convention — never the flat shape that was written.
+            const resolved = ctrlDump([{ uuid: { value: 'comp-id-1' } }, { uuid: { value: 'comp-id-2' } }]);
+            mockRequest.mockImplementation((_m: string, action: string, payload: any) => {
+                if (action === 'query-node' && payload === 'target-node-1') return Promise.resolve(targetDump('comp-id-1'));
+                if (action === 'query-node' && payload === 'target-node-2') return Promise.resolve(targetDump('comp-id-2'));
+                if (action === 'query-node' && payload === CTRL_NODE) return Promise.resolve(resolved);
+                return Promise.resolve({});
+            });
+
+            const result = await tool.execute('set_property', {
+                nodeUuid: CTRL_NODE,
+                componentType: CTRL_TYPE,
+                property: 'waypoints',
+                propertyType: 'componentArray',
+                value: ['target-node-1', 'target-node-2']
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.data.changeVerified).toBe(true);
+        });
+
+        it('still reports failure when an element genuinely does not match', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            // Read-back shows only ONE element resolved — the second write did not take.
+            const partiallyResolved = ctrlDump([{ uuid: { value: 'comp-id-1' } }, { uuid: { value: 'stale-id' } }]);
+            mockRequest.mockImplementation((_m: string, action: string, payload: any) => {
+                if (action === 'query-node' && payload === 'target-node-1') return Promise.resolve(targetDump('comp-id-1'));
+                if (action === 'query-node' && payload === 'target-node-2') return Promise.resolve(targetDump('comp-id-2'));
+                if (action === 'query-node' && payload === CTRL_NODE) return Promise.resolve(partiallyResolved);
+                return Promise.resolve({});
+            });
+
+            const result = await tool.execute('set_property', {
+                nodeUuid: CTRL_NODE,
+                componentType: CTRL_TYPE,
+                property: 'waypoints',
+                propertyType: 'componentArray',
+                value: ['target-node-1', 'target-node-2']
+            });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/did not verify/i);
+        });
+    });
 });
