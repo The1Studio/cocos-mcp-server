@@ -1,4 +1,4 @@
-import { convertPropertyValue, ASSET_REFERENCE_PROPERTY_TYPES } from '../tools/manage-component-property-helpers';
+import { convertPropertyValue, ASSET_REFERENCE_PROPERTY_TYPES, SUPPORTED_PROPERTY_TYPES } from '../tools/manage-component-property-helpers';
 
 /**
  * Tests for convertPropertyValue's asset-reference coercion (issue #26).
@@ -48,5 +48,31 @@ describe('convertPropertyValue — asset-reference propertyTypes', () => {
             expect(error.message).toContain('material');
             expect(error.message).toContain('string');
         }
+    });
+});
+
+// Regression: issue #18 — there was no way to set an array of component references
+// (only a single one via propertyType "component"). convertPropertyValue's half of
+// the fix mirrors "component": each item stays a plain node-UUID string, resolved to
+// a component id later by applyPropertyToEditor / applyComponentReferenceArray.
+describe('convertPropertyValue — componentArray propertyType (issue #18)', () => {
+    it('keeps each item as a string node UUID', () => {
+        expect(convertPropertyValue('componentArray', ['node-a', 'node-b'])).toEqual(['node-a', 'node-b']);
+    });
+
+    it('accepts an empty array', () => {
+        expect(convertPropertyValue('componentArray', [])).toEqual([]);
+    });
+
+    it('throws when an item is not a string', () => {
+        expect(() => convertPropertyValue('componentArray', [123])).toThrow(/must be string node UUIDs/);
+    });
+
+    it('throws when the value itself is not an array', () => {
+        expect(() => convertPropertyValue('componentArray', 'not-an-array')).toThrow(/must be an array/);
+    });
+
+    it('is included in SUPPORTED_PROPERTY_TYPES', () => {
+        expect(SUPPORTED_PROPERTY_TYPES).toContain('componentArray');
     });
 });

@@ -125,9 +125,20 @@ export async function applyPropertyToEditor(
         );
 
     } else if (propertyType === 'nodeArray' && Array.isArray(processedValue)) {
+        // Without an explicit type/isArray/elementTypeData, the editor's set-property
+        // dump has no way to know this is an array of cc.Node references — it falls
+        // through as a bare value and silently does not apply (issue #18), the same
+        // failure mode as the asset-reference types before they gained an explicit
+        // `type` field (see the asset-reference branch above).
         await Editor.Message.request('scene', 'set-property', {
-            uuid: nodeUuid, path: propertyPath, dump: { value: processedValue }
+            uuid: nodeUuid, path: propertyPath,
+            dump: { value: processedValue, type: 'cc.Node', isArray: true, elementTypeData: { value: null, type: 'cc.Node' } }
         });
+
+    } else if (propertyType === 'componentArray' && Array.isArray(processedValue)) {
+        actualExpectedValue = await applyComponentReferenceArray(
+            nodeUuid, propertyPath, componentType, property, processedValue, getComponentInfo
+        );
 
     } else if (propertyType === 'colorArray' && Array.isArray(processedValue)) {
         const colorArrayValue = processedValue.map((item: any) => {
@@ -154,15 +165,20 @@ export async function applyPropertyToEditor(
     return actualExpectedValue;
 }
 
-/** Resolve a component reference UUID to scene __id__ and call set-property. Returns { uuid } object. */
-async function applyComponentReference(
+/**
+ * Resolve a target node's component reference to its scene component id, WITHOUT
+ * performing the `set-property` write. Shared by the single-`component` propertyType
+ * (which writes one `{ uuid }` value) and the `componentArray` propertyType (which
+ * writes a whole array in one set-property call, so per-element writes must not happen
+ * here — issue #18).
+ */
+async function resolveComponentReference(
     nodeUuid: string,
-    propertyPath: string,
     componentType: string,
     property: string,
     targetNodeUuid: string,
     getComponentInfo: (nodeUuid: string, componentType: string) => Promise<ActionToolResult>
-): Promise<any> {
+): Promise<{ componentId: string; expectedComponentType: string }> {
     console.log(`[ManageComponent] Setting component reference - finding component on node: ${targetNodeUuid}`);
 
     let expectedComponentType = '';
@@ -245,10 +261,75 @@ async function applyComponentReference(
         throw new Error(`Component type '${expectedComponentType}' not found on node ${targetNodeUuid}. Available components: ${available.join(', ')}`);
     }
 
+    if (!componentId) {
+        throw new Error(`Unable to extract component ID from component structure`);
+    }
+
+    return { componentId, expectedComponentType };
+}
+
+/** Resolve a component reference and write it as a single `{ uuid }` value. */
+async function applyComponentReference(
+    nodeUuid: string,
+    propertyPath: string,
+    componentType: string,
+    property: string,
+    targetNodeUuid: string,
+    getComponentInfo: (nodeUuid: string, componentType: string) => Promise<ActionToolResult>
+): Promise<any> {
+    const { componentId, expectedComponentType } = await resolveComponentReference(
+        nodeUuid, componentType, property, targetNodeUuid, getComponentInfo
+    );
+
     await Editor.Message.request('scene', 'set-property', {
         uuid: nodeUuid, path: propertyPath,
         dump: { value: { uuid: componentId }, type: expectedComponentType }
     });
 
     return { uuid: componentId };
+}
+
+/**
+ * Resolve an array of target-node UUIDs to their component references and write the
+ * whole array in ONE set-property call (matching the nodeArray fix above — an array
+ * property needs `isArray`/`elementTypeData` in the dump, not N separate scalar writes).
+ * An empty input array is guarded explicitly: there is no element to resolve a
+ * component type from, so it is written as an empty array with a generic element type
+ * rather than indexing into an array that has no `[0]`.
+ */
+async function applyComponentReferenceArray(
+    nodeUuid: string,
+    propertyPath: string,
+    componentType: string,
+    property: string,
+    targetNodeUuids: any[],
+    getComponentInfo: (nodeUuid: string, componentType: string) => Promise<ActionToolResult>
+): Promise<any> {
+    if (targetNodeUuids.length === 0) {
+        await Editor.Message.request('scene', 'set-property', {
+            uuid: nodeUuid, path: propertyPath,
+            dump: { value: [], isArray: true, elementTypeData: { value: null, type: 'cc.Component' } }
+        });
+        return [];
+    }
+
+    const resolvedRefs: Array<{ uuid: string }> = [];
+    let elementType = '';
+    for (const targetNodeUuid of targetNodeUuids) {
+        if (typeof targetNodeUuid !== 'string') {
+            throw new Error('componentArray items must be string node UUIDs (each containing the target component)');
+        }
+        const { componentId, expectedComponentType } = await resolveComponentReference(
+            nodeUuid, componentType, property, targetNodeUuid, getComponentInfo
+        );
+        resolvedRefs.push({ uuid: componentId });
+        elementType = elementType || expectedComponentType;
+    }
+
+    await Editor.Message.request('scene', 'set-property', {
+        uuid: nodeUuid, path: propertyPath,
+        dump: { value: resolvedRefs, isArray: true, elementTypeData: { value: null, type: elementType } }
+    });
+
+    return resolvedRefs;
 }

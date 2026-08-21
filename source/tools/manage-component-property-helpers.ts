@@ -235,7 +235,7 @@ export const SUPPORTED_PROPERTY_TYPES = [
     'color', 'vec2', 'vec3', 'size',
     'node', 'component',
     ...ASSET_REFERENCE_PROPERTY_TYPES,
-    'nodeArray', 'colorArray', 'numberArray', 'stringArray'
+    'nodeArray', 'colorArray', 'numberArray', 'stringArray', 'componentArray'
 ] as const;
 
 /**
@@ -280,6 +280,12 @@ export function convertPropertyValue(propertyType: string, value: any): any {
         case 'component':
             if (typeof value === 'string') return value; // resolved to __id__ later
             throw new Error('Component reference value must be a string (node UUID containing the target component)');
+        case 'componentArray':
+            if (Array.isArray(value)) return value.map((item: any) => {
+                if (typeof item === 'string') return item; // each resolved to a component __id__ later
+                throw new Error('ComponentArray items must be string node UUIDs (each containing the target component)');
+            });
+            throw new Error('ComponentArray value must be an array');
         case 'nodeArray':
             if (Array.isArray(value)) return value.map((item: any) => { if (typeof item === 'string') return { uuid: item }; throw new Error('NodeArray items must be string UUIDs'); });
             throw new Error('NodeArray value must be an array');
@@ -422,8 +428,32 @@ export async function verifyComponentPropertyChange(
                 actualValue = propertyData.value;
             }
 
+            // Extracts a reference's uuid regardless of whether the editor's dump wraps it
+            // as a plain string ({ uuid: 'x' }) or as a nested leaf descriptor
+            // ({ uuid: { value: 'x' } }) — the same ambiguity the single-reference branch
+            // below already tolerates.
+            const extractUuid = (ref: any): string => {
+                if (!ref || typeof ref !== 'object' || !('uuid' in ref)) return '';
+                const raw = ref.uuid;
+                if (raw && typeof raw === 'object' && 'value' in raw) return raw.value || '';
+                return raw || '';
+            };
+
             let verified = false;
-            if (typeof expectedValue === 'object' && expectedValue !== null && 'uuid' in expectedValue) {
+            if (Array.isArray(expectedValue)) {
+                // nodeArray / componentArray: every element is itself a { uuid } reference.
+                // Compare by per-element uuid (order-preserving), never by deep-equaling the
+                // whole array — the editor's read-back dump may carry extra per-element
+                // metadata (e.g. an internal object id) that a plain component/node reference
+                // write never included, which would fail a JSON.stringify comparison even
+                // though every reference resolved correctly.
+                const actualArr = Array.isArray(actualValue) ? actualValue : [];
+                verified = actualArr.length === expectedValue.length &&
+                    expectedValue.every((exp: any, idx: number) => {
+                        const expUuid = extractUuid(exp);
+                        return expUuid !== '' && expUuid === extractUuid(actualArr[idx]);
+                    });
+            } else if (typeof expectedValue === 'object' && expectedValue !== null && 'uuid' in expectedValue) {
                 const actualUuid = actualValue && typeof actualValue === 'object' && 'uuid' in actualValue ? actualValue.uuid : '';
                 const expectedUuid = expectedValue.uuid || '';
                 verified = actualUuid === expectedUuid && expectedUuid !== '';
