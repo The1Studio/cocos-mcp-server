@@ -86,6 +86,12 @@ function unwrap(res) {
 }
 
 async function main() {
+    // Extract per-case flags BEFORE destructuring `rest` — `rest` is a snapshot copy of
+    // argv taken at the point of destructuring, so a later `takeFlag()` call (which
+    // mutates `argv` in place) never removes the flag from `rest`, and `rest[0]` is left
+    // holding the flag token itself (e.g. "--timeout") instead of the value or the next
+    // positional arg. Mirrors how `--port` is already extracted before argv is consumed.
+    const timeoutFlag = takeFlag('--timeout');
     const [cmd, ...rest] = argv;
 
     switch (cmd) {
@@ -104,7 +110,7 @@ async function main() {
         }
 
         case 'wait': {
-            const timeoutSec = parseInt(takeFlag('--timeout') || rest[0] || '120', 10);
+            const timeoutSec = parseInt(timeoutFlag || rest[0] || '120', 10);
             const deadline = Date.now() + timeoutSec * 1000;
             while (Date.now() < deadline) {
                 try {
@@ -133,9 +139,15 @@ async function main() {
                     die(`bad JSON args: ${err.message}`);
                 }
             }
-            const result = unwrap(await request('POST', `/api/${tool}`, args));
+            const res = await request('POST', `/api/${tool}`, args);
+            const result = unwrap(res);
             console.log(JSON.stringify(result, null, 2));
-            process.exit(result && result.success === false ? 1 : 0);
+            // A non-200 status (bad tool name, malformed request, server error) must fail
+            // the gate the same way a { success: false } result does — `health` and `wait`
+            // already gate on res.status === 200; `call` silently ignored it and only ever
+            // exited 1 on an explicit success:false, which unwrap() may not even produce
+            // (e.g. a non-JSON error body unwraps to `res.body` itself, `null`).
+            process.exit(res.status !== 200 || (result && result.success === false) ? 1 : 0);
             break;
         }
 
