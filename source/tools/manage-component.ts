@@ -518,13 +518,26 @@ export class ManageComponent extends BaseActionTool {
             );
 
             // Wait for editor to complete the update, then verify.
-            await new Promise(r => setTimeout(r, 200));
+            // Look up by the RESOLVED dump type (targetComponent.type — a cid when
+            // componentType was a class name resolved via resolveComponentByName),
+            // not the caller-supplied componentType: getComponentInfo matches against
+            // the dump's __type__/cid, which never equals a readable class name, so
+            // verification would always report unverified for the class-name path.
             const verification = await verifyComponentPropertyChange(
-                nodeUuid, componentType, property, originalValue, actualExpectedValue,
+                nodeUuid, targetComponent.type || componentType, property, originalValue, actualExpectedValue,
                 (uuid, type) => this.getComponentInfo(uuid, type)
             );
 
-            return { success: true, actualValue: verification.actualValue, changeVerified: verification.verified };
+            if (!verification.verified) {
+                return {
+                    success: false,
+                    actualValue: verification.actualValue,
+                    changeVerified: false,
+                    error: `Property '${componentType}.${property}' write did not verify: expected ${JSON.stringify(actualExpectedValue)} but the editor reads back ${JSON.stringify(verification.actualValue)}`
+                };
+            }
+
+            return { success: true, actualValue: verification.actualValue, changeVerified: true };
         } catch (error: any) {
             console.error(`[ManageComponent] Error setting property '${property}':`, error);
             return { success: false, error: `Failed to set property '${property}': ${error.message}` };

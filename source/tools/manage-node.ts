@@ -243,6 +243,14 @@ export class ManageNode extends BaseActionTool {
                         uuids: [uuid],
                         keepWorldTransform: coerceBool(args.keepWorldTransform) || false
                     });
+                    // Best-effort verification: this re-parent is a secondary ordering step
+                    // after node creation already succeeded, so a mismatch is logged rather
+                    // than failing the whole create — the verificationData read-back below
+                    // still reports the node's true final parent either way.
+                    const verifyInfo = await this.getNodeInfo(uuid);
+                    if (!verifyInfo.success || verifyInfo.data?.parent !== targetParentUuid) {
+                        console.warn(`Sibling-index reparent did not verify: expected parent '${targetParentUuid}', got '${verifyInfo.data?.parent}'`);
+                    }
                 } catch (err) {
                     console.warn('Failed to set sibling index:', err);
                 }
@@ -583,7 +591,22 @@ export class ManageNode extends BaseActionTool {
                     console.warn('Failed to set siblingIndex after move:', err);
                 }
             }
-            return successResult(null, 'Node moved successfully');
+
+            // Read back the actual parent. `set-parent` silently no-ops for some prefab-
+            // instance constraints (e.g. moving a prefab root out from under its instance),
+            // so a resolved promise here does not guarantee the reparent took effect.
+            const verifyInfo = await this.getNodeInfo(nodeUuid);
+            if (!verifyInfo.success || !verifyInfo.data) {
+                return errorResult(`Node move could not be verified: failed to read back node '${nodeUuid}' after the move.`);
+            }
+            if (verifyInfo.data.parent !== newParentUuid) {
+                return errorResult(
+                    `Node move did not take effect: expected parent '${newParentUuid}' but the node still reports parent '${verifyInfo.data.parent}'. ` +
+                    `This can happen when the node is a prefab instance's root and reparenting is blocked by the prefab link.`
+                );
+            }
+
+            return successResult({ nodeUuid, newParentUuid, nodeInfo: verifyInfo.data }, 'Node moved successfully');
         } catch (err: any) {
             return errorResult(err.message);
         }
