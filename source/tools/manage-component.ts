@@ -84,6 +84,38 @@ export class ManageComponent extends BaseActionTool {
         get_available: (args) => Promise.resolve(getAvailableComponentsList(args.category))
     };
 
+    /**
+     * Match a dump component against whatever spelling the caller used.
+     *
+     * `create-component` accepts a readable class name, but `query-node` lists a custom
+     * `@ccclass` script under its COMPRESSED CID (the first five hex characters of the
+     * script asset uuid plus a base64 tail), so `comp.type === 'MyController'` is never
+     * true for a project script. The readable name survives in exactly one place in the
+     * dump — `value.name`, formatted `${nodeName}<${className}>`.
+     *
+     * Built-in components are unaffected: `cc.Sprite` matches on `type` as before.
+     */
+    private static matchesComponent(comp: any, componentType: string): boolean {
+        if (comp.type === componentType) return true;
+        if (comp.uuid && comp.uuid === componentType) return true;
+
+        const dumpName = comp.properties?.name?.value;
+        return typeof dumpName === 'string' && dumpName.endsWith(`<${componentType}>`);
+    }
+
+    /** The identity a caller needs for every FOLLOW-UP call: get_info, set_property, remove. */
+    private static componentIdentity(nodeUuid: string, componentType: string, comp: any) {
+        return {
+            nodeUuid,
+            componentType,
+            // The cid, which is what every other action on this tool expects. Returning it
+            // saves the caller a get_all round-trip just to translate their own class name.
+            resolvedType: comp?.type ?? componentType,
+            componentUuid: comp?.uuid ?? null,
+            componentVerified: true
+        };
+    }
+
     private async addComponent(nodeUuid: string, componentType: string): Promise<ActionToolResult> {
         if (!nodeUuid || !componentType) {
             return errorResult('nodeUuid and componentType are required for action=add');
@@ -91,10 +123,12 @@ export class ManageComponent extends BaseActionTool {
         // Check if component already exists on node
         const allComponentsInfo = await this.getComponents(nodeUuid);
         if (allComponentsInfo.success && allComponentsInfo.data?.components) {
-            const existingComponent = allComponentsInfo.data.components.find((comp: any) => comp.type === componentType);
+            const existingComponent = allComponentsInfo.data.components.find(
+                (comp: any) => ManageComponent.matchesComponent(comp, componentType)
+            );
             if (existingComponent) {
                 return successResult(
-                    { nodeUuid, componentType, componentVerified: true, existing: true },
+                    { ...ManageComponent.componentIdentity(nodeUuid, componentType, existingComponent), existing: true },
                     `Component '${componentType}' already exists on node`
                 );
             }
@@ -110,10 +144,12 @@ export class ManageComponent extends BaseActionTool {
             // Re-query to verify the component was actually added
             const allComponentsInfo2 = await this.getComponents(nodeUuid);
             if (allComponentsInfo2.success && allComponentsInfo2.data?.components) {
-                const addedComponent = allComponentsInfo2.data.components.find((comp: any) => comp.type === componentType);
+                const addedComponent = allComponentsInfo2.data.components.find(
+                    (comp: any) => ManageComponent.matchesComponent(comp, componentType)
+                );
                 if (addedComponent) {
                     return successResult(
-                        { nodeUuid, componentType, componentVerified: true, existing: false },
+                        { ...ManageComponent.componentIdentity(nodeUuid, componentType, addedComponent), existing: false },
                         `Component '${componentType}' added successfully`
                     );
                 } else {
