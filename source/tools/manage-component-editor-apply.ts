@@ -216,9 +216,55 @@ async function resolveComponentReference(
         }
     }
 
-    const targetNodeData = await Editor.Message.request('scene', 'query-node', targetNodeUuid);
+    // `query-node` REJECTS on some editor builds and resolves falsy on others; both mean
+    // the same thing here — the value is not a node uuid.
+    let targetNodeData: any = null;
+    try {
+        targetNodeData = await Editor.Message.request('scene', 'query-node', targetNodeUuid);
+    } catch {
+        targetNodeData = null;
+    }
+
     if (!targetNodeData || !targetNodeData.__comps__) {
-        throw new Error(`Target node ${targetNodeUuid} not found or has no components`);
+        // The caller may have passed the COMPONENT's own uuid — the `uuid` field that
+        // manage_component get_all / get_info return, and the obvious thing to reach for
+        // when wiring a @property(SomeComponent) reference. Accept that spelling instead
+        // of reporting a correct uuid as a missing node.
+        //
+        // Resolve-only, exactly like the node path below — this function has no
+        // `propertyPath` and must never write. The caller (applyComponentReference for a
+        // single reference, applyComponentReferenceArray for an array) performs the ONE
+        // set-property write; a write here would fire once per element on a componentArray
+        // (issue #18).
+        const direct = await queryComponentByUuid(targetNodeUuid);
+        if (!direct) {
+            throw new Error(
+                `'${targetNodeUuid}' is neither a node uuid nor a component uuid. ` +
+                `Pass the uuid of the NODE that holds the component, or the component's own ` +
+                `uuid from manage_component action=get_all.`
+            );
+        }
+
+        const directType = expectedComponentType || direct.type;
+        if (!directType) {
+            throw new Error(`Unable to determine required component type for property '${property}' on component '${componentType}'. Property metadata may not contain type information.`);
+        }
+
+        // The node path below only ever resolves a component whose type EXACTLY matches
+        // expectedComponentType (its search loop rejects anything else). `expectedComponentType
+        // || direct.type` only falls back to direct.type when expectedComponentType is empty;
+        // it never validated the two against each other when expectedComponentType WAS known,
+        // letting a mismatched component (e.g. a cc.Sprite uuid on a property typed
+        // HeroDragController) resolve unrejected. A direct.type that is itself unusable
+        // ('Unknown'/blank) cannot disprove a match, so it is left to fall through.
+        if (expectedComponentType && isUsableType(direct.type) && direct.type !== expectedComponentType) {
+            throw new Error(
+                `Component uuid '${targetNodeUuid}' is a '${direct.type}', but property '${property}' ` +
+                `on '${componentType}' requires a '${expectedComponentType}'.`
+            );
+        }
+
+        return { componentId: direct.uuid, expectedComponentType: directType };
     }
 
     // Single-cc-component fallback: when expectedComponentType could not be inferred
@@ -332,4 +378,25 @@ async function applyComponentReferenceArray(
     });
 
     return resolvedRefs;
+}
+
+/**
+ * Look a uuid up as a COMPONENT rather than a node.
+ *
+ * `query-component` answers for a component's own uuid and returns the same dump shape as
+ * one `__comps__` entry, so `value.uuid.value` and `type` read exactly as they do on the
+ * node path. Returns null for anything that is not a live component — including a uuid
+ * that names nothing at all — so the caller can report both accepted spellings.
+ */
+async function queryComponentByUuid(uuid: string): Promise<{ uuid: string; type: string } | null> {
+    try {
+        const comp: any = await Editor.Message.request('scene', 'query-component', uuid);
+        if (!comp) return null;
+
+        const resolvedUuid = comp.value?.uuid?.value || comp.uuid?.value || comp.uuid || uuid;
+        const type = comp.type || comp.cid || comp.__type__ || '';
+        return { uuid: resolvedUuid, type };
+    } catch {
+        return null;
+    }
 }
