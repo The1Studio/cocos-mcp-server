@@ -183,4 +183,67 @@ describe('applyPropertyToEditor — component references', () => {
             )
         ).rejects.toThrow(/neither a node uuid nor a component uuid/i);
     });
+
+    // Issue #45: the declared @property type is a BASE class, but the node only carries
+    // a SUBCLASS of it. An exact comp.type === expectedComponentType match can never
+    // succeed, so the resolver must fall back to the inheritance-aware live-scene lookup
+    // (findComponentByBaseClass, backed by node.getComponent(BaseClass)) instead of
+    // reporting the subclass as "not found".
+    it('resolves a SUBCLASS component when the declared property type is its base class', async () => {
+        const SUBCLASS_UUID = 'subclass-component-uuid';
+        requestMock.mockImplementation((_m: string, action: string, arg: any) => {
+            if (action === 'query-node') {
+                // The node's only component is a subclass — no comp.type equals EXPECTED_TYPE.
+                return Promise.resolve({
+                    __comps__: [
+                        { type: 'PipeCannon', value: { uuid: { value: SUBCLASS_UUID } } }
+                    ]
+                });
+            }
+            if (action === 'execute-scene-script' && arg?.method === 'findComponentByBaseClass') {
+                expect(arg.args).toEqual([TARGET_NODE_UUID, EXPECTED_TYPE]);
+                return Promise.resolve({
+                    success: true,
+                    data: { componentUuid: SUBCLASS_UUID, concreteType: 'PipeCannon', baseClassName: EXPECTED_TYPE }
+                });
+            }
+            return Promise.resolve(undefined);
+        });
+
+        const result = await applyPropertyToEditor(
+            { ...baseArgs, value: TARGET_NODE_UUID, processedValue: TARGET_NODE_UUID },
+            getComponentInfo
+        );
+
+        expect(setPropertyPayload().dump).toEqual({
+            value: { uuid: SUBCLASS_UUID }, type: EXPECTED_TYPE
+        });
+        expect(result).toEqual({ uuid: SUBCLASS_UUID });
+    });
+
+    // When the base-class fallback ALSO finds nothing (no component on the node extends
+    // the declared type at all), the original "not found" error must still surface —
+    // the fallback must not swallow a genuine mismatch.
+    it('still reports not-found when no component extends the declared base type either', async () => {
+        requestMock.mockImplementation((_m: string, action: string, arg: any) => {
+            if (action === 'query-node') {
+                return Promise.resolve({
+                    __comps__: [
+                        { type: 'cc.Sprite', value: { uuid: { value: 'unrelated-uuid' } } }
+                    ]
+                });
+            }
+            if (action === 'execute-scene-script' && arg?.method === 'findComponentByBaseClass') {
+                return Promise.resolve({ success: false, error: `No component extending '${EXPECTED_TYPE}' found on node` });
+            }
+            return Promise.resolve(undefined);
+        });
+
+        await expect(
+            applyPropertyToEditor(
+                { ...baseArgs, value: TARGET_NODE_UUID, processedValue: TARGET_NODE_UUID },
+                getComponentInfo
+            )
+        ).rejects.toThrow(/Component type 'HeroDragController' not found on node/);
+    });
 });

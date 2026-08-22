@@ -98,6 +98,61 @@ export const methods: { [key: string]: (...any: any) => any } = {
     },
 
     /**
+     * Resolve a component on a target node by its DECLARED base class, honouring the
+     * inheritance chain.
+     *
+     * `manage_component set_property` with `propertyType: "component"` resolves the
+     * target component by exact class-name equality against the property's declared type
+     * (issue #45). When the declared type is a BASE class and the actual component on the
+     * node is a SUBCLASS, the literal match never resolves — even though the engine's own
+     * `node.getComponent(BaseClass)` would return the subclass instance. This method uses
+     * the live cc.js class registry to do exactly that lookup, walking `__super__` so a
+     * subclass is recognised as fulfilling a base-typed `@property` slot.
+     *
+     * Returns the component's own uuid and its concrete type, so the caller can build the
+     * correct `{ uuid }` set-property dump and report what was actually bound.
+     */
+    findComponentByBaseClass(nodeUuid: string, baseClassName: string) {
+        try {
+            const { director, js } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const node = findNodeByUuidDeep(scene, nodeUuid);
+            if (!node) {
+                return { success: false, error: `Node with UUID ${nodeUuid} not found` };
+            }
+
+            const BaseClass = js.getClassByName(baseClassName);
+            if (!BaseClass) {
+                return { success: false, error: `Component type ${baseClassName} not found` };
+            }
+
+            // getComponent(BaseClass) returns a component whose constructor IS or
+            // EXTENDS BaseClass — exactly the polymorphic resolve #45 needs.
+            const component = node.getComponent(BaseClass);
+            if (!component) {
+                return { success: false, error: `No component extending '${baseClassName}' found on node` };
+            }
+
+            const concreteType = (component.constructor && (component.constructor.name || component.constructor.__cid__)) || baseClassName;
+            const componentUuid = (component as any).uuid || (component as any).__id__ || '';
+            return {
+                success: true,
+                data: {
+                    componentUuid,
+                    concreteType,
+                    baseClassName
+                }
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
      * Remove component from a node
      */
     removeComponentFromNode(nodeUuid: string, componentType: string) {
