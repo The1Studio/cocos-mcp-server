@@ -210,13 +210,18 @@ export class ManageDebug extends BaseActionTool {
         const validationError = this.validateScript(script);
         if (validationError) return errorResult(validationError);
         try {
-            const result = await Editor.Message.request('scene', 'execute-scene-script', {
-                name: 'console',
+            // 'name' must be the registered package name (see package.json "name"), not an
+            // arbitrary label — execute-scene-script resolves it to the package's scene.js
+            // and calls the named export. 'console' is not a registered package, so this
+            // previously always rejected with "instance not found" and execute_script was dead.
+            const response: any = await Editor.Message.request('scene', 'execute-scene-script', {
+                name: 'cocos-mcp-server',
                 method: 'eval',
                 args: [script]
             });
+            if (!response?.success) return errorResult(response?.error || 'Script execution failed');
             return successResult({
-                result,
+                result: response.data?.result,
                 message: 'Script executed successfully',
                 warning: 'Code was executed in the scene context. Ensure scripts are trusted before execution.'
             });

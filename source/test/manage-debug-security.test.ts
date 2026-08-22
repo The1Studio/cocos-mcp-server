@@ -94,10 +94,24 @@ describe('ManageDebug.execute action routing', () => {
 
     it('execute_script calls Editor.Message.request for valid script', async () => {
         const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-        mockRequest.mockResolvedValueOnce({ result: 42 });
+        mockRequest.mockResolvedValueOnce({ success: true, data: { result: 42 } });
 
         const result = await tool.execute('execute_script', { script: 'return 42;' });
         expect(result.success).toBe(true);
-        expect(mockRequest).toHaveBeenCalledWith('scene', 'execute-scene-script', expect.any(Object));
+        expect(result.data.result).toBe(42);
+        expect(mockRequest).toHaveBeenCalledWith('scene', 'execute-scene-script', {
+            name: 'cocos-mcp-server',
+            method: 'eval',
+            args: ['return 42;']
+        });
+    });
+
+    it('execute_script surfaces a scene-side eval failure as an error result', async () => {
+        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        mockRequest.mockResolvedValueOnce({ success: false, error: 'ReferenceError: foo is not defined' });
+
+        const result = await tool.execute('execute_script', { script: 'return foo;' });
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/foo is not defined/);
     });
 });
