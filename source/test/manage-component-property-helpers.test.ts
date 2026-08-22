@@ -76,3 +76,57 @@ describe('convertPropertyValue — componentArray propertyType (issue #18)', () 
         expect(SUPPORTED_PROPERTY_TYPES).toContain('componentArray');
     });
 });
+
+// Regression: issue #52 — set_property rejected a valid cc.Size (and other object/array
+// -shaped propertyTypes) whenever the value arrived as a JSON-encoded string rather than
+// a parsed object, even though set_properties_batch accepted the byte-identical value
+// because its schema keeps `properties` nested under `items: { type: 'object' }` and so
+// never gets stringified by a transport in the first place. convertPropertyValue must
+// treat both spellings identically.
+describe('convertPropertyValue — JSON-string values for object/array propertyTypes (issue #52)', () => {
+    it('accepts a JSON-string size identically to an already-parsed object', () => {
+        const expected = { width: 94, height: 94 };
+        expect(convertPropertyValue('size', '{"width":94,"height":94}')).toEqual(expected);
+        expect(convertPropertyValue('size', { width: 94, height: 94 })).toEqual(expected);
+    });
+
+    it('accepts a JSON-string vec2 identically to an already-parsed object', () => {
+        const expected = { x: 1, y: 2 };
+        expect(convertPropertyValue('vec2', '{"x":1,"y":2}')).toEqual(expected);
+        expect(convertPropertyValue('vec2', { x: 1, y: 2 })).toEqual(expected);
+    });
+
+    it('accepts a JSON-string vec3 identically to an already-parsed object', () => {
+        const expected = { x: 1, y: 2, z: 3 };
+        expect(convertPropertyValue('vec3', '{"x":1,"y":2,"z":3}')).toEqual(expected);
+        expect(convertPropertyValue('vec3', { x: 1, y: 2, z: 3 })).toEqual(expected);
+    });
+
+    it('accepts a JSON-string color object, and still accepts a hex-string color unchanged', () => {
+        expect(convertPropertyValue('color', '{"r":255,"g":0,"b":0}')).toEqual({ r: 255, g: 0, b: 0, a: 255 });
+        expect(convertPropertyValue('color', '#FF0000')).toEqual({ r: 255, g: 0, b: 0, a: 255 });
+    });
+
+    it('accepts a JSON-string array for nodeArray/numberArray/stringArray/colorArray', () => {
+        expect(convertPropertyValue('nodeArray', '["node-a","node-b"]')).toEqual([{ uuid: 'node-a' }, { uuid: 'node-b' }]);
+        expect(convertPropertyValue('numberArray', '[1,2,3]')).toEqual([1, 2, 3]);
+        expect(convertPropertyValue('stringArray', '["a","b"]')).toEqual(['a', 'b']);
+        expect(convertPropertyValue('colorArray', '[{"r":255,"g":0,"b":0}]')).toEqual([{ r: 255, g: 0, b: 0, a: 255 }]);
+    });
+
+    it('still rejects a non-object, non-JSON-object size value, and names the actual received type', () => {
+        expect(() => convertPropertyValue('size', 'not-json'))
+            .toThrow(/Size value must be an object with width, height properties \(received typeof string\)/);
+        expect(() => convertPropertyValue('size', 42))
+            .toThrow(/received typeof number/);
+    });
+
+    it('still rejects a non-array, non-JSON-array numberArray value, and names the actual received type', () => {
+        // The received value is a string (a JSON OBJECT string, not an array string) — the
+        // error names the type of what was actually passed in, before any JSON parsing.
+        expect(() => convertPropertyValue('numberArray', '{"not":"an array"}'))
+            .toThrow(/NumberArray value must be an array \(received typeof string\)/);
+        expect(() => convertPropertyValue('numberArray', { not: 'an array' }))
+            .toThrow(/NumberArray value must be an array \(received typeof object\)/);
+    });
+});

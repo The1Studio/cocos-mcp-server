@@ -4,6 +4,7 @@
  */
 
 import { ActionToolResult, successResult } from '../types';
+import { parseJsonPayload } from '../utils/normalize';
 
 export interface PropertyAnalysisResult {
     exists: boolean;
@@ -245,7 +246,7 @@ export const SUPPORTED_PROPERTY_TYPES = [
 export function convertPropertyValue(propertyType: string, value: any): any {
     if ((ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType)) {
         if (typeof value === 'string') return { uuid: value };
-        throw new Error(`${propertyType} value must be a string UUID`);
+        throw new Error(`${propertyType} value must be a string UUID (received typeof ${typeof value})`);
     }
     switch (propertyType) {
         case 'string':
@@ -255,54 +256,86 @@ export function convertPropertyValue(propertyType: string, value: any): any {
         case 'boolean':
             return Boolean(value);
         case 'color':
-            if (typeof value === 'string') return parseColorString(value);
-            if (typeof value === 'object' && value !== null) {
-                return {
-                    r: Math.min(255, Math.max(0, Number(value.r) || 0)),
-                    g: Math.min(255, Math.max(0, Number(value.g) || 0)),
-                    b: Math.min(255, Math.max(0, Number(value.b) || 0)),
-                    a: value.a !== undefined ? Math.min(255, Math.max(0, Number(value.a))) : 255
-                };
+            {
+                // Issue #52: a JSON-string value (e.g. '{"r":255,"g":0,"b":0}') reaches
+                // this point as a string. A hex color string (e.g. "#FF0000") is NOT
+                // valid JSON, so parseJsonPayload returns it unchanged; only a JSON object
+                // string coerces to an object. Try the JSON path first so both a hex
+                // string and a JSON-string object land in the right branch.
+                const coerced = parseJsonPayload(value);
+                if (typeof coerced === 'string') return parseColorString(coerced);
+                if (typeof coerced === 'object' && coerced !== null) {
+                    return {
+                        r: Math.min(255, Math.max(0, Number(coerced.r) || 0)),
+                        g: Math.min(255, Math.max(0, Number(coerced.g) || 0)),
+                        b: Math.min(255, Math.max(0, Number(coerced.b) || 0)),
+                        a: coerced.a !== undefined ? Math.min(255, Math.max(0, Number(coerced.a))) : 255
+                    };
+                }
             }
-            throw new Error('Color value must be an object with r, g, b properties or a hexadecimal string (e.g., "#FF0000")');
+            throw new Error(`Color value must be an object with r, g, b properties or a hexadecimal string (e.g., "#FF0000") (received typeof ${typeof value})`);
         case 'vec2':
-            if (typeof value === 'object' && value !== null) return { x: Number(value.x) || 0, y: Number(value.y) || 0 };
-            throw new Error('Vec2 value must be an object with x, y properties');
+            {
+                const coerced = parseJsonPayload(value);
+                if (typeof coerced === 'object' && coerced !== null) return { x: Number(coerced.x) || 0, y: Number(coerced.y) || 0 };
+            }
+            throw new Error(`Vec2 value must be an object with x, y properties (received typeof ${typeof value})`);
         case 'vec3':
-            if (typeof value === 'object' && value !== null) return { x: Number(value.x) || 0, y: Number(value.y) || 0, z: Number(value.z) || 0 };
-            throw new Error('Vec3 value must be an object with x, y, z properties');
+            {
+                const coerced = parseJsonPayload(value);
+                if (typeof coerced === 'object' && coerced !== null) return { x: Number(coerced.x) || 0, y: Number(coerced.y) || 0, z: Number(coerced.z) || 0 };
+            }
+            throw new Error(`Vec3 value must be an object with x, y, z properties (received typeof ${typeof value})`);
         case 'size':
-            if (typeof value === 'object' && value !== null) return { width: Number(value.width) || 0, height: Number(value.height) || 0 };
-            throw new Error('Size value must be an object with width, height properties');
+            {
+                const coerced = parseJsonPayload(value);
+                if (typeof coerced === 'object' && coerced !== null) return { width: Number(coerced.width) || 0, height: Number(coerced.height) || 0 };
+            }
+            throw new Error(`Size value must be an object with width, height properties (received typeof ${typeof value})`);
         case 'node':
             if (typeof value === 'string') return { uuid: value };
-            throw new Error('Node reference value must be a string UUID');
+            throw new Error(`Node reference value must be a string UUID (received typeof ${typeof value})`);
         case 'component':
             if (typeof value === 'string') return value; // resolved to __id__ later
-            throw new Error('Component reference value must be a string (node UUID containing the target component)');
+            throw new Error(`Component reference value must be a string (node UUID containing the target component) (received typeof ${typeof value})`);
         case 'componentArray':
-            if (Array.isArray(value)) return value.map((item: any) => {
-                if (typeof item === 'string') return item; // each resolved to a component __id__ later
-                throw new Error('ComponentArray items must be string node UUIDs (each containing the target component)');
-            });
-            throw new Error('ComponentArray value must be an array');
+            {
+                const coerced = parseJsonPayload(value);
+                if (Array.isArray(coerced)) return coerced.map((item: any) => {
+                    if (typeof item === 'string') return item; // each resolved to a component __id__ later
+                    throw new Error(`ComponentArray items must be string node UUIDs (each containing the target component) (received item typeof ${typeof item})`);
+                });
+            }
+            throw new Error(`ComponentArray value must be an array (received typeof ${typeof value})`);
         case 'nodeArray':
-            if (Array.isArray(value)) return value.map((item: any) => { if (typeof item === 'string') return { uuid: item }; throw new Error('NodeArray items must be string UUIDs'); });
-            throw new Error('NodeArray value must be an array');
+            {
+                const coerced = parseJsonPayload(value);
+                if (Array.isArray(coerced)) return coerced.map((item: any) => { if (typeof item === 'string') return { uuid: item }; throw new Error(`NodeArray items must be string UUIDs (received item typeof ${typeof item})`); });
+            }
+            throw new Error(`NodeArray value must be an array (received typeof ${typeof value})`);
         case 'colorArray':
-            if (Array.isArray(value)) return value.map((item: any) => {
-                if (typeof item === 'object' && item !== null && 'r' in item) {
-                    return { r: Math.min(255, Math.max(0, Number(item.r) || 0)), g: Math.min(255, Math.max(0, Number(item.g) || 0)), b: Math.min(255, Math.max(0, Number(item.b) || 0)), a: item.a !== undefined ? Math.min(255, Math.max(0, Number(item.a))) : 255 };
-                }
-                return { r: 255, g: 255, b: 255, a: 255 };
-            });
-            throw new Error('ColorArray value must be an array');
+            {
+                const coerced = parseJsonPayload(value);
+                if (Array.isArray(coerced)) return coerced.map((item: any) => {
+                    if (typeof item === 'object' && item !== null && 'r' in item) {
+                        return { r: Math.min(255, Math.max(0, Number(item.r) || 0)), g: Math.min(255, Math.max(0, Number(item.g) || 0)), b: Math.min(255, Math.max(0, Number(item.b) || 0)), a: item.a !== undefined ? Math.min(255, Math.max(0, Number(item.a))) : 255 };
+                    }
+                    return { r: 255, g: 255, b: 255, a: 255 };
+                });
+            }
+            throw new Error(`ColorArray value must be an array (received typeof ${typeof value})`);
         case 'numberArray':
-            if (Array.isArray(value)) return value.map((item: any) => Number(item));
-            throw new Error('NumberArray value must be an array');
+            {
+                const coerced = parseJsonPayload(value);
+                if (Array.isArray(coerced)) return coerced.map((item: any) => Number(item));
+            }
+            throw new Error(`NumberArray value must be an array (received typeof ${typeof value})`);
         case 'stringArray':
-            if (Array.isArray(value)) return value.map((item: any) => String(item));
-            throw new Error('StringArray value must be an array');
+            {
+                const coerced = parseJsonPayload(value);
+                if (Array.isArray(coerced)) return coerced.map((item: any) => String(item));
+            }
+            throw new Error(`StringArray value must be an array (received typeof ${typeof value})`);
         default:
             throw new Error(`Unsupported property type: ${propertyType}. Supported types: ${SUPPORTED_PROPERTY_TYPES.join(', ')}`);
     }
