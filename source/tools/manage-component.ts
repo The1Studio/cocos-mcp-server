@@ -262,38 +262,25 @@ export class ManageComponent extends BaseActionTool {
         if (!nodeUuid || !componentType) {
             return errorResult('nodeUuid and componentType are required for action=get_info');
         }
-        try {
-            const nodeData: any = await Editor.Message.request('scene', 'query-node', nodeUuid);
-            if (nodeData && nodeData.__comps__) {
-                const component = nodeData.__comps__.find((comp: any) => {
-                    const compType = comp.__type__ || comp.cid || comp.type;
-                    return compType === componentType;
-                });
-                if (component) {
-                    return successResult({
-                        nodeUuid, componentType,
-                        enabled: component.enabled !== undefined ? component.enabled : true,
-                        properties: this.extractComponentProperties(component)
-                    });
-                }
-                return errorResult(`Component '${componentType}' not found on node`);
-            }
-            return errorResult('Node not found or no components data');
-        } catch (err: any) {
-            try {
-                const result: any = await Editor.Message.request('scene', 'execute-scene-script', {
-                    name: 'cocos-mcp-server', method: 'getNodeInfo', args: [nodeUuid]
-                });
-                if (result.success && result.data.components) {
-                    const component = result.data.components.find((comp: any) => comp.type === componentType);
-                    if (component) return successResult({ nodeUuid, componentType, ...component });
-                    return errorResult(`Component '${componentType}' not found on node`);
-                }
-                return errorResult(result?.error || 'Failed to get component info');
-            } catch (err2: any) {
-                return errorResult(`Direct API failed: ${err.message}, Scene script failed: ${err2.message}`);
-            }
+        // Route through getComponents + matchesComponent so a custom @ccclass class name
+        // resolves the same way action=add does (issue #44): query-node lists project
+        // scripts under their compressed cid, while the readable name lives only in
+        // `value.name` as `${nodeName}<${className}>`, which matchesComponent checks.
+        const componentsResponse = await this.getComponents(nodeUuid);
+        if (!componentsResponse.success || !componentsResponse.data?.components) {
+            return errorResult(componentsResponse.error || 'Node not found or no components data');
         }
+        const component = componentsResponse.data.components.find(
+            (comp: any) => ManageComponent.matchesComponent(comp, componentType)
+        );
+        if (component) {
+            return successResult({
+                nodeUuid, componentType,
+                enabled: component.enabled !== undefined ? component.enabled : true,
+                properties: component.properties
+            });
+        }
+        return errorResult(`Component '${componentType}' not found on node. Available components: ${componentsResponse.data.components.map((c: any) => c.type).join(', ')}`);
     }
 
     private extractComponentProperties(component: any): Record<string, any> {
@@ -445,7 +432,7 @@ export class ManageComponent extends BaseActionTool {
         for (let i = 0; i < allComponents.length; i++) {
             const comp = allComponents[i];
             availableTypes.push(comp.type);
-            if (comp.type === componentType) {
+            if (ManageComponent.matchesComponent(comp, componentType)) {
                 targetComponent = comp;
                 resolvedIndex = i;
                 break;
