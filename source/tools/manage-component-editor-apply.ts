@@ -305,6 +305,24 @@ async function resolveComponentReference(
     }
 
     if (!foundComponent) {
+        // Issue #45: expectedComponentType may be a BASE class (declared on the
+        // @property) while every component actually on the node is a SUBCLASS — an
+        // exact string match against comp.type can never succeed for a polymorphic
+        // reference, even though the engine's own node.getComponent(BaseClass) already
+        // resolves subclass instances. Fall back to that live-scene, inheritance-aware
+        // lookup before giving up.
+        let baseClassResult: any = null;
+        try {
+            baseClassResult = await Editor.Message.request('scene', 'execute-scene-script', {
+                name: 'cocos-mcp-server', method: 'findComponentByBaseClass', args: [targetNodeUuid, expectedComponentType]
+            });
+        } catch {
+            baseClassResult = null;
+        }
+        if (baseClassResult && baseClassResult.success && baseClassResult.data && baseClassResult.data.componentUuid) {
+            return { componentId: baseClassResult.data.componentUuid, expectedComponentType };
+        }
+
         const available = targetNodeData.__comps__.map((comp: any) => {
             const sceneId = comp.value && comp.value.uuid && comp.value.uuid.value ? comp.value.uuid.value : 'unknown';
             return `${comp.type}(scene_id:${sceneId})`;

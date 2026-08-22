@@ -154,4 +154,77 @@ describe('ManageNode', () => {
             expect(result.error).toMatch(/could not be verified/i);
         });
     });
+
+    describe('set_property (boolean coercion + read-back verification, issue #47)', () => {
+        // set-property, then readNodeProperty's own query-node, then getNodeInfo's query-node.
+        function mockHappyPath(mockRequest: jest.Mock, activeValue: boolean) {
+            mockRequest
+                .mockResolvedValueOnce({}) // set-property
+                .mockResolvedValueOnce({ active: { value: activeValue } }) // readNodeProperty query-node
+                .mockResolvedValueOnce({ uuid: { value: 'node-1' }, active: { value: activeValue } }); // getNodeInfo query-node
+        }
+
+        it('coerces a stringified "false" on the known-boolean property "active" without an explicit propertyType', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockHappyPath(mockRequest, false);
+
+            const result = await tool.execute('set_property', { uuid: 'node-1', property: 'active', value: 'false' });
+
+            expect(result.success).toBe(true);
+            const setPropertyCall = mockRequest.mock.calls.find((c: any[]) => c[1] === 'set-property');
+            expect(setPropertyCall?.[2]).toEqual({ uuid: 'node-1', path: 'active', dump: { value: false } });
+            expect(result.data.newValue).toBe(false);
+        });
+
+        it('coerces via an explicit propertyType: "boolean" on a non-"active" property', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce({}) // set-property
+                .mockResolvedValueOnce({ visible: { value: false } }) // readNodeProperty
+                .mockResolvedValueOnce({ uuid: { value: 'node-1' } }); // getNodeInfo
+
+            const result = await tool.execute('set_property', {
+                uuid: 'node-1', property: 'visible', value: '0', propertyType: 'boolean'
+            });
+
+            expect(result.success).toBe(true);
+            const setPropertyCall = mockRequest.mock.calls.find((c: any[]) => c[1] === 'set-property');
+            expect(setPropertyCall?.[2]).toEqual({ uuid: 'node-1', path: 'visible', dump: { value: false } });
+        });
+
+        it('rejects an uncoercible boolean value instead of forwarding it to the engine', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+
+            const result = await tool.execute('set_property', { uuid: 'node-1', property: 'active', value: 'maybe' });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/expects a boolean value/i);
+            expect(mockRequest.mock.calls.find((c: any[]) => c[1] === 'set-property')).toBeUndefined();
+        });
+
+        it('reports failure when the read-back value does not match the requested write (silent no-op)', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce({}) // set-property resolves without error...
+                .mockResolvedValueOnce({ active: { value: true } }); // ...but the node is still active
+
+            const result = await tool.execute('set_property', { uuid: 'node-1', property: 'active', value: false });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/did not take effect/i);
+        });
+
+        it('still succeeds, marked unverified, for a property the read-back cannot resolve', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce({}) // set-property
+                .mockResolvedValueOnce({}) // readNodeProperty: no matching top-level entry
+                .mockResolvedValueOnce({ uuid: { value: 'node-1' } }); // getNodeInfo
+
+            const result = await tool.execute('set_property', { uuid: 'node-1', property: 'customField', value: 'anything' });
+
+            expect(result.success).toBe(true);
+            expect(result.message).toMatch(/unable to verify/i);
+        });
+    });
 });
