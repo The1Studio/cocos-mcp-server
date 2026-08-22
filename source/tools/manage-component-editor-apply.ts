@@ -55,8 +55,13 @@ export async function applyPropertyToEditor(
     // EVERY asset-reference propertyType must land here. Falling through to the terminal `else`
     // sends a dump with no `type` field — the same shape that makes the nodeArray path fail
     // (issue #18) — so an accepted-but-typeless propertyType would silently not apply.
+    // An explicit `propertyType: 'string'` is authoritative — a property-name substring
+    // must never re-route it to the asset-reference branch (issue #46: `fireClipName` was
+    // coerced to `cc.AudioClip`, nulling the field and dropping it from the component dump).
+    // The name-hint heuristic applies ONLY to the generic `asset` spelling, which carries
+    // no type information of its own.
     if ((ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType) ||
-        (propertyType === 'string' && NAME_HINTED_ASSET_KEYWORDS.some(k => property.toLowerCase().includes(k)))) {
+        (propertyType === 'asset' && NAME_HINTED_ASSET_KEYWORDS.some(k => property.toLowerCase().includes(k)))) {
 
         const assetType = resolveAssetType(propertyType, property);
 

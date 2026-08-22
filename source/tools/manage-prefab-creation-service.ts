@@ -106,13 +106,22 @@ export class PrefabCreationService {
         if (!node || !node.uuid) return node;
         try {
             const nodeData = await Editor.Message.request('scene', 'query-node', node.uuid);
-            if (nodeData && nodeData.__comps__) {
-                node.components = nodeData.__comps__.map((comp: any) => ({
-                    type: comp.__type__ || comp.cid || comp.type || 'Unknown',
-                    uuid: comp.uuid?.value || comp.uuid || null,
-                    enabled: comp.enabled !== undefined ? comp.enabled : true
-                }));
-                console.log(`Node ${node.uuid} enhanced with ${node.components.length} components (incl. script types)`);
+            if (nodeData) {
+                // Carry the transform dump through so createEngineStandardNode can read
+                // position/rotation/scale instead of falling back to identity (issue #50).
+                // The query-node dump shapes these as { value: { x, y, z } } (and w for quat),
+                // which is exactly the shape createEngineStandardNode reads via nodeData.position?.value.
+                if (nodeData.position) node.position = nodeData.position;
+                if (nodeData.rotation) node.rotation = nodeData.rotation;
+                if (nodeData.scale) node.scale = nodeData.scale;
+                if (nodeData.__comps__) {
+                    node.components = nodeData.__comps__.map((comp: any) => ({
+                        type: comp.__type__ || comp.cid || comp.type || 'Unknown',
+                        uuid: comp.uuid?.value || comp.uuid || null,
+                        enabled: comp.enabled !== undefined ? comp.enabled : true
+                    }));
+                    console.log(`Node ${node.uuid} enhanced with ${node.components.length} components (incl. script types)`);
+                }
             }
         } catch (error) {
             console.warn(`Failed to get component info for node ${node.uuid}:`, error);

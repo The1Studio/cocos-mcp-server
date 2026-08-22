@@ -79,9 +79,14 @@ describe('applyPropertyToEditor — existing callers are unaffected', () => {
         expect(payload.dump.type).toBe('cc.SpriteFrame');
     });
 
-    it('bare "string" with an asset-ish name still routes to the asset branch', async () => {
+    it('explicit propertyType "string" always wins over an asset-ish property name (issue #46)', async () => {
+        // Pre-fix bug: a bare `string` propertyType with a keyword-matching name (e.g.
+        // `fireClipName`) was silently re-routed into the asset-reference branch, coercing
+        // the write to `{ value, type: 'cc.AudioClip' }` and nulling the actual string field.
+        // An explicit propertyType is authoritative — the name-hint heuristic must only kick
+        // in for the generic `asset` spelling, which carries no type information of its own.
         const payload = await applyWith('string', 'iconTexture');
-        expect(payload.dump.type).toBe('cc.Texture2D');
+        expect(payload.dump.type).toBeUndefined();
     });
 });
 
