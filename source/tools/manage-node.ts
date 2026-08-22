@@ -1,6 +1,6 @@
 import { BaseActionTool } from './base-action-tool';
 import { ActionToolResult, NodeInfo, successResult, errorResult } from '../types';
-import { coerceBool, coerceInt, normalizeVec3 } from '../utils/normalize';
+import { coerceBool, coerceInt, coerceFloat, normalizeVec3 } from '../utils/normalize';
 import { is2DNode, is2DComponentType, is3DComponentType, normalizeTransformValue, getComponentCategory, getNodePath, searchNodeInTree } from './manage-node-transform-helpers';
 
 export class ManageNode extends BaseActionTool {
@@ -87,6 +87,11 @@ export class ManageNode extends BaseActionTool {
             value: {
                 description: '[set_property] Property value'
             },
+            propertyType: {
+                type: 'string',
+                enum: ['boolean', 'number', 'string'],
+                description: "[set_property] Optional value-type hint, honoured the same way manage_component set_property does. 'active' is coerced as boolean automatically even when omitted; pass 'boolean' explicitly for any other boolean node property to avoid a truthy-string no-op (e.g. value=\"false\" over a transport that stringifies args)."
+            },
             position: {
                 type: 'object',
                 properties: {
@@ -137,7 +142,7 @@ export class ManageNode extends BaseActionTool {
         find: (args) => this.findNodes(args.pattern, coerceBool(args.exactMatch) ?? false),
         find_by_name: (args) => this.findNodeByName(args.name),
         get_all: () => this.getAllNodes(),
-        set_property: (args) => this.setNodeProperty(args.uuid, args.property, args.value),
+        set_property: (args) => this.setNodeProperty(args.uuid, args.property, args.value, args.propertyType),
         set_transform: (args) => this.setNodeTransform(args),
         delete: (args) => this.deleteNode(args.uuid),
         move: (args) => this.moveNode(args.nodeUuid, args.newParentUuid, coerceInt(args.siblingIndex) ?? -1, coerceBool(args.keepWorldTransform) ?? false),
@@ -437,25 +442,99 @@ export class ManageNode extends BaseActionTool {
         }
     }
 
-    private async setNodeProperty(uuid: string, property: string, value: any): Promise<ActionToolResult> {
+    /** Node properties that must be treated as boolean even when propertyType is omitted. */
+    private static readonly KNOWN_BOOLEAN_NODE_PROPERTIES = new Set(['active']);
+
+    /**
+     * Coerce a set_property value by the requested (or inferred) propertyType.
+     * Throws on a value that cannot be coerced, so the caller returns errorResult
+     * instead of silently forwarding a value the engine will misinterpret.
+     */
+    private coerceNodePropertyValue(property: string, value: any, propertyType?: string): any {
+        const effectiveType = propertyType
+            || (ManageNode.KNOWN_BOOLEAN_NODE_PROPERTIES.has(property) ? 'boolean' : undefined);
+
+        if (effectiveType === 'boolean') {
+            const coerced = coerceBool(value);
+            if (coerced === undefined) {
+                throw new Error(`Property '${property}' expects a boolean value (true/false/1/0/"true"/"false"), received: ${JSON.stringify(value)}`);
+            }
+            return coerced;
+        }
+        if (effectiveType === 'number') {
+            const coerced = coerceFloat(value);
+            if (coerced === undefined) {
+                throw new Error(`Property '${property}' expects a numeric value, received: ${JSON.stringify(value)}`);
+            }
+            return coerced;
+        }
+        return value;
+    }
+
+    /**
+     * Read a node property back from the live scene for set_property verification.
+     * Only resolves top-level dump entries (active, name, layer, mobility, ...) — the
+     * properties set_property actually documents. `found: false` means the path could
+     * not be resolved this way (e.g. a nested property), NOT that the write failed.
+     */
+    private async readNodeProperty(uuid: string, property: string): Promise<{ found: boolean; value: any }> {
+        try {
+            const nodeData: any = await Editor.Message.request('scene', 'query-node', uuid);
+            const entry = nodeData ? nodeData[property] : undefined;
+            if (entry && typeof entry === 'object' && 'value' in entry) {
+                return { found: true, value: entry.value };
+            }
+            return { found: false, value: undefined };
+        } catch {
+            return { found: false, value: undefined };
+        }
+    }
+
+    private async setNodeProperty(uuid: string, property: string, value: any, propertyType?: string): Promise<ActionToolResult> {
         if (!uuid || !property || value === undefined) {
             return errorResult('uuid, property, and value are required for action=set_property');
         }
+
+        // Issue #47: a boolean node property (active, ...) sent through any transport
+        // that stringifies args arrives as `"false"` — a TRUTHY string — so
+        // `node.active = "false"` silently leaves the node active. Coerce by an explicit
+        // propertyType, or by a known boolean property name when propertyType is
+        // omitted, the same way manage_component set_property honours propertyType.
+        let coercedValue: any;
         try {
-            await Editor.Message.request('scene', 'set-property', { uuid, path: property, dump: { value } });
+            coercedValue = this.coerceNodePropertyValue(property, value, propertyType);
+        } catch (coerceErr: any) {
+            return errorResult(coerceErr.message);
+        }
+
+        try {
+            await Editor.Message.request('scene', 'set-property', { uuid, path: property, dump: { value: coercedValue } });
+
+            // Issue #47: `set-property` resolving without throwing does NOT mean the
+            // write took effect — read the property back and compare, the same
+            // verify-don't-assume fix #34/#42 already applied to manage_component.
+            const verify = await this.readNodeProperty(uuid, property);
+            if (verify.found && verify.value !== coercedValue) {
+                return errorResult(
+                    `Property '${property}' write did not take effect: requested ${JSON.stringify(coercedValue)}, ` +
+                    `actual value is ${JSON.stringify(verify.value)}.`
+                );
+            }
+            const verifiedSuffix = verify.found ? '' : ' (unable to verify — read-back did not resolve a value at this property path)';
+
             try {
                 const nodeInfo = await this.getNodeInfo(uuid);
                 return successResult({
-                    nodeUuid: uuid, property, newValue: value, nodeInfo: nodeInfo.data,
-                    changeDetails: { property, value, timestamp: new Date().toISOString() }
-                }, `Property '${property}' updated successfully`);
+                    nodeUuid: uuid, property, newValue: coercedValue, nodeInfo: nodeInfo.data,
+                    changeDetails: { property, value: coercedValue, timestamp: new Date().toISOString() }
+                }, `Property '${property}' updated successfully${verifiedSuffix}`);
             } catch {
-                return successResult({ nodeUuid: uuid, property, newValue: value }, `Property '${property}' updated successfully (verification failed)`);
+                return successResult({ nodeUuid: uuid, property, newValue: coercedValue }, `Property '${property}' updated successfully${verifiedSuffix}`);
             }
         } catch (err: any) {
             try {
                 const result: any = await Editor.Message.request('scene', 'execute-scene-script', {
-                    name: 'cocos-mcp-server', method: 'setNodeProperty', args: [uuid, property, value]
+                    name: 'cocos-mcp-server', method: 'setNodeProperty', args: [uuid, property, coercedValue]
                 });
                 if (result && result.success) return successResult(result.data, result.message);
                 return errorResult(result?.error || 'Unknown error');
