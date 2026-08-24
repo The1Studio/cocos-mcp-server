@@ -21,58 +21,156 @@ describe('ManagePrefab', () => {
         });
     });
 
-    describe('validate action (#7 — invalid asset-db "read-asset" message)', () => {
+    describe('validate action (#7 / #25 — real asset-db message shapes)', () => {
+        const UUID = 'f24aafc0-5bd5-4786-bfd8-caa6bc71e5ea';
+        const URL = 'db://assets/ScoreUI.prefab';
+
+        /**
+         * A genuine Cocos Creator 3.8.7 `asset-db:query-asset-meta` result. `IAssetMeta`
+         * carries NO `url` and NO `file` — the earlier tests mocked `{ url }` here, which
+         * is what let #25 through: the real record made the tool forward `''` to
+         * `query-path`, and the editor rejected it with a bare `parameter error`.
+         */
+        const PREFAB_META = {
+            ver: '1.1.50', importer: 'prefab', imported: true, uuid: UUID,
+            files: ['.json'], subMetas: {}, userData: {},
+            displayName: 'ScoreUI', id: UUID, name: 'ScoreUI.prefab',
+        };
+
+        function assetInfo(file: string | undefined) {
+            return {
+                name: 'ScoreUI.prefab', displayName: 'ScoreUI', source: URL,
+                path: 'db://assets/ScoreUI', url: URL, file, uuid: UUID,
+                importer: 'prefab', type: 'cc.Prefab', isDirectory: false,
+                library: {}, subAssets: {}, visible: true, readonly: false,
+            };
+        }
+
+        /** Routes by message name so a wrong call order cannot pass by accident. */
+        function routeMessages(handlers: Record<string, (...args: any[]) => any>) {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockReset();
+            mockRequest.mockImplementation(async (_pkg: string, message: string, ...args: any[]) => {
+                const handler = handlers[message];
+                if (!handler) throw new Error(`${_pkg} - ${message} does not exist`);
+                return handler(...args);
+            });
+            return mockRequest;
+        }
+
+        function writePrefab(contents: any): string {
+            const tmpFile = path.join(os.tmpdir(), `t1k-prefab-${process.pid}-${Math.random().toString(36).slice(2)}.prefab`);
+            fs.writeFileSync(tmpFile, typeof contents === 'string' ? contents : JSON.stringify(contents), 'utf-8');
+            return tmpFile;
+        }
+
+        afterEach(() => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockReset();
+            mockRequest.mockResolvedValue({});
+        });
+
         it('returns error when uuid is missing', async () => {
             const result = await tool.execute('validate', {});
             expect(result.success).toBe(false);
         });
 
-        it('resolves the db url to a file path and reads it — never calls read-asset', async () => {
-            const tmpFile = path.join(os.tmpdir(), `t1k-prefab-${process.pid}-${Date.now()}.prefab`);
-            fs.writeFileSync(
-                tmpFile,
-                JSON.stringify([{ __type__: 'cc.Prefab' }, { __type__: 'cc.Node', _name: 'Root' }]),
-                'utf-8',
-            );
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce({ url: 'db://assets/ScoreUI.prefab' }) // query-asset-meta
-                .mockResolvedValueOnce(tmpFile); // query-path
+        it('resolves the path through query-asset-info — never reads url off the meta record', async () => {
+            const tmpFile = writePrefab([{ __type__: 'cc.Prefab' }, { __type__: 'cc.Node', _name: 'Root' }]);
+            const mockRequest = routeMessages({
+                'query-asset-info': () => assetInfo(tmpFile),
+                'query-asset-meta': () => PREFAB_META,
+                'query-path': () => tmpFile,
+            });
 
-            const result = await tool.execute('validate', { uuid: 'da1db047-660d-407c-9aa3-cab9b4d1141b' });
+            const result = await tool.execute('validate', { uuid: UUID });
 
             expect(result.success).toBe(true);
-            expect(result.data).toHaveProperty('isValid');
-            // The bug: the old code called a nonexistent 'read-asset' message.
-            expect(mockRequest).toHaveBeenCalledWith('asset-db', 'query-path', 'db://assets/ScoreUI.prefab');
+            expect(result.data.isValid).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('asset-db', 'query-asset-info', UUID);
+            // #25: `query-asset-meta` has no `url`, so the old code called query-path('').
+            const pathArgs = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'query-path').map((c: any[]) => c[2]);
+            expect(pathArgs).not.toContain('');
+            expect(pathArgs).not.toContain(undefined);
             const calledMessages = mockRequest.mock.calls.map((c: any[]) => c[1]);
             expect(calledMessages).not.toContain('read-asset');
 
             fs.unlinkSync(tmpFile);
         });
 
-        it('errors clearly when the file path cannot be resolved on disk', async () => {
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce({ url: 'db://assets/ScoreUI.prefab' }) // query-asset-meta
-                .mockResolvedValueOnce(null); // query-path returns nothing
+        it('never sends an empty string to query-path even when the info record omits file', async () => {
+            const tmpFile = writePrefab([{ __type__: 'cc.Prefab' }, { __type__: 'cc.Node' }]);
+            const mockRequest = routeMessages({
+                'query-asset-info': () => assetInfo(undefined),
+                'query-path': (arg: string) => {
+                    // Mirrors the editor: an empty argument is rejected outright.
+                    if (!arg) throw new Error('parameter error');
+                    return tmpFile;
+                },
+            });
 
-            const result = await tool.execute('validate', { uuid: 'some-uuid' });
+            const result = await tool.execute('validate', { uuid: UUID });
+
+            expect(result.success).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('asset-db', 'query-path', URL);
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('names the failing stage instead of collapsing to a bare parameter error', async () => {
+            routeMessages({
+                'query-asset-info': () => { throw new Error('parameter error'); },
+            });
+
+            const result = await tool.execute('validate', { uuid: UUID });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/query-asset-info/i);
+            expect(result.error).toContain(UUID);
+        });
+
+        it('errors clearly when the file path cannot be resolved on disk', async () => {
+            routeMessages({
+                'query-asset-info': () => assetInfo(undefined),
+                'query-path': () => null,
+            });
+
+            const result = await tool.execute('validate', { uuid: UUID });
             expect(result.success).toBe(false);
             expect(result.error).toMatch(/could not resolve prefab file path/i);
         });
 
-        it('reports a parse error on malformed prefab JSON', async () => {
-            const tmpFile = path.join(os.tmpdir(), `t1k-prefab-bad-${process.pid}-${Date.now()}.prefab`);
-            fs.writeFileSync(tmpFile, 'not-json{', 'utf-8');
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce({ url: 'db://assets/Bad.prefab' })
-                .mockResolvedValueOnce(tmpFile);
+        it('reports the asset as missing when the db does not know the uuid', async () => {
+            routeMessages({ 'query-asset-info': () => null });
 
-            const result = await tool.execute('validate', { uuid: 'bad-uuid' });
+            const result = await tool.execute('validate', { uuid: UUID });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/not found in the asset db/i);
+        });
+
+        it('reports a parse error on malformed prefab JSON', async () => {
+            const tmpFile = writePrefab('not-json{');
+            routeMessages({ 'query-asset-info': () => assetInfo(tmpFile) });
+
+            const result = await tool.execute('validate', { uuid: UUID });
             expect(result.success).toBe(false);
             expect(result.error).toMatch(/cannot parse json/i);
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('get_info returns the real url and name, not empty strings off the meta record', async () => {
+            const tmpFile = writePrefab([{ __type__: 'cc.Prefab' }]);
+            routeMessages({
+                'query-asset-info': () => assetInfo(tmpFile),
+                'query-asset-meta': () => PREFAB_META,
+            });
+
+            const result = await tool.execute('get_info', { uuid: UUID });
+
+            expect(result.success).toBe(true);
+            expect(result.data.path).toBe(URL);
+            expect(result.data.folder).toBe('db://assets');
+            expect(result.data.name).toBe('ScoreUI.prefab');
 
             fs.unlinkSync(tmpFile);
         });
@@ -100,10 +198,9 @@ describe('ManagePrefab', () => {
             const tmpFile = writePrefabFile();
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
-                .mockResolvedValueOnce(nodeDump)                          // query-node
-                .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab' }) // query-asset-meta
-                .mockResolvedValueOnce(tmpFile)                           // query-path
-                .mockImplementationOnce(async () => {                     // apply-prefab
+                .mockResolvedValueOnce(nodeDump)                                         // query-node
+                .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab', file: tmpFile }) // query-asset-info
+                .mockImplementationOnce(async () => {                                    // apply-prefab
                     fs.writeFileSync(tmpFile, JSON.stringify([{ __type__: 'cc.Prefab', v: 2 }]), 'utf-8');
                     const future = Date.now() + 5000;
                     fs.utimesSync(tmpFile, new Date(future), new Date(future));
@@ -114,6 +211,9 @@ describe('ManagePrefab', () => {
 
             expect(result.success).toBe(true);
             expect(mockRequest).toHaveBeenCalledWith('scene', 'apply-prefab', ROOT_UUID);
+            // #25: the path used to resolve to null for every asset, so the write check
+            // was permanently 'unverified' and every apply reported success.
+            expect(result.data.persisted).toBe(true);
             // The bug: the old code sent an object, which resolved without writing anything.
             expect(mockRequest).not.toHaveBeenCalledWith('scene', 'apply-prefab', { node: 'child-uuid-9999' });
 
@@ -138,8 +238,7 @@ describe('ManagePrefab', () => {
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
                 .mockResolvedValueOnce(nodeDump)
-                .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab' })
-                .mockResolvedValueOnce(tmpFile)
+                .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab', file: tmpFile })
                 .mockResolvedValueOnce(undefined); // resolves, writes nothing — the #12 symptom
 
             const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
