@@ -118,10 +118,44 @@ export class ManageScene extends BaseActionTool {
         });
     }
 
+    /**
+     * `scene:save-scene` resolves to a `boolean` (per the shipped 3.8.7 message types,
+     * `node_modules/@cocos/creator-types/editor/packages/scene/@types/message.d.ts`),
+     * not `void` — the old code discarded that result and reported success unconditionally
+     * once the promise settled, with no verification and no `.catch` for a rejected save.
+     * A `false` result is now treated as a failed save (#6).
+     *
+     * A resolved `true` still does not guarantee every pending edit was captured — two
+     * mutating calls issued concurrently/batched (rather than awaited sequentially) can
+     * race with the save, per #6's own reproduction. `scene:query-dirty` (already used by
+     * `manage_scene_query`) is checked immediately after: a scene still reporting dirty
+     * right after a "successful" save is direct evidence something did not make it into
+     * that save, and is now surfaced as an actionable failure instead of silent success.
+     */
     private async saveScene(): Promise<ActionToolResult> {
         return new Promise((resolve) => {
-            Editor.Message.request('scene', 'save-scene').then(() => {
-                resolve(successResult(null, 'Scene saved successfully'));
+            (Editor.Message.request as any)('scene', 'save-scene').then((saved: boolean) => {
+                if (saved === false) {
+                    resolve(errorResult('scene:save-scene returned false — the editor rejected the save. Nothing was written.'));
+                    return;
+                }
+                Editor.Message.request('scene', 'query-dirty').then((dirty: boolean) => {
+                    if (dirty === true) {
+                        resolve(errorResult(
+                            'save-scene reported success, but the scene is still dirty immediately afterward — ' +
+                            'a pending edit was not captured in this save. This typically means a mutating call ' +
+                            '(manage_node/manage_component/etc.) was issued concurrently or batched with this save ' +
+                            'instead of awaited first; issue calls sequentially and retry save.'
+                        ));
+                        return;
+                    }
+                    resolve(successResult({ dirty }, 'Scene saved successfully (verified not dirty)'));
+                }).catch(() => {
+                    // Dirty-state verification is best-effort — save-scene itself already
+                    // reported true, so an unreadable dirty check must not turn that into
+                    // a failure.
+                    resolve(successResult(null, 'Scene saved successfully (dirty state unverifiable)'));
+                });
             }).catch((err: Error) => {
                 resolve(errorResult(err.message));
             });
