@@ -258,6 +258,103 @@ describe('ManagePrefab', () => {
         });
     });
 
+    describe('update action (#21 — apply-prefab does not remove deleted children)', () => {
+        const ROOT_UUID = 'root-uuid-5555';
+        const ASSET_UUID = 'asset-uuid-6666';
+        const nodeDump = { __prefab__: { rootUuid: ROOT_UUID, uuid: ASSET_UUID } };
+
+        function writePrefabAsset(nodeEntries: any[]): string {
+            const tmpFile = path.join(os.tmpdir(), `t1k-prefab-orphan-${process.pid}-${Math.random().toString(36).slice(2)}.prefab`);
+            fs.writeFileSync(tmpFile, JSON.stringify(nodeEntries), 'utf-8');
+            return tmpFile;
+        }
+
+        /** Routes by message name so this test isn't order-dependent on call sequence. */
+        function routeMessages(handlers: Record<string, (...args: any[]) => any>) {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockReset();
+            mockRequest.mockImplementation(async (_pkg: string, message: string, ...args: any[]) => {
+                const handler = handlers[message];
+                if (!handler) throw new Error(`${_pkg} - ${message} does not exist`);
+                return handler(...args);
+            });
+            return mockRequest;
+        }
+
+        function applyPrefabWriting(tmpFile: string, contents: any[]) {
+            return () => {
+                fs.writeFileSync(tmpFile, JSON.stringify(contents), 'utf-8');
+                const future = Date.now() + 5000;
+                fs.utimesSync(tmpFile, new Date(future), new Date(future));
+                return true;
+            };
+        }
+
+        afterEach(() => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockReset();
+            mockRequest.mockResolvedValue({});
+        });
+
+        it('fails instead of reporting success when the asset still has a child the instance no longer has', async () => {
+            // Instance root has ONE live child (fileId "child-A"); the asset that
+            // apply-prefab just rewrote still contains "child-A" AND a second node
+            // "child-B" the instance no longer has — exactly the #21 symptom.
+            const rewritten = [
+                { __type__: 'cc.Prefab' },
+                { __type__: 'cc.Node', _prefab: { __id__: 2 } },
+                { __type__: 'cc.PrefabInfo', fileId: 'child-A' },
+                { __type__: 'cc.Node', _prefab: { __id__: 4 } },
+                { __type__: 'cc.PrefabInfo', fileId: 'child-B' },
+            ];
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+
+            routeMessages({
+                'query-node': (uuid: string) => {
+                    if (uuid === ROOT_UUID) return { ...nodeDump, __prefab__: { ...nodeDump.__prefab__, fileId: 'root' }, children: ['child-a-uuid'] };
+                    if (uuid === 'child-a-uuid') return { __prefab__: { fileId: 'child-A' }, children: [] };
+                    return null;
+                },
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, rewritten),
+            });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/does not remove deleted children/i);
+            expect(result.error).toContain('child-B');
+            expect(result.error).not.toContain('child-A');
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('succeeds when every asset child is still present in the live instance', async () => {
+            const rewritten = [
+                { __type__: 'cc.Prefab' },
+                { __type__: 'cc.Node', _prefab: { __id__: 2 } },
+                { __type__: 'cc.PrefabInfo', fileId: 'child-A' },
+            ];
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+
+            routeMessages({
+                'query-node': (uuid: string) => {
+                    if (uuid === ROOT_UUID) return { ...nodeDump, __prefab__: { ...nodeDump.__prefab__, fileId: 'root' }, children: ['child-a-uuid'] };
+                    if (uuid === 'child-a-uuid') return { __prefab__: { fileId: 'child-A' }, children: [] };
+                    return null;
+                },
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, rewritten),
+            });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(result.success).toBe(true);
+
+            fs.unlinkSync(tmpFile);
+        });
+    });
+
     describe('revert action (#13 — scene:revert-prefab does not exist in 3.8.7)', () => {
         const ROOT_UUID = 'root-uuid-3333';
         const ASSET_UUID = 'asset-uuid-4444';
