@@ -436,6 +436,25 @@ export class ManagePrefab extends BaseActionTool {
                 };
             }
 
+            // `apply-prefab` writes property overrides but does not remove a child node
+            // deleted from the instance (#21) — the mtime guard above cannot see this,
+            // because a deletion still produces overrides elsewhere, so the file IS
+            // rewritten and `persisted` is genuinely `true`. Compare the live instance's
+            // fileIds against the freshly-written asset's to catch the specific failure
+            // mode the mtime check cannot: a child still present on disk that no longer
+            // exists in the scene.
+            let orphanedFileIds: string[] = [];
+            if (persisted === true && prefabPath) {
+                orphanedFileIds = await this.findOrphanedChildFileIds(rootUuid, prefabPath);
+            }
+            if (orphanedFileIds.length > 0) {
+                return {
+                    success: false,
+                    error: `apply-prefab wrote ${prefabPath}, but it still contains ${orphanedFileIds.length} child node(s) (fileId: ${orphanedFileIds.join(', ')}) that no longer exist in the scene instance. Cocos Creator 3.8.7's apply-prefab does not remove deleted children — delete and recreate the prefab, or remove the stale entries from the asset manually.`,
+                    data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted, orphanedFileIds }
+                };
+            }
+
             return {
                 success: true,
                 message: 'Prefab updated successfully',
@@ -444,6 +463,58 @@ export class ManagePrefab extends BaseActionTool {
         } catch (err: any) {
             return { success: false, error: err.message };
         }
+    }
+
+    /**
+     * Return the fileIds of prefab-tracked nodes present in the written asset but absent
+     * from the live scene instance — children `apply-prefab` failed to remove (#21).
+     * Detection is best-effort: any failure returns no orphans rather than a false
+     * positive, since this check must never mask a genuine success.
+     */
+    private async findOrphanedChildFileIds(rootUuid: string, prefabPath: string): Promise<string[]> {
+        try {
+            const liveFileIds = await this.collectInstanceFileIds(rootUuid);
+            if (liveFileIds.size === 0) return [];
+            const assetData = JSON.parse(fs.readFileSync(prefabPath, 'utf-8'));
+            if (!Array.isArray(assetData)) return [];
+            const assetFileIds = this.collectAssetNodeFileIds(assetData);
+            return [...assetFileIds].filter(id => !liveFileIds.has(id));
+        } catch {
+            return [];
+        }
+    }
+
+    /** Walk a live prefab-instance subtree and collect the `__prefab__.fileId` of every node. */
+    private async collectInstanceFileIds(rootUuid: string): Promise<Set<string>> {
+        const fileIds = new Set<string>();
+        const visit = async (uuid: string): Promise<void> => {
+            let nodeData: any;
+            try {
+                nodeData = await Editor.Message.request('scene', 'query-node', uuid);
+            } catch {
+                return;
+            }
+            if (!nodeData) return;
+            const fileId = nodeData.__prefab__?.fileId;
+            if (typeof fileId === 'string' && fileId) fileIds.add(fileId);
+            const children: string[] = Array.isArray(nodeData.children) ? nodeData.children : [];
+            for (const childUuid of children) await visit(childUuid);
+        };
+        await visit(rootUuid);
+        return fileIds;
+    }
+
+    /** Extract every `cc.Node` entry's fileId from a written `.prefab` asset's JSON array. */
+    private collectAssetNodeFileIds(prefabData: any[]): Set<string> {
+        const fileIds = new Set<string>();
+        for (const entry of prefabData) {
+            if (!entry || entry.__type__ !== 'cc.Node') continue;
+            const prefabInfoIndex = entry._prefab?.__id__;
+            if (prefabInfoIndex === undefined) continue;
+            const fileId = prefabData[prefabInfoIndex]?.fileId;
+            if (typeof fileId === 'string' && fileId) fileIds.add(fileId);
+        }
+        return fileIds;
     }
 
     private async getPrefabInfoByUuid(uuid: string): Promise<any> {
