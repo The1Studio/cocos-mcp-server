@@ -8,6 +8,85 @@
  * - Saving and re-importing asset files via asset-db
  * - Linking scene nodes to newly created prefab assets
  */
+import * as fs from 'fs';
+import { resolveAsset } from '../utils/asset-path';
+import { extractComponentPropertyDump } from './manage-component-property-helpers';
+
+/**
+ * A dump entry is a property descriptor when it wraps a `value` and carries at least one
+ * editor annotation. Deliberately looser than the inspector-side
+ * `isValidPropertyDescriptor`, which rejects descriptors whose fields are all primitives
+ * (`{ name, value: 60, type: 'Number' }`) because it is guarding a different case.
+ */
+function isPropertyDescriptor(entry: any): boolean {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    if (!Object.prototype.hasOwnProperty.call(entry, 'value')) return false;
+    return ['name', 'type', 'displayName', 'readonly'].some(k => Object.prototype.hasOwnProperty.call(entry, k));
+}
+
+/** Editor-only dump entries that have no serialized counterpart in a .prefab file. */
+const DUMP_KEYS_NOT_SERIALIZED = new Set([
+    'node', 'enabled', '__type__', 'uuid', 'name', '__scriptAsset',
+    '_objFlags', '_name', '_id', '_enabled', '__prefab', '__editorExtras__'
+]);
+
+/** The envelope every serialized component carries even when it holds no properties. */
+const BASE_COMPONENT_KEYS = new Set([
+    '__type__', '_name', '_objFlags', '__editorExtras__', 'node', '_enabled', '__prefab', '_id'
+]);
+
+/**
+ * Dump keys whose serialized field name differs (accessor-backed engine properties).
+ *
+ * Verified only for these four types — every other engine `cc.*`/`sp.*`/`dragonBones.*`
+ * component falls through to the generic branch below, which emits the dump key
+ * VERBATIM. For most engine types the dump key already matches the serialized key
+ * (e.g. `cc.ParticleSystem2D`'s `emissionRate`), but an accessor-backed field on a type
+ * not listed here would serialize under the WRONG key rather than being dropped — a
+ * known, undetectable-without-a-live-editor limitation of this fix. Extend this table
+ * as specific mismatches are confirmed against a running Cocos Creator 3.8.7 instance.
+ */
+const DUMP_KEY_RENAMES: Record<string, Record<string, string>> = {
+    'cc.UITransform': { contentSize: '_contentSize', anchorPoint: '_anchorPoint' },
+    'cc.Sprite': { spriteFrame: '_spriteFrame', type: '_type', sizeMode: '_sizeMode', fillType: '_fillType' },
+    'cc.Label': { string: '_string', fontSize: '_fontSize', lineHeight: '_lineHeight', overflow: '_overflow' },
+    'cc.Button': { target: '_target', interactable: '_interactable', transition: '_transition' },
+};
+
+/**
+ * Gap-fillers, applied only to keys the dump did not supply. These are engine defaults —
+ * never an override of a captured value.
+ */
+const COMPONENT_DEFAULTS: Record<string, Record<string, any>> = {
+    'cc.UITransform': {
+        _contentSize: { "__type__": "cc.Size", "width": 100, "height": 100 },
+        _anchorPoint: { "__type__": "cc.Vec2", "x": 0.5, "y": 0.5 },
+    },
+    'cc.Sprite': {
+        _spriteFrame: null, _type: 0, _fillType: 0, _sizeMode: 1,
+        _fillCenter: { "__type__": "cc.Vec2", "x": 0, "y": 0 },
+        _fillStart: 0, _fillRange: 0, _isTrimmedMode: true, _useGrayscale: false,
+        _atlas: null,
+    },
+    'cc.Button': {
+        _interactable: true, _transition: 3,
+        _normalColor: { "__type__": "cc.Color", "r": 255, "g": 255, "b": 255, "a": 255 },
+        _hoverColor: { "__type__": "cc.Color", "r": 211, "g": 211, "b": 211, "a": 255 },
+        _pressedColor: { "__type__": "cc.Color", "r": 255, "g": 255, "b": 255, "a": 255 },
+        _disabledColor: { "__type__": "cc.Color", "r": 124, "g": 124, "b": 124, "a": 255 },
+        _normalSprite: null, _hoverSprite: null, _pressedSprite: null, _disabledSprite: null,
+        _duration: 0.1, _zoomScale: 1.2, _clickEvents: [],
+    },
+    'cc.Label': {
+        _string: "Label", _horizontalAlign: 1, _verticalAlign: 1,
+        _actualFontSize: 20, _fontSize: 20, _fontFamily: "Arial",
+        _lineHeight: 25, _overflow: 0, _enableWrapText: true,
+        _font: null, _isSystemFontUsed: true, _spacingX: 0,
+        _isItalic: false, _isBold: false, _isUnderline: false,
+        _underlineHeight: 2, _cacheMode: 0,
+    },
+};
+
 export class PrefabCreationService {
 
     async createPrefabWithAssetDB(nodeUuid: string, savePath: string, prefabName: string, includeChildren: boolean, includeComponents: boolean): Promise<any> {
@@ -26,6 +105,21 @@ export class PrefabCreationService {
             await this.updateAssetWithAssetDB(savePath, JSON.stringify(prefabContent, null, 2));
             await this.createMetaWithAssetDB(savePath, this.createStandardMetaContent(prefabName, actualPrefabUuid));
             await this.reimportAssetWithAssetDB(savePath);
+
+            // Read the asset back before reporting success. Components that were
+            // configured in the scene but serialized to a bare envelope are a silent
+            // data loss the caller cannot otherwise detect (#28).
+            const readBack = await this.readBackPrefab(savePath, prefabContent);
+            const lost = this.findComponentsThatLostProperties(readBack.data, nodeData);
+            if (lost.length > 0) {
+                return {
+                    success: false,
+                    fatal: true,
+                    error: `Prefab written to ${savePath}, but these components serialized with no properties: ${lost.join(', ')}. The scene values were not captured — do not use this prefab.`,
+                    data: { prefabUuid: actualPrefabUuid, prefabPath: savePath, nodeUuid, prefabName, componentsWithoutProperties: lost, verifiedFrom: readBack.source }
+                };
+            }
+
             const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, actualPrefabUuid, savePath);
 
             return {
@@ -33,6 +127,7 @@ export class PrefabCreationService {
                 data: {
                     prefabUuid: actualPrefabUuid, prefabPath: savePath, nodeUuid, prefabName,
                     convertedToPrefabInstance: convertResult.success,
+                    propertiesVerifiedFrom: readBack.source,
                     message: convertResult.success ? 'Prefab created and node converted' : 'Prefab created, node conversion failed'
                 }
             };
@@ -59,6 +154,15 @@ export class PrefabCreationService {
             const saveResult = await this.savePrefabWithMeta(prefabPath, prefabJsonData, this.createStandardMetaContent(prefabName, prefabUuid));
 
             if (saveResult.success) {
+                const lost = this.findComponentsThatLostProperties(prefabJsonData, nodeData);
+                if (lost.length > 0) {
+                    return {
+                        success: false,
+                        fatal: true,
+                        error: `Prefab written to ${prefabPath}, but these components serialized with no properties: ${lost.join(', ')}. The scene values were not captured — do not use this prefab.`,
+                        data: { prefabUuid, prefabPath, nodeUuid, prefabName, componentsWithoutProperties: lost }
+                    };
+                }
                 const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, prefabPath, prefabUuid);
                 return {
                     success: true,
@@ -115,10 +219,15 @@ export class PrefabCreationService {
                 if (nodeData.rotation) node.rotation = nodeData.rotation;
                 if (nodeData.scale) node.scale = nodeData.scale;
                 if (nodeData.__comps__) {
+                    // `properties` carries the live property dump through to serialization.
+                    // Reducing each component to type/uuid/enabled discarded every configured
+                    // value before it could be written, so `action=create` saved engine
+                    // defaults for every component type (#28).
                     node.components = nodeData.__comps__.map((comp: any) => ({
                         type: comp.__type__ || comp.cid || comp.type || 'Unknown',
                         uuid: comp.uuid?.value || comp.uuid || null,
-                        enabled: comp.enabled !== undefined ? comp.enabled : true
+                        enabled: comp.enabled !== undefined ? comp.enabled : true,
+                        properties: extractComponentPropertyDump(comp)
                     }));
                     console.log(`Node ${node.uuid} enhanced with ${node.components.length} components (incl. script types)`);
                 }
@@ -260,6 +369,15 @@ export class PrefabCreationService {
         };
     }
 
+    /**
+     * Serialize one component.
+     *
+     * The captured dump is the source of truth for every component type. The per-type
+     * tables below only fill in keys the dump did not carry — they used to run *instead*
+     * of the dump, which silently wrote engine defaults for `cc.UITransform`,
+     * `cc.Sprite`, `cc.Button` and `cc.Label`, and wrote nothing at all for every other
+     * type (#28).
+     */
     private createComponentObject(componentData: any, nodeIndex: number, context?: any): any {
         const componentType = componentData.type || componentData.__type__ || 'cc.Component';
         const enabled = componentData.enabled !== undefined ? componentData.enabled : true;
@@ -268,49 +386,23 @@ export class PrefabCreationService {
             "node": { "__id__": nodeIndex }, "_enabled": enabled, "__prefab": null
         };
 
-        if (componentType === 'cc.UITransform') {
-            const contentSize = componentData.properties?.contentSize?.value || { width: 100, height: 100 };
-            const anchorPoint = componentData.properties?.anchorPoint?.value || { x: 0.5, y: 0.5 };
-            component._contentSize = { "__type__": "cc.Size", "width": contentSize.width, "height": contentSize.height };
-            component._anchorPoint = { "__type__": "cc.Vec2", "x": anchorPoint.x, "y": anchorPoint.y };
-        } else if (componentType === 'cc.Sprite') {
-            const spriteFrameProp = componentData.properties?._spriteFrame || componentData.properties?.spriteFrame;
-            component._spriteFrame = spriteFrameProp ? this.processComponentProperty(spriteFrameProp, context) : null;
-            component._type = componentData.properties?._type?.value ?? 0;
-            component._fillType = componentData.properties?._fillType?.value ?? 0;
-            component._sizeMode = componentData.properties?._sizeMode?.value ?? 1;
-            component._fillCenter = { "__type__": "cc.Vec2", "x": 0, "y": 0 };
-            component._fillStart = componentData.properties?._fillStart?.value ?? 0;
-            component._fillRange = componentData.properties?._fillRange?.value ?? 0;
-            component._isTrimmedMode = componentData.properties?._isTrimmedMode?.value ?? true;
-            component._useGrayscale = componentData.properties?._useGrayscale?.value ?? false;
-            component._atlas = null; component._id = "";
-        } else if (componentType === 'cc.Button') {
-            component._interactable = true; component._transition = 3;
-            component._normalColor = { "__type__": "cc.Color", "r": 255, "g": 255, "b": 255, "a": 255 };
-            component._hoverColor = { "__type__": "cc.Color", "r": 211, "g": 211, "b": 211, "a": 255 };
-            component._pressedColor = { "__type__": "cc.Color", "r": 255, "g": 255, "b": 255, "a": 255 };
-            component._disabledColor = { "__type__": "cc.Color", "r": 124, "g": 124, "b": 124, "a": 255 };
-            component._normalSprite = null; component._hoverSprite = null;
-            component._pressedSprite = null; component._disabledSprite = null;
-            component._duration = 0.1; component._zoomScale = 1.2;
-            const targetProp = componentData.properties?._target || componentData.properties?.target;
-            component._target = targetProp ? this.processComponentProperty(targetProp, context) : { "__id__": nodeIndex };
-            component._clickEvents = []; component._id = "";
-        } else if (componentType === 'cc.Label') {
-            component._string = componentData.properties?._string?.value || "Label";
-            component._horizontalAlign = 1; component._verticalAlign = 1;
-            component._actualFontSize = 20; component._fontSize = 20; component._fontFamily = "Arial";
-            component._lineHeight = 25; component._overflow = 0; component._enableWrapText = true;
-            component._font = null; component._isSystemFontUsed = true; component._spacingX = 0;
-            component._isItalic = false; component._isBold = false; component._isUnderline = false;
-            component._underlineHeight = 2; component._cacheMode = 0; component._id = "";
-        } else if (componentData.properties) {
-            for (const [key, value] of Object.entries(componentData.properties)) {
-                if (['node', 'enabled', '__type__', 'uuid', 'name', '__scriptAsset', '_objFlags'].includes(key)) continue;
-                const propValue = this.processComponentProperty(value, context);
-                if (propValue !== undefined) component[key] = propValue;
+        const properties = componentData.properties || {};
+        const renames = DUMP_KEY_RENAMES[componentType] || {};
+
+        for (const [key, value] of Object.entries(properties)) {
+            if (DUMP_KEYS_NOT_SERIALIZED.has(key)) continue;
+            const propValue = this.processComponentProperty(value, context);
+            if (propValue !== undefined) component[renames[key] || key] = propValue;
+        }
+
+        for (const [key, fallback] of Object.entries(COMPONENT_DEFAULTS[componentType] || {})) {
+            if (!Object.prototype.hasOwnProperty.call(component, key)) {
+                component[key] = typeof fallback === 'object' && fallback !== null ? JSON.parse(JSON.stringify(fallback)) : fallback;
             }
+        }
+        // A button with no captured target points at its own node, matching editor behaviour.
+        if (componentType === 'cc.Button' && component._target === undefined) {
+            component._target = { "__id__": nodeIndex };
         }
 
         // Ensure _id is last (matches engine serialization order)
@@ -318,6 +410,56 @@ export class PrefabCreationService {
         delete component._id;
         component._id = _id;
         return component;
+    }
+
+    /**
+     * Count the dump entries that would actually be serialized, so the post-write check
+     * only demands properties for components that had some.
+     */
+    private countSerializableProps(properties: any): number {
+        if (!properties || typeof properties !== 'object') return 0;
+        return Object.keys(properties).filter(k => !DUMP_KEYS_NOT_SERIALIZED.has(k)).length;
+    }
+
+    /**
+     * Report component types that carried live properties in the scene but serialized to
+     * nothing but the base envelope. `action=create` previously reported success in
+     * exactly that state (#28).
+     */
+    private findComponentsThatLostProperties(prefabData: any[], nodeData: any): string[] {
+        const expected = new Set<string>();
+        const walk = (node: any) => {
+            if (!node) return;
+            for (const comp of (node.components || [])) {
+                if (this.countSerializableProps(comp?.properties) > 0) {
+                    expected.add(comp.type || comp.__type__ || 'Unknown');
+                }
+            }
+            for (const child of (node.children || [])) walk(child);
+        };
+        walk(nodeData);
+        if (expected.size === 0) return [];
+
+        const populated = new Set<string>();
+        for (const entry of prefabData) {
+            if (!entry || typeof entry !== 'object' || !expected.has(entry.__type__)) continue;
+            if (Object.keys(entry).some(key => !BASE_COMPONENT_KEYS.has(key))) populated.add(entry.__type__);
+        }
+        return [...expected].filter(type => !populated.has(type));
+    }
+
+    /** Re-read the written prefab; falls back to the in-memory content when the path is unresolvable. */
+    private async readBackPrefab(savePath: string, fallback: any[]): Promise<{ data: any[]; source: 'disk' | 'in-memory' }> {
+        try {
+            const resolved = await resolveAsset(savePath);
+            if (resolved.filePath) {
+                const parsed = JSON.parse(fs.readFileSync(resolved.filePath, 'utf-8'));
+                if (Array.isArray(parsed)) return { data: parsed, source: 'disk' };
+            }
+        } catch {
+            // fall through to the in-memory content
+        }
+        return { data: fallback, source: 'in-memory' };
     }
 
     /**
@@ -379,9 +521,30 @@ export class PrefabCreationService {
             return value.map((item: any) => item?.value !== undefined ? item.value : item);
         }
 
+        // Nested CCClass group: the dump nests another descriptor map under `value`.
+        // Serializing it verbatim would write editor descriptors ({name, value, type})
+        // into the asset instead of the values themselves.
+        if (value && typeof value === 'object' && !Array.isArray(value) && this.isNestedPropertyMap(value)) {
+            const nested: any = type ? { "__type__": type } : {};
+            for (const [key, entry] of Object.entries(value)) {
+                if (DUMP_KEYS_NOT_SERIALIZED.has(key)) continue;
+                const nestedValue = this.processComponentProperty(entry, context);
+                if (nestedValue !== undefined) nested[key] = nestedValue;
+            }
+            return nested;
+        }
+
         // Other complex typed objects
         if (value && typeof value === 'object' && type?.startsWith('cc.')) return { "__type__": type, ...value };
         return value;
+    }
+
+    /** True when every entry is an object and at least one is a Cocos property descriptor. */
+    private isNestedPropertyMap(value: Record<string, any>): boolean {
+        const entries = Object.entries(value);
+        if (entries.length === 0) return false;
+        return entries.every(([, entry]) => entry !== null && typeof entry === 'object')
+            && entries.some(([, entry]) => isPropertyDescriptor(entry));
     }
 
     // ===== Asset DB operations =====

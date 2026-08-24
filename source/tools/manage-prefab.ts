@@ -322,6 +322,9 @@ export class ManagePrefab extends BaseActionTool {
                 args.nodeUuid, fullPath, prefabName, includeChildren, includeComponents
             );
             if (assetDbResult.success) return assetDbResult;
+            // A defective write is a result, not an unavailable path — retrying through
+            // the fallback chain would re-serialize the same loss and mask it (#28).
+            if (assetDbResult.fatal) return assetDbResult;
 
             const nativeResult = this.creationService.createPrefabNativeStub();
             if (nativeResult.success) return nativeResult;
