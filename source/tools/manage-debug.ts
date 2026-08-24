@@ -103,33 +103,12 @@ export class ManageDebug extends BaseActionTool {
         required: ['action'],
     };
 
-    // State preserved from DebugTools
-    private consoleMessages: ConsoleMessage[] = [];
-    private readonly maxMessages = 1000;
-
-    constructor() {
-        super();
-        this.setupConsoleCapture();
-    }
-
-    private setupConsoleCapture(): void {
-        // Intercept Editor console messages
-        // Note: Editor.Message.addBroadcastListener may not be available in all versions
-        // This is a placeholder for console capture implementation
-        console.log('Console capture setup - implementation depends on Editor API availability');
-    }
-
-    private addConsoleMessage(message: any): void {
-        this.consoleMessages.push({
-            timestamp: new Date().toISOString(),
-            ...message
-        });
-
-        // Keep only latest messages
-        if (this.consoleMessages.length > this.maxMessages) {
-            this.consoleMessages.shift();
-        }
-    }
+    /** Lines this file's own tail-read has ever managed to match against. */
+    private static readonly LOG_TYPE_PATTERNS: Array<{ type: ConsoleMessage['type']; re: RegExp }> = [
+        { type: 'error', re: /\[error\]|(?:^|\s)error:/i },
+        { type: 'warn', re: /\[warn(?:ing)?\]|(?:^|\s)warn(?:ing)?:/i },
+        { type: 'info', re: /\[info\]|(?:^|\s)info:/i },
+    ];
 
     protected actionHandlers: Record<string, (args: Record<string, any>) => Promise<ActionToolResult>> = {
         get_console_logs: (args) => this.getConsoleLogs(
@@ -161,8 +140,32 @@ export class ManageDebug extends BaseActionTool {
         ),
     };
 
+    /**
+     * `get_console_logs` used to read `this.consoleMessages`, a buffer nothing ever
+     * wrote to: `setupConsoleCapture` was an explicit placeholder, and `addConsoleMessage`
+     * — the only method that appended to it — had zero call sites. The buffer was
+     * therefore permanently empty and the action always reported `total: 0`, indistinguishable
+     * from a genuinely quiet editor (#51).
+     *
+     * `temp/logs/project.log` is the editor's own console output and is already read
+     * reliably by `get_project_logs`/`search_project_logs` — reuse that same tail-read
+     * instead of a broadcast-listener capture this repo cannot verify against a live
+     * 3.8.7 editor.
+     */
     private async getConsoleLogs(limit: number, filter: string): Promise<ActionToolResult> {
-        let logs = this.consoleMessages;
+        let logFilePath: string;
+        try {
+            logFilePath = this.resolveLogFilePath();
+        } catch (err: any) {
+            return errorResult(`Failed to read project logs: ${err.message}`);
+        }
+
+        const rawLines = this.readLogFileTail(logFilePath).split('\n').filter(line => line.trim() !== '');
+        let logs: ConsoleMessage[] = rawLines.map(line => ({
+            timestamp: new Date().toISOString(),
+            type: this.classifyLogLine(line),
+            message: line
+        }));
 
         if (filter !== 'all') {
             logs = logs.filter(log => log.type === filter);
@@ -173,17 +176,24 @@ export class ManageDebug extends BaseActionTool {
         return successResult({
             total: logs.length,
             returned: recentLogs.length,
-            logs: recentLogs
+            logs: recentLogs,
+            logFilePath
         });
     }
 
-    private async clearConsole(): Promise<ActionToolResult> {
-        this.consoleMessages = [];
+    /** Classify a project.log line by the same bracket/prefix convention get_project_logs already filters on. */
+    private classifyLogLine(line: string): ConsoleMessage['type'] {
+        for (const { type, re } of ManageDebug.LOG_TYPE_PATTERNS) {
+            if (re.test(line)) return type;
+        }
+        return 'log';
+    }
 
+    private async clearConsole(): Promise<ActionToolResult> {
         try {
             // Note: Editor.Message.send may not return a promise in all versions
             Editor.Message.send('console', 'clear');
-            return successResult(null, 'Console cleared successfully');
+            return successResult(null, 'Console cleared successfully. get_console_logs reads temp/logs/project.log directly, which this does not truncate.');
         } catch (err: any) {
             return errorResult(err.message);
         }

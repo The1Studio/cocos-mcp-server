@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { ManageDebug } from '../tools/manage-debug';
 
 /** Access private method via cast */
@@ -79,11 +82,60 @@ describe('ManageDebug.execute action routing', () => {
         expect(result.success).toBe(false);
     });
 
-    it('get_console_logs returns empty logs on fresh instance', async () => {
+    it('errors clearly when no project log file exists, instead of a fake-empty success', async () => {
         const result = await tool.execute('get_console_logs', { limit: 10 });
-        expect(result.success).toBe(true);
-        expect(result.data.logs).toEqual([]);
-        expect(result.data.total).toBe(0);
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/project log file not found/i);
+    });
+
+    describe('get_console_logs reads temp/logs/project.log (#51)', () => {
+        const logDir = path.join(os.tmpdir(), 'temp', 'logs');
+        const logFile = path.join(logDir, 'project.log');
+
+        beforeEach(() => {
+            fs.mkdirSync(logDir, { recursive: true });
+        });
+
+        afterEach(() => {
+            try { fs.unlinkSync(logFile); } catch { /* already gone */ }
+        });
+
+        it('returns real log lines classified by type — the buffer nothing ever wrote to (#51) reported total:0 here', async () => {
+            fs.writeFileSync(logFile, [
+                '[Scene] Missing class: RollicTopBannerView',
+                'error: Script "RollicTopBannerView" attached to "RollicTopBanner" is missing or invalid',
+                'warn: deprecated API used',
+                'normal log line',
+            ].join('\n'), 'utf-8');
+
+            const result = await tool.execute('get_console_logs', { limit: 10 });
+
+            expect(result.success).toBe(true);
+            expect(result.data.total).toBe(4);
+            expect(result.data.logs.some((l: any) => l.type === 'error')).toBe(true);
+            expect(result.data.logs.some((l: any) => l.type === 'warn')).toBe(true);
+        });
+
+        it('filters by type', async () => {
+            fs.writeFileSync(logFile, ['error: boom', 'warn: careful', 'plain line'].join('\n'), 'utf-8');
+
+            const result = await tool.execute('get_console_logs', { limit: 10, filter: 'error' });
+
+            expect(result.success).toBe(true);
+            expect(result.data.total).toBe(1);
+            expect(result.data.logs[0].type).toBe('error');
+        });
+
+        it('respects limit, keeping the most recent lines', async () => {
+            fs.writeFileSync(logFile, ['line 1', 'line 2', 'line 3'].join('\n'), 'utf-8');
+
+            const result = await tool.execute('get_console_logs', { limit: 2 });
+
+            expect(result.success).toBe(true);
+            expect(result.data.total).toBe(3);
+            expect(result.data.returned).toBe(2);
+            expect(result.data.logs.map((l: any) => l.message)).toEqual(['line 2', 'line 3']);
+        });
     });
 
     it('execute_script rejects dangerous script via action handler', async () => {
