@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { ActionToolResult, successResult, errorResult, PrefabInfo } from '../types';
 import { BaseActionTool } from './base-action-tool';
 import { normalizeVec3 } from '../utils/normalize';
+import { resolveAsset } from '../utils/asset-path';
 import { PrefabCreationService } from './manage-prefab-creation-service';
 
 export class ManagePrefab extends BaseActionTool {
@@ -361,16 +362,16 @@ export class ManagePrefab extends BaseActionTool {
         };
     }
 
-    /** Resolve a prefab asset's on-disk path, or null when it cannot be determined. */
+    /**
+     * Resolve a prefab asset's on-disk path, or null when it cannot be determined.
+     *
+     * Goes through `query-asset-info`, not `query-asset-meta`: the meta record has no
+     * `url` field, so the old lookup resolved to null for every asset and left the
+     * post-apply write check permanently `unverified` (#25).
+     */
     private async resolvePrefabFilePath(assetUuid?: string): Promise<string | null> {
         if (!assetUuid) return null;
-        try {
-            const meta: any = await Editor.Message.request('asset-db', 'query-asset-meta', assetUuid);
-            if (!meta?.url) return null;
-            return (await Editor.Message.request('asset-db', 'query-path', meta.url)) as string | null;
-        } catch {
-            return null;
-        }
+        return (await resolveAsset(assetUuid)).filePath;
     }
 
     private statMtimeMs(filePath: string | null): number | null {
@@ -443,52 +444,68 @@ export class ManagePrefab extends BaseActionTool {
     }
 
     private async getPrefabInfoByUuid(uuid: string): Promise<any> {
+        // `query-asset-meta` carries no `url`/`name`/timestamps — reading them off the
+        // meta record produced an all-empty PrefabInfo that still reported success (#25).
+        const resolved = await resolveAsset(uuid);
+        if (resolved.error) return { success: false, error: resolved.error };
+        if (!resolved.info) return { success: false, error: `Prefab not found: ${uuid}` };
+
+        const assetInfo = resolved.info;
+        const url: string = assetInfo.url || '';
+        const stats = resolved.filePath ? this.statTimes(resolved.filePath) : null;
+        const info: PrefabInfo = {
+            name: assetInfo.name,
+            uuid: assetInfo.uuid || uuid,
+            path: url,
+            folder: url ? url.substring(0, url.lastIndexOf('/')) : '',
+            createTime: stats?.createTime,
+            modifyTime: stats?.modifyTime
+        };
+        return { success: true, data: { ...info, file: resolved.filePath } };
+    }
+
+    private statTimes(filePath: string): { createTime: string; modifyTime: string } | null {
         try {
-            const metaInfo: any = await Editor.Message.request('asset-db', 'query-asset-meta', uuid);
-            const info: PrefabInfo = {
-                name: metaInfo.name, uuid: metaInfo.uuid, path: metaInfo.url || '',
-                folder: metaInfo.url ? metaInfo.url.substring(0, metaInfo.url.lastIndexOf('/')) : '',
-                createTime: metaInfo.createTime, modifyTime: metaInfo.modifyTime,
-                dependencies: metaInfo.depends || []
-            };
-            return { success: true, data: info };
-        } catch (err: any) {
-            return { success: false, error: err.message };
+            const s = fs.statSync(filePath);
+            return { createTime: s.birthtime.toISOString(), modifyTime: s.mtime.toISOString() };
+        } catch {
+            return null;
         }
     }
 
     private async validatePrefabByUuid(uuid: string): Promise<any> {
+        // Each stage reports itself. The old single outer catch collapsed every failure
+        // into `Error validating prefab: Error: parameter error`, which hid that the
+        // rejected call was `query-path('')` — `query-asset-meta` never returns a `url`
+        // to resolve, so the path lookup was always handed an empty string (#25).
+        const resolved = await resolveAsset(uuid);
+        if (resolved.error) return { success: false, error: `Error validating prefab: ${resolved.error}` };
+        if (!resolved.filePath) return { success: false, error: 'Could not resolve prefab file path on disk' };
+
+        let content: string;
         try {
-            const assetInfo: any = await Editor.Message.request('asset-db', 'query-asset-meta', uuid);
-            if (!assetInfo) return { success: false, error: 'Prefab not found' };
-            const url = assetInfo.url || '';
-            // asset-db has no 'read-asset' message; resolve the db URL to a
-            // filesystem path and read the .prefab file directly (same pattern
-            // as manage-script / manage-animation).
-            const filePath = await Editor.Message.request('asset-db', 'query-path', url) as string | null;
-            if (!filePath) return { success: false, error: 'Could not resolve prefab file path on disk' };
-            try {
-                const content: string = fs.readFileSync(filePath, 'utf-8');
-                try {
-                    const prefabData = JSON.parse(content);
-                    const validationResult = this.creationService.validatePrefabFormat(prefabData);
-                    return {
-                        success: true,
-                        data: {
-                            isValid: validationResult.isValid, issues: validationResult.issues,
-                            nodeCount: validationResult.nodeCount, componentCount: validationResult.componentCount,
-                            message: validationResult.isValid ? 'Prefab format is valid' : 'Prefab format has issues'
-                        }
-                    };
-                } catch {
-                    return { success: false, error: 'Prefab file format error: cannot parse JSON' };
-                }
-            } catch (error: any) {
-                return { success: false, error: `Failed to read prefab file: ${error.message}` };
-            }
+            content = fs.readFileSync(resolved.filePath, 'utf-8');
         } catch (error: any) {
-            return { success: false, error: `Error validating prefab: ${error}` };
+            return { success: false, error: `Failed to read prefab file: ${error.message}` };
         }
+
+        let prefabData: any;
+        try {
+            prefabData = JSON.parse(content);
+        } catch {
+            return { success: false, error: 'Prefab file format error: cannot parse JSON' };
+        }
+
+        const validationResult = this.creationService.validatePrefabFormat(prefabData);
+        return {
+            success: true,
+            data: {
+                isValid: validationResult.isValid, issues: validationResult.issues,
+                nodeCount: validationResult.nodeCount, componentCount: validationResult.componentCount,
+                url: resolved.url, file: resolved.filePath,
+                message: validationResult.isValid ? 'Prefab format is valid' : 'Prefab format has issues'
+            }
+        };
     }
 
     private async duplicatePrefabByUuid(args: { uuid: string; newName?: string; targetDir?: string }): Promise<any> {

@@ -2,6 +2,7 @@ import { BaseActionTool } from './base-action-tool';
 import { ActionToolResult, successResult, errorResult } from '../types';
 import { coerceBool, coerceInt } from '../utils/normalize';
 import { ConsoleMessage, PerformanceStats, ValidationResult, ValidationIssue } from '../types';
+import { collectAssetUuids } from '../utils/asset-refs';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -286,58 +287,151 @@ export class ManageDebug extends BaseActionTool {
         }
     }
 
+    /**
+     * Validate the open scene.
+     *
+     * Each enabled check runs in its own fault boundary. Previously a single failing
+     * check aborted the whole action: Cocos Creator 3.8.7 registers no
+     * `scene:check-missing-assets` message, so the request rejected with
+     * `scene - check-missing-assets does not exist` and `validate_scene` returned an
+     * error instead of a result (#23). An unsupported check is now reported as one
+     * unsupported check, and the missing-asset scan falls back to walking the scene's
+     * own component dumps for unresolvable asset UUIDs.
+     */
     private async validateScene(options: { checkMissingAssets: boolean; checkPerformance: boolean }): Promise<ActionToolResult> {
         const issues: ValidationIssue[] = [];
+        const checks: Record<string, string> = {};
 
+        if (options.checkMissingAssets) {
+            const native = await this.checkMissingAssetsNative();
+            if (native.supported) {
+                checks.missingAssets = 'native';
+                issues.push(...native.issues);
+            } else {
+                const scan = await this.scanMissingAssetReferences();
+                checks.missingAssets = scan.error ? `unsupported: ${scan.error}` : 'fallback-scan';
+                issues.push(...scan.issues);
+            }
+        }
+
+        if (options.checkPerformance) {
+            const perf = await this.checkNodeCount();
+            checks.performance = perf.error ? `unsupported: ${perf.error}` : 'ok';
+            issues.push(...perf.issues);
+        }
+
+        const result: ValidationResult = {
+            valid: issues.filter(i => i.type === 'error').length === 0,
+            issueCount: issues.length,
+            issues
+        };
+        return successResult({ ...result, checks });
+    }
+
+    /** Try the editor's own missing-asset check. 3.8.7 does not register it. */
+    private async checkMissingAssetsNative(): Promise<{ supported: boolean; issues: ValidationIssue[] }> {
         try {
-            // Check for missing assets
-            if (options.checkMissingAssets) {
-                const assetCheck = await Editor.Message.request('scene', 'check-missing-assets');
-                if (assetCheck && assetCheck.missing) {
-                    issues.push({
+            const assetCheck: any = await (Editor.Message.request as any)('scene', 'check-missing-assets');
+            if (assetCheck && Array.isArray(assetCheck.missing)) {
+                return {
+                    supported: true,
+                    issues: assetCheck.missing.length ? [{
                         type: 'error',
                         category: 'assets',
                         message: `Found ${assetCheck.missing.length} missing asset references`,
                         details: assetCheck.missing
-                    });
-                }
+                    }] : []
+                };
             }
-
-            // Check for performance issues
-            if (options.checkPerformance) {
-                const hierarchy = await Editor.Message.request('scene', 'query-hierarchy');
-                const nodeCount = this.countNodes(hierarchy.children);
-
-                if (nodeCount > 1000) {
-                    issues.push({
-                        type: 'warning',
-                        category: 'performance',
-                        message: `High node count: ${nodeCount} nodes (recommended < 1000)`,
-                        suggestion: 'Consider using object pooling or scene optimization'
-                    });
-                }
-            }
-
-            const result: ValidationResult = {
-                valid: issues.length === 0,
-                issueCount: issues.length,
-                issues: issues
-            };
-
-            return successResult(result);
-        } catch (err: any) {
-            return errorResult(err.message);
+            return { supported: false, issues: [] };
+        } catch {
+            return { supported: false, issues: [] };
         }
     }
 
-    private countNodes(nodes: any[]): number {
-        let count = nodes.length;
-        for (const node of nodes) {
-            if (node.children) {
-                count += this.countNodes(node.children);
+    /**
+     * Version-independent fallback: walk the scene's node dumps, collect every asset
+     * UUID referenced by a component property, and report the ones the asset DB cannot
+     * resolve. Same `ValidationIssue` shape as the native path.
+     */
+    private async scanMissingAssetReferences(): Promise<{ issues: ValidationIssue[]; error?: string }> {
+        let rootUuids: string[];
+        try {
+            rootUuids = await this.collectSceneNodeUuids();
+        } catch (err: any) {
+            return { issues: [], error: `cannot enumerate scene nodes (${err?.message || err})` };
+        }
+
+        const referencedBy = new Map<string, Set<string>>();
+        for (const nodeUuid of rootUuids) {
+            let nodeData: any;
+            try {
+                nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
+            } catch {
+                continue;
+            }
+            const nodeName = nodeData?.name?.value ?? nodeData?.name ?? nodeUuid;
+            for (const comp of (nodeData?.__comps__ ?? [])) {
+                const compType = comp.__type__ || comp.cid || comp.type || 'Unknown';
+                for (const uuid of collectAssetUuids(comp.value ?? comp)) {
+                    if (!referencedBy.has(uuid)) referencedBy.set(uuid, new Set());
+                    referencedBy.get(uuid)!.add(`${nodeName} → ${compType}`);
+                }
             }
         }
-        return count;
+
+        const missing: Array<{ uuid: string; referencedBy: string[] }> = [];
+        for (const [uuid, holders] of referencedBy) {
+            let info: any = null;
+            try {
+                info = await Editor.Message.request('asset-db', 'query-asset-info', uuid);
+            } catch {
+                info = null;
+            }
+            if (!info) missing.push({ uuid, referencedBy: [...holders] });
+        }
+
+        if (!missing.length) return { issues: [] };
+        return {
+            issues: [{
+                type: 'error',
+                category: 'assets',
+                message: `Found ${missing.length} missing asset references`,
+                details: missing
+            }]
+        };
+    }
+
+    /** Flatten the scene tree to a list of node UUIDs. */
+    private async collectSceneNodeUuids(): Promise<string[]> {
+        const tree: any = await Editor.Message.request('scene', 'query-node-tree');
+        const roots: any[] = Array.isArray(tree) ? tree : (tree ? [tree] : []);
+        const uuids: string[] = [];
+        const walk = (node: any) => {
+            if (!node) return;
+            if (typeof node.uuid === 'string') uuids.push(node.uuid);
+            for (const child of (node.children ?? [])) walk(child);
+        };
+        roots.forEach(walk);
+        return uuids;
+    }
+
+    private async checkNodeCount(): Promise<{ issues: ValidationIssue[]; error?: string }> {
+        let nodeCount: number;
+        try {
+            nodeCount = (await this.collectSceneNodeUuids()).length;
+        } catch (err: any) {
+            return { issues: [], error: `cannot enumerate scene nodes (${err?.message || err})` };
+        }
+        if (nodeCount <= 1000) return { issues: [] };
+        return {
+            issues: [{
+                type: 'warning',
+                category: 'performance',
+                message: `High node count: ${nodeCount} nodes (recommended < 1000)`,
+                suggestion: 'Consider using object pooling or scene optimization'
+            }]
+        };
     }
 
     private async getEditorInfo(): Promise<ActionToolResult> {
