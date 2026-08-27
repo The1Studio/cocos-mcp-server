@@ -3,6 +3,11 @@ import { ActionToolResult, NodeInfo, successResult, errorResult } from '../types
 import { coerceBool, coerceInt, coerceFloat, normalizeVec3 } from '../utils/normalize';
 import { is2DNode, is2DComponentType, is3DComponentType, normalizeTransformValue, getComponentCategory, getNodePath, searchNodeInTree } from './manage-node-transform-helpers';
 
+/** Longest `awaitNodeCommit` waits for a freshly created node to become queryable. */
+const NODE_COMMIT_TIMEOUT_MS = 2000;
+/** Gap between `scene:query-node` polls while waiting for that commit. */
+const NODE_COMMIT_POLL_MS = 20;
+
 export class ManageNode extends BaseActionTool {
 
     readonly name = 'manage_node';
@@ -242,7 +247,7 @@ export class ManageNode extends BaseActionTool {
 
             if (siblingIndex !== undefined && siblingIndex >= 0 && uuid && targetParentUuid) {
                 try {
-                    await new Promise(r => setTimeout(r, 100));
+                    await this.awaitNodeCommit(uuid);
                     await Editor.Message.request('scene', 'set-parent', {
                         parent: targetParentUuid,
                         uuids: [uuid],
@@ -263,7 +268,7 @@ export class ManageNode extends BaseActionTool {
 
             if (args.components && args.components.length > 0 && uuid) {
                 try {
-                    await new Promise(r => setTimeout(r, 100));
+                    await this.awaitNodeCommit(uuid);
                     for (const componentType of args.components) {
                         try {
                             await Editor.Message.request('scene', 'create-component', {
@@ -282,7 +287,7 @@ export class ManageNode extends BaseActionTool {
 
             if (args.initialTransform && uuid) {
                 try {
-                    await new Promise(r => setTimeout(r, 150));
+                    await this.awaitNodeCommit(uuid);
                     const pos = normalizeVec3(args.initialTransform.position);
                     const rot = normalizeVec3(args.initialTransform.rotation);
                     const scl = normalizeVec3(args.initialTransform.scale);
@@ -335,6 +340,31 @@ export class ManageNode extends BaseActionTool {
 
         } catch (err: any) {
             return errorResult(`Failed to create node: ${err.message}. Args: ${JSON.stringify(args)}`);
+        }
+    }
+
+    /**
+     * `scene:create-node` resolves before the new node is queryable, so the follow-up
+     * set-parent / create-component / initial-transform steps used to wait out a fixed
+     * 100-150ms sleep and then proceed regardless of whether the commit had landed. On a
+     * busy editor it had not, and those edits were silently dropped from the created node
+     * (#6). Poll `scene:query-node` instead: continue as soon as the node is actually
+     * visible, and throw when it never becomes visible so the caller's existing catch
+     * reports a real reason rather than a blind failure further down.
+     */
+    private async awaitNodeCommit(uuid: string): Promise<void> {
+        const deadline = Date.now() + NODE_COMMIT_TIMEOUT_MS;
+        for (;;) {
+            try {
+                const nodeData: any = await Editor.Message.request('scene', 'query-node', uuid);
+                if (nodeData) return;
+            } catch (err) {
+                // query-node rejects while the node is not yet in the graph — keep polling.
+            }
+            if (Date.now() >= deadline) {
+                throw new Error(`Node '${uuid}' was not queryable within ${NODE_COMMIT_TIMEOUT_MS}ms of creation`);
+            }
+            await new Promise(r => setTimeout(r, NODE_COMMIT_POLL_MS));
         }
     }
 

@@ -26,6 +26,8 @@ export class BatchExecute extends BaseActionTool {
     readonly name = 'batch_execute';
     readonly description = 'Execute multiple tool calls sequentially in a single request. Reduces round-trips when building complex scenes. Actions: execute. Max 50 calls per batch. Each call specifies tool name, action, and args. Use stopOnError=false to continue past failures.';
     readonly actions = ['execute'];
+    /** Re-enters the dispatcher for each of its own calls — must not be enqueued (#6). */
+    readonly reentrant = true;
 
     readonly inputSchema = {
         type: 'object',
