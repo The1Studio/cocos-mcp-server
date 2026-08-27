@@ -1,5 +1,6 @@
 import { BaseActionTool } from './base-action-tool';
 import { ActionToolResult, successResult, errorResult } from '../types';
+import { pendingMutationCount } from './mutation-queue';
 
 export class ManageSceneQuery extends BaseActionTool {
     readonly name = 'manage_scene_query';
@@ -97,10 +98,25 @@ export class ManageSceneQuery extends BaseActionTool {
         });
     }
 
+    /**
+     * `scene:query-dirty` only describes edits the editor has already committed. Mutating
+     * tool calls the client issued but that are still queued behind this query have not
+     * reached the editor yet, so proxying the raw flag reported `dirty: false` — "clean" —
+     * for a scene that was about to change, and a caller trusting it skipped the save it
+     * actually needed (#6). Reconcile the flag against the serialization queue and report
+     * both readings so a caller can see *why* the scene is dirty.
+     */
     private async queryDirty(): Promise<ActionToolResult> {
         return new Promise((resolve) => {
-            Editor.Message.request('scene', 'query-dirty').then((dirty: boolean) => {
-                resolve(successResult({ dirty }, dirty ? 'Scene has unsaved changes' : 'Scene is clean'));
+            Editor.Message.request('scene', 'query-dirty').then((editorDirty: boolean) => {
+                const pendingMutations = pendingMutationCount();
+                const dirty = editorDirty === true || pendingMutations > 0;
+                const message = !dirty
+                    ? 'Scene is clean'
+                    : pendingMutations > 0
+                        ? `Scene has ${pendingMutations} tool call(s) still queued — treat as dirty`
+                        : 'Scene has unsaved changes';
+                resolve(successResult({ dirty, editorDirty: editorDirty === true, pendingMutations }, message));
             }).catch((err: Error) => {
                 resolve(errorResult(err.message));
             });

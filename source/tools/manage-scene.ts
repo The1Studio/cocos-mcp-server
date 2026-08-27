@@ -126,11 +126,14 @@ export class ManageScene extends BaseActionTool {
      * A `false` result is now treated as a failed save (#6).
      *
      * A resolved `true` still does not guarantee every pending edit was captured — two
-     * mutating calls issued concurrently/batched (rather than awaited sequentially) can
-     * race with the save, per #6's own reproduction. `scene:query-dirty` (already used by
-     * `manage_scene_query`) is checked immediately after: a scene still reporting dirty
-     * right after a "successful" save is direct evidence something did not make it into
-     * that save, and is now surfaced as an actionable failure instead of silent success.
+     * mutating calls issued concurrently/batched (rather than awaited sequentially) could
+     * race with the save, per #6's own reproduction. That race is now prevented upstream:
+     * every tool call is serialized on one chain (`tools/mutation-queue.ts`), so this save
+     * cannot begin until the mutations ahead of it have settled. `scene:query-dirty`
+     * (already used by `manage_scene_query`) is still checked immediately after as the
+     * backstop: a scene reporting dirty right after a "successful" save is direct evidence
+     * something did not make it into that save, and is surfaced as an actionable failure
+     * instead of silent success.
      */
     private async saveScene(): Promise<ActionToolResult> {
         return new Promise((resolve) => {

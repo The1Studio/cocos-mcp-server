@@ -127,6 +127,13 @@ export interface ActionToolExecutor {
     execute(action: string, args: Record<string, any>): Promise<ActionToolResult>;
     /** List of supported actions */
     readonly actions: string[];
+    /**
+     * Opt out of the global mutation serialization queue (#6). Only for tools that
+     * re-enter the dispatcher themselves (batch_execute) — enqueueing those would
+     * deadlock them behind their own queue slot. Omitted/false means serialized, so a
+     * newly added mutating tool is protected without having to remember to opt in.
+     */
+    readonly reentrant?: boolean;
 }
 
 /** Standardized tool result — replaces ad-hoc ToolResponse */

@@ -46,6 +46,7 @@ import { ManageProfiler } from './tools/manage-profiler';
 import { ManageVideo } from './tools/manage-video';
 import { ManageInput } from './tools/manage-input';
 import { CocosResources } from './resources/cocos-resources';
+import { enqueueMutation } from './tools/mutation-queue';
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB request body limit
 
@@ -196,7 +197,17 @@ export class MCPServer {
                 `Available actions: ${executor.actions.join(', ')}`
             );
         }
-        return await executor.execute(action, restArgs);
+        // #6: tool calls issued concurrently by a client interleave inside the editor, so a
+        // save can run while a `manage_node create` is still committing and silently drop it.
+        // Serializing every call on one chain here — the single dispatch point every tool
+        // call passes through — is what prevents that race; verifying the save afterwards
+        // only detects it. Re-entrant tools run directly: batch_execute calls back into this
+        // method per entry, so enqueueing it would deadlock it behind its own slot, and its
+        // inner calls are each serialized on their own anyway.
+        if (executor.reentrant) {
+            return await executor.execute(action, restArgs);
+        }
+        return await enqueueMutation(() => executor.execute(action, restArgs));
     }
 
     public getAvailableTools(): ToolDefinition[] {
