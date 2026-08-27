@@ -9,7 +9,7 @@ export class ManagePrefab extends BaseActionTool {
     private readonly creationService = new PrefabCreationService();
 
     readonly name = 'manage_prefab';
-    readonly description = 'Manage prefabs in the project. Actions: list=list all prefabs, load=load prefab by path, instantiate=instantiate prefab in scene, create=create prefab from node, update=apply node changes to the prefab asset (verifies the asset was written), revert=revert prefab instance to the asset state (alias of restore), get_info=get prefab details, validate=validate prefab file format, duplicate=duplicate a prefab, restore=restore prefab node using asset (with undo). For update/revert/restore, nodeUuid may be any node in the instance — the instance root is resolved automatically. Prerequisites: project must be open in Cocos Creator.';
+    readonly description = 'Manage prefabs in the project. Actions: list=list all prefabs, load=load prefab by path, instantiate=instantiate prefab in scene, create=create prefab from node, update=apply node changes to the prefab asset (verifies the asset was written, and removes children deleted from the instance that apply-prefab leaves behind), revert=revert prefab instance to the asset state (alias of restore), get_info=get prefab details, validate=validate prefab file format, duplicate=duplicate a prefab, restore=restore prefab node using asset (with undo). For update/revert/restore, nodeUuid may be any node in the instance — the instance root is resolved automatically. Prerequisites: project must be open in Cocos Creator.';
     readonly actions = ['list', 'load', 'instantiate', 'create', 'update', 'revert', 'get_info', 'validate', 'duplicate', 'restore'];
 
     readonly inputSchema = {
@@ -442,23 +442,33 @@ export class ManagePrefab extends BaseActionTool {
             // rewritten and `persisted` is genuinely `true`. Compare the live instance's
             // fileIds against the freshly-written asset's to catch the specific failure
             // mode the mtime check cannot: a child still present on disk that no longer
-            // exists in the scene.
+            // exists in the scene. Anything found is then removed from the asset, since
+            // reporting the stale children is not the same as honouring the deletion.
             let orphanedFileIds: string[] = [];
             if (persisted === true && prefabPath) {
                 orphanedFileIds = await this.findOrphanedChildFileIds(rootUuid, prefabPath);
             }
+            let removedFileIds: string[] = [];
             if (orphanedFileIds.length > 0) {
-                return {
-                    success: false,
-                    error: `apply-prefab wrote ${prefabPath}, but it still contains ${orphanedFileIds.length} child node(s) (fileId: ${orphanedFileIds.join(', ')}) that no longer exist in the scene instance. Cocos Creator 3.8.7's apply-prefab does not remove deleted children — delete and recreate the prefab, or remove the stale entries from the asset manually.`,
-                    data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted, orphanedFileIds }
-                };
+                const removal = await this.removeOrphanedChildrenFromAsset(
+                    prefabPath as string, orphanedFileIds, rootUuid, assetUuid
+                );
+                if (!removal.success) {
+                    return {
+                        success: false,
+                        error: `apply-prefab wrote ${prefabPath}, but it still contains ${orphanedFileIds.length} child node(s) (fileId: ${orphanedFileIds.join(', ')}) that no longer exist in the scene instance. Cocos Creator 3.8.7's apply-prefab does not remove deleted children, and removing them here was declined: ${removal.error}. The asset is byte-for-byte unchanged — delete and recreate the prefab, or remove the stale entries manually.`,
+                        data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted, orphanedFileIds }
+                    };
+                }
+                removedFileIds = orphanedFileIds;
             }
 
             return {
                 success: true,
-                message: 'Prefab updated successfully',
-                data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted }
+                message: removedFileIds.length > 0
+                    ? `Prefab updated successfully; removed ${removedFileIds.length} child node(s) apply-prefab left behind`
+                    : 'Prefab updated successfully',
+                data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted, removedFileIds }
             };
         } catch (err: any) {
             return { success: false, error: err.message };
@@ -507,14 +517,278 @@ export class ManagePrefab extends BaseActionTool {
     /** Extract every `cc.Node` entry's fileId from a written `.prefab` asset's JSON array. */
     private collectAssetNodeFileIds(prefabData: any[]): Set<string> {
         const fileIds = new Set<string>();
-        for (const entry of prefabData) {
-            if (!entry || entry.__type__ !== 'cc.Node') continue;
-            const prefabInfoIndex = entry._prefab?.__id__;
-            if (prefabInfoIndex === undefined) continue;
-            const fileId = prefabData[prefabInfoIndex]?.fileId;
-            if (typeof fileId === 'string' && fileId) fileIds.add(fileId);
+        for (let index = 0; index < prefabData.length; index++) {
+            const fileId = this.fileIdOfNode(prefabData, index);
+            if (fileId !== null) fileIds.add(fileId);
         }
         return fileIds;
+    }
+
+    /** The fileId recorded on the `cc.Node` at `index`, or null when it has none. */
+    private fileIdOfNode(prefabData: any[], index: number): string | null {
+        const entry = prefabData[index];
+        if (!entry || entry.__type__ !== 'cc.Node') return null;
+        const prefabInfoIndex = entry._prefab?.__id__;
+        if (typeof prefabInfoIndex !== 'number') return null;
+        const fileId = prefabData[prefabInfoIndex]?.fileId;
+        return typeof fileId === 'string' && fileId ? fileId : null;
+    }
+
+    /**
+     * Reference arrays whose element order is structural — a removed entry must be spliced
+     * out of them, never left behind as a null hole.
+     */
+    private readonly structuralRefArrays = ['_children', '_components', 'nestedPrefabInstanceRoots', 'targetOverrides'];
+
+    /**
+     * Remove the orphaned child subtrees `apply-prefab` left behind, then hand the result
+     * to the editor for acceptance (#21).
+     *
+     * Three gates guard the rewrite, and the pre-surgery bytes are restored at any of them:
+     * the graph rewrite refuses a layout it does not recognise, the rewritten graph is
+     * validated before it is written, and `asset-db:reimport-asset` is the engine's own
+     * verdict on the result — an internally consistent graph can still be one the importer
+     * rejects, and only the editor can say so. A declined removal leaves the caller exactly
+     * where it stood before this method existed: a hard failure naming the stale fileIds.
+     */
+    private async removeOrphanedChildrenFromAsset(
+        prefabPath: string,
+        orphanedFileIds: string[],
+        rootUuid: string,
+        assetUuid: string
+    ): Promise<{ success: boolean; error?: string }> {
+        let originalText: string;
+        let prefabData: any;
+        try {
+            originalText = fs.readFileSync(prefabPath, 'utf-8');
+            prefabData = JSON.parse(originalText);
+        } catch (err: any) {
+            return { success: false, error: `the asset could not be re-read (${err.message})` };
+        }
+        if (!Array.isArray(prefabData)) {
+            return { success: false, error: 'the asset is not a serialized entry array' };
+        }
+
+        const liveFileIds = await this.collectInstanceFileIds(rootUuid);
+        const fileIdsBefore = this.collectAssetNodeFileIds(prefabData);
+        const rewritten = this.pruneOrphanedNodes(prefabData, orphanedFileIds, liveFileIds);
+        if (!rewritten) {
+            return { success: false, error: 'the asset graph does not match the layout this removal understands' };
+        }
+
+        const invalid = this.validatePrefabGraph(rewritten, orphanedFileIds, fileIdsBefore);
+        if (invalid) {
+            return { success: false, error: `the rewritten graph failed validation (${invalid})` };
+        }
+
+        try {
+            fs.writeFileSync(prefabPath, JSON.stringify(rewritten, null, originalText.includes('\n') ? 2 : 0), 'utf-8');
+        } catch (err: any) {
+            return { success: false, error: `the rewritten asset could not be written (${err.message})` };
+        }
+
+        let imported: boolean;
+        try {
+            imported = (await Editor.Message.request('asset-db', 'reimport-asset', assetUuid)) !== false;
+        } catch {
+            imported = false;
+        }
+        if (!imported) {
+            this.restorePrefabFile(prefabPath, originalText);
+            return { success: false, error: 'the editor rejected the rewritten asset on reimport' };
+        }
+
+        const survivors = await this.findOrphanedChildFileIds(rootUuid, prefabPath);
+        if (survivors.length > 0) {
+            this.restorePrefabFile(prefabPath, originalText);
+            return { success: false, error: `removal ran but fileId(s) ${survivors.join(', ')} are still orphaned` };
+        }
+
+        return { success: true };
+    }
+
+    /** Put the pre-surgery bytes back, so a declined removal leaves the asset untouched. */
+    private restorePrefabFile(prefabPath: string, originalText: string): void {
+        try {
+            fs.writeFileSync(prefabPath, originalText, 'utf-8');
+        } catch {
+            // Nothing further to do here — the caller reports the failure either way.
+        }
+    }
+
+    /**
+     * Drop every orphaned child subtree from a serialized prefab array and re-index the whole
+     * graph. Returns null — changing nothing — whenever the graph does not match what this
+     * rewrite relies on, rather than producing an asset nobody can load.
+     */
+    private pruneOrphanedNodes(prefabData: any[], orphanedFileIds: string[], liveFileIds: Set<string>): any[] | null {
+        const nodeIndexByFileId = new Map<string, number>();
+        for (let index = 0; index < prefabData.length; index++) {
+            const fileId = this.fileIdOfNode(prefabData, index);
+            if (fileId !== null && !nodeIndexByFileId.has(fileId)) nodeIndexByFileId.set(fileId, index);
+        }
+
+        const removed = new Set<number>();
+        const pending: number[] = [];
+        for (const fileId of orphanedFileIds) {
+            const index = nodeIndexByFileId.get(fileId);
+            // Detection and removal disagree about the asset — do not guess at the graph.
+            if (index === undefined) return null;
+            pending.push(index);
+        }
+
+        while (pending.length > 0) {
+            const nodeIndex = pending.shift() as number;
+            if (removed.has(nodeIndex)) continue;
+            const node = prefabData[nodeIndex];
+            if (!node || node.__type__ !== 'cc.Node') return null;
+            removed.add(nodeIndex);
+
+            const prefabInfoIndex = node._prefab?.__id__;
+            if (typeof prefabInfoIndex === 'number') removed.add(prefabInfoIndex);
+
+            for (const ref of Array.isArray(node._components) ? node._components : []) {
+                const componentIndex = ref?.__id__;
+                if (typeof componentIndex !== 'number') continue;
+                removed.add(componentIndex);
+                const compPrefabIndex = prefabData[componentIndex]?.__prefab?.__id__;
+                if (typeof compPrefabIndex === 'number') removed.add(compPrefabIndex);
+            }
+
+            for (const ref of Array.isArray(node._children) ? node._children : []) {
+                const childIndex = ref?.__id__;
+                if (typeof childIndex !== 'number') return null;
+                // A descendant of a deleted child cannot still be live in the instance. If one
+                // is, the orphan set is not what this rewrite assumes and it must not proceed.
+                const childFileId = this.fileIdOfNode(prefabData, childIndex);
+                if (childFileId !== null && liveFileIds.has(childFileId)) return null;
+                pending.push(childIndex);
+            }
+        }
+        if (removed.size === 0) return null;
+
+        const pruned: any[] = JSON.parse(JSON.stringify(prefabData));
+        for (let index = 0; index < pruned.length; index++) {
+            if (removed.has(index)) continue;
+            const entry = pruned[index];
+            if (!entry || typeof entry !== 'object') continue;
+            for (const key of this.structuralRefArrays) {
+                if (!Array.isArray(entry[key])) continue;
+                entry[key] = entry[key].filter((element: any) => !this.referencesRemoved(element, removed));
+            }
+        }
+
+        // Whatever still points at a removed entry becomes null — this is the dangling
+        // component reference the report calls out (an `ObjectView.tickNode` binding to a
+        // child that no longer exists).
+        for (let index = 0; index < pruned.length; index++) {
+            if (removed.has(index)) continue;
+            pruned[index] = this.nullifyRemovedRefs(pruned[index], removed);
+        }
+
+        const remap = new Map<number, number>();
+        const survivors: any[] = [];
+        for (let index = 0; index < pruned.length; index++) {
+            if (removed.has(index)) continue;
+            remap.set(index, survivors.length);
+            survivors.push(pruned[index]);
+        }
+        return survivors.map(entry => this.remapRefs(entry, remap));
+    }
+
+    /** True when `value` is — or contains — an `{ __id__ }` reference to a removed entry. */
+    private referencesRemoved(value: any, removed: Set<number>): boolean {
+        if (!value || typeof value !== 'object') return false;
+        if (typeof value.__id__ === 'number') return removed.has(value.__id__);
+        return Object.values(value).some(nested => this.referencesRemoved(nested, removed));
+    }
+
+    /** Replace every `{ __id__ }` reference to a removed entry with null. */
+    private nullifyRemovedRefs(value: any, removed: Set<number>): any {
+        if (Array.isArray(value)) return value.map(element => this.nullifyRemovedRefs(element, removed));
+        if (!value || typeof value !== 'object') return value;
+        if (typeof value.__id__ === 'number') return removed.has(value.__id__) ? null : value;
+        const rewritten: any = {};
+        for (const [key, nested] of Object.entries(value)) rewritten[key] = this.nullifyRemovedRefs(nested, removed);
+        return rewritten;
+    }
+
+    /** Point every surviving `__id__` at its entry's slot in the compacted array. */
+    private remapRefs(value: any, remap: Map<number, number>): any {
+        if (Array.isArray(value)) return value.map(element => this.remapRefs(element, remap));
+        if (!value || typeof value !== 'object') return value;
+        if (typeof value.__id__ === 'number') {
+            const next = remap.get(value.__id__);
+            return next === undefined ? null : { __id__: next };
+        }
+        const rewritten: any = {};
+        for (const [key, nested] of Object.entries(value)) rewritten[key] = this.remapRefs(nested, remap);
+        return rewritten;
+    }
+
+    /**
+     * Reject a rewritten graph before it reaches disk. Returns the first problem found, or
+     * null when the graph is sound — this is what makes a mis-indexed asset impossible to
+     * write rather than something to notice afterwards.
+     */
+    private validatePrefabGraph(prefabData: any[], removedFileIds: string[], fileIdsBefore: Set<string>): string | null {
+        const dangling = this.findDanglingRef(prefabData, prefabData.length);
+        if (dangling !== null) return `__id__ ${dangling} is out of range`;
+
+        // Identity, not count: exactly the orphans go, and nothing else does.
+        const remaining = this.collectAssetNodeFileIds(prefabData);
+        for (const fileId of removedFileIds) {
+            if (remaining.has(fileId)) return `orphaned fileId ${fileId} survived removal`;
+        }
+        for (const fileId of fileIdsBefore) {
+            if (removedFileIds.includes(fileId)) continue;
+            if (!remaining.has(fileId)) return `fileId ${fileId} was removed but should have been kept`;
+        }
+
+        for (let index = 0; index < prefabData.length; index++) {
+            const entry = prefabData[index];
+            if (!entry || entry.__type__ !== 'cc.Node') continue;
+            for (const ref of Array.isArray(entry._children) ? entry._children : []) {
+                const childIndex = ref?.__id__;
+                if (typeof childIndex !== 'number') return `node ${index} has a malformed _children entry`;
+                const child = prefabData[childIndex];
+                if (!child || child.__type__ !== 'cc.Node') return `node ${index} lists a non-node child at ${childIndex}`;
+                if (child._parent && child._parent.__id__ !== index) {
+                    return `node ${childIndex} does not point back at parent ${index}`;
+                }
+            }
+            for (const ref of Array.isArray(entry._components) ? entry._components : []) {
+                const componentIndex = ref?.__id__;
+                if (typeof componentIndex !== 'number') return `node ${index} has a malformed _components entry`;
+                const component = prefabData[componentIndex];
+                if (!component) return `node ${index} lists a missing component at ${componentIndex}`;
+                if (component.node && component.node.__id__ !== index) {
+                    return `component ${componentIndex} does not point back at node ${index}`;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The first `__id__` outside `[0, length)` anywhere in the graph, or null when all resolve. */
+    private findDanglingRef(value: any, length: number): number | null {
+        if (Array.isArray(value)) {
+            for (const element of value) {
+                const found = this.findDanglingRef(element, length);
+                if (found !== null) return found;
+            }
+            return null;
+        }
+        if (!value || typeof value !== 'object') return null;
+        if (typeof value.__id__ === 'number') {
+            const id = value.__id__;
+            return Number.isInteger(id) && id >= 0 && id < length ? null : id;
+        }
+        for (const nested of Object.values(value)) {
+            const found = this.findDanglingRef(nested, length);
+            if (found !== null) return found;
+        }
+        return null;
     }
 
     private async getPrefabInfoByUuid(uuid: string): Promise<any> {

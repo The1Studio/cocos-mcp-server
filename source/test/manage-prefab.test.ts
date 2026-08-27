@@ -296,35 +296,223 @@ describe('ManagePrefab', () => {
             mockRequest.mockResolvedValue({});
         });
 
-        it('fails instead of reporting success when the asset still has a child the instance no longer has', async () => {
-            // Instance root has ONE live child (fileId "child-A"); the asset that
-            // apply-prefab just rewrote still contains "child-A" AND a second node
-            // "child-B" the instance no longer has — exactly the #21 symptom.
-            const rewritten = [
-                { __type__: 'cc.Prefab' },
-                { __type__: 'cc.Node', _prefab: { __id__: 2 } },
-                { __type__: 'cc.PrefabInfo', fileId: 'child-A' },
-                { __type__: 'cc.Node', _prefab: { __id__: 4 } },
-                { __type__: 'cc.PrefabInfo', fileId: 'child-B' },
+        /**
+         * A prefab whose root has two children: "Keep" (fileId child-A, still in the
+         * instance) and "Deleted" (fileId child-B, gone from it). The root's `ObjectView`
+         * holds a reference to each — `tickNode` is the dangling binding the report calls
+         * out. "Deleted" sits in the MIDDLE of the array, so removing it shifts every
+         * later index and any re-index bug shows up as a reference landing on the wrong
+         * entry rather than as an out-of-range `__id__`.
+         */
+        function assetWithOrphanedChild(): any[] {
+            return [
+                { __type__: 'cc.Prefab', _name: 'Foo', data: { __id__: 1 } },
+                { __type__: 'cc.Node', _name: 'Root', _parent: null, _children: [{ __id__: 2 }, { __id__: 6 }], _components: [{ __id__: 10 }], _prefab: { __id__: 12 } },
+                { __type__: 'cc.Node', _name: 'Keep', _parent: { __id__: 1 }, _children: [], _components: [{ __id__: 3 }], _prefab: { __id__: 5 } },
+                { __type__: 'cc.Sprite', node: { __id__: 2 }, __prefab: { __id__: 4 } },
+                { __type__: 'cc.CompPrefabInfo', fileId: 'comp-keep' },
+                { __type__: 'cc.PrefabInfo', root: { __id__: 1 }, asset: { __id__: 0 }, fileId: 'child-A' },
+                { __type__: 'cc.Node', _name: 'Deleted', _parent: { __id__: 1 }, _children: [], _components: [{ __id__: 7 }], _prefab: { __id__: 9 } },
+                { __type__: 'cc.Label', node: { __id__: 6 }, __prefab: { __id__: 8 } },
+                { __type__: 'cc.CompPrefabInfo', fileId: 'comp-dead' },
+                { __type__: 'cc.PrefabInfo', root: { __id__: 1 }, asset: { __id__: 0 }, fileId: 'child-B' },
+                { __type__: 'ObjectView', node: { __id__: 1 }, tickNode: { __id__: 6 }, keepNode: { __id__: 2 }, __prefab: { __id__: 11 } },
+                { __type__: 'cc.CompPrefabInfo', fileId: 'comp-root' },
+                { __type__: 'cc.PrefabInfo', root: { __id__: 1 }, asset: { __id__: 0 }, fileId: 'root' },
             ];
-            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+        }
 
+        /** Live instance: the root plus "Keep". "Deleted" was removed from it. */
+        function liveInstance(rootChildren: string[] = ['keep-uuid']) {
+            return (uuid: string) => {
+                if (uuid === ROOT_UUID) return { ...nodeDump, __prefab__: { ...nodeDump.__prefab__, fileId: 'root' }, children: rootChildren };
+                if (uuid === 'keep-uuid') return { __prefab__: { fileId: 'child-A' }, children: [] };
+                return null;
+            };
+        }
+
+        /** Every `__id__` anywhere in the graph, so a sweep can prove they all resolve. */
+        function collectRefs(value: any, found: number[] = []): number[] {
+            if (Array.isArray(value)) {
+                value.forEach(element => collectRefs(element, found));
+                return found;
+            }
+            if (!value || typeof value !== 'object') return found;
+            if (typeof value.__id__ === 'number') {
+                found.push(value.__id__);
+                return found;
+            }
+            Object.values(value).forEach(nested => collectRefs(nested, found));
+            return found;
+        }
+
+        function readAsset(tmpFile: string): any[] {
+            return JSON.parse(fs.readFileSync(tmpFile, 'utf-8'));
+        }
+
+        it('removes the deleted child subtree from the asset instead of only reporting it', async () => {
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
             routeMessages({
-                'query-node': (uuid: string) => {
-                    if (uuid === ROOT_UUID) return { ...nodeDump, __prefab__: { ...nodeDump.__prefab__, fileId: 'root' }, children: ['child-a-uuid'] };
-                    if (uuid === 'child-a-uuid') return { __prefab__: { fileId: 'child-A' }, children: [] };
-                    return null;
-                },
+                'query-node': liveInstance(),
                 'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
-                'apply-prefab': applyPrefabWriting(tmpFile, rewritten),
+                'apply-prefab': applyPrefabWriting(tmpFile, assetWithOrphanedChild()),
+                'reimport-asset': () => true,
+            });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(result.success).toBe(true);
+            expect(result.data.removedFileIds).toEqual(['child-B']);
+
+            const after = readAsset(tmpFile);
+            // The orphaned node, its component and both prefab records are gone...
+            expect(after.some(entry => entry.fileId === 'child-B')).toBe(false);
+            expect(after.some(entry => entry.fileId === 'comp-dead')).toBe(false);
+            expect(after.some(entry => entry._name === 'Deleted')).toBe(false);
+            expect(after.some(entry => entry.__type__ === 'cc.Label')).toBe(false);
+            // ...and nothing that was still live went with it.
+            expect(after.some(entry => entry.fileId === 'child-A')).toBe(true);
+            expect(after.some(entry => entry.fileId === 'root')).toBe(true);
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('keeps every surviving reference pointing at the entry it pointed at before', async () => {
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            routeMessages({
+                'query-node': liveInstance(),
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, assetWithOrphanedChild()),
+                'reimport-asset': () => true,
+            });
+
+            await tool.execute('update', { nodeUuid: ROOT_UUID });
+            const after = readAsset(tmpFile);
+
+            // Identity, not position: each reference is followed and the entry it lands on
+            // is identified by name/type/fileId. A re-index that is merely self-consistent
+            // (every `__id__` in range) still fails these.
+            expect(collectRefs(after).every(id => id >= 0 && id < after.length)).toBe(true);
+
+            const root = after[after[0].data.__id__];
+            expect(root._name).toBe('Root');
+            expect(root._children).toHaveLength(1);
+            expect(after[root._children[0].__id__]._name).toBe('Keep');
+            expect(after[root._prefab.__id__].fileId).toBe('root');
+
+            const objectView = after[root._components[0].__id__];
+            expect(objectView.__type__).toBe('ObjectView');
+            expect(after[objectView.node.__id__]._name).toBe('Root');
+            expect(after[objectView.keepNode.__id__]._name).toBe('Keep');
+            expect(after[objectView.__prefab.__id__].fileId).toBe('comp-root');
+
+            const keep = after[root._children[0].__id__];
+            expect(after[keep._parent.__id__]._name).toBe('Root');
+            expect(after[keep._prefab.__id__].fileId).toBe('child-A');
+            expect(after[keep._components[0].__id__].__type__).toBe('cc.Sprite');
+            expect(after[after[keep._components[0].__id__].__prefab.__id__].fileId).toBe('comp-keep');
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('clears the component reference that pointed at the removed child', async () => {
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            routeMessages({
+                'query-node': liveInstance(),
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, assetWithOrphanedChild()),
+                'reimport-asset': () => true,
+            });
+
+            await tool.execute('update', { nodeUuid: ROOT_UUID });
+            const after = readAsset(tmpFile);
+
+            const objectView = after.find(entry => entry.__type__ === 'ObjectView');
+            expect(objectView.tickNode).toBeNull();
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('hands the rewritten asset to the editor for reimport', async () => {
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            const mockRequest = routeMessages({
+                'query-node': liveInstance(),
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, assetWithOrphanedChild()),
+                'reimport-asset': () => true,
+            });
+
+            await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(mockRequest).toHaveBeenCalledWith('asset-db', 'reimport-asset', ASSET_UUID);
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('restores the original bytes when the editor rejects the rewritten asset', async () => {
+            const applied = assetWithOrphanedChild();
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            routeMessages({
+                'query-node': liveInstance(),
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, applied),
+                'reimport-asset': () => false,
             });
 
             const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
 
             expect(result.success).toBe(false);
-            expect(result.error).toMatch(/does not remove deleted children/i);
+            expect(result.error).toMatch(/rejected the rewritten asset on reimport/i);
             expect(result.error).toContain('child-B');
-            expect(result.error).not.toContain('child-A');
+            // The asset must be exactly what apply-prefab left, not a half-rewritten graph.
+            expect(fs.readFileSync(tmpFile, 'utf-8')).toBe(JSON.stringify(applied));
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('leaves the asset untouched when the graph is not the layout the removal understands', async () => {
+            const applied = assetWithOrphanedChild();
+            applied[6]._children = [{ __id__: 'not-an-index' }];
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            routeMessages({
+                'query-node': liveInstance(),
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, applied),
+                'reimport-asset': () => true,
+            });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/does not match the layout/i);
+            expect(fs.readFileSync(tmpFile, 'utf-8')).toBe(JSON.stringify(applied));
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('restores the original bytes when an orphan survives the removal', async () => {
+            const applied = assetWithOrphanedChild();
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            // The instance loses "Keep" between the removal and the post-condition re-check,
+            // so the re-check finds a fresh orphan the removal did not handle. The gate must
+            // put the file back rather than report a success it cannot stand behind.
+            let rootWalks = 0;
+            routeMessages({
+                'query-node': (uuid: string) => {
+                    if (uuid === ROOT_UUID) rootWalks++;
+                    return liveInstance(rootWalks > 2 ? [] : ['keep-uuid'])(uuid);
+                },
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, applied),
+                'reimport-asset': () => true,
+            });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/still orphaned/i);
+            expect(result.error).toContain('child-A');
+            expect(fs.readFileSync(tmpFile, 'utf-8')).toBe(JSON.stringify(applied));
 
             fs.unlinkSync(tmpFile);
         });
