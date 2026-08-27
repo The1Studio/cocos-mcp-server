@@ -586,4 +586,131 @@ describe('ManageComponent', () => {
             expect(result.error).toMatch(/did not verify/i);
         });
     });
+
+    // Regression: issue #48 — a node/component reference that crosses a prefab-instance
+    // boundary persists only as a cc.TargetOverrideInfo record on the instance's
+    // cc.PrefabInfo.targetOverrides. `scene:set-property` never creates one, and the
+    // post-write check re-reads the LIVE scene, so the write verified as
+    // `changeVerified: true` and was then silently lost on save. The result must now
+    // carry `persistenceVerified: false` + a warning for exactly that case — and must
+    // NOT do so for a reference that stays within one serialization context.
+    describe('set_property — prefab-instance boundary reporting (issue #48)', () => {
+        const HOST_NODE = 'host-node';
+        const HOST_TYPE = 'RefController';
+        const TARGET_NODE = 'target-node';
+
+        function hostDump() {
+            return {
+                __comps__: [
+                    {
+                        __type__: HOST_TYPE,
+                        type: HOST_TYPE,
+                        enabled: true,
+                        value: {
+                            uuid: { value: 'host-comp-uuid' },
+                            target: { name: 'target', value: null, type: 'cc.Node' }
+                        }
+                    }
+                ]
+            };
+        }
+
+        /**
+         * Wire a per-uuid `query-node` mock whose HOST dump reflects each `set-property`
+         * write (so live verification passes), and whose HOST/TARGET nodes carry the
+         * given `__prefab__` blocks — the discriminator ManagePrefab already drives
+         * apply-prefab/restore-prefab from.
+         */
+        function wire(hostPrefab: any, targetPrefab: any) {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            const host: any = hostDump();
+            if (hostPrefab) host.__prefab__ = hostPrefab;
+            const target: any = { __comps__: [] };
+            if (targetPrefab) target.__prefab__ = targetPrefab;
+
+            mockRequest.mockImplementation((_m: string, action: string, payload: any) => {
+                if (action === 'query-node') {
+                    return Promise.resolve(payload === TARGET_NODE ? target : host);
+                }
+                if (action === 'set-property') {
+                    const segments: string[] = payload.path.split('.');
+                    host.__comps__[Number(segments[1])].value[segments[2]].value = payload.dump.value;
+                    return Promise.resolve({});
+                }
+                return Promise.resolve({});
+            });
+            return mockRequest;
+        }
+
+        const setTarget = () => tool.execute('set_property', {
+            nodeUuid: HOST_NODE, componentType: HOST_TYPE,
+            property: 'target', propertyType: 'node', value: TARGET_NODE
+        });
+
+        it('flags a plain-scene component referencing a node inside a prefab instance', async () => {
+            wire(null, { rootUuid: 'instance-root', uuid: 'prefab-asset' });
+
+            const result = await setTarget();
+
+            expect(result.success).toBe(true);
+            expect(result.data.changeVerified).toBe(true);
+            expect(result.data.persistenceVerified).toBe(false);
+            expect(result.data.warning).toMatch(/cc\.TargetOverrideInfo/);
+        });
+
+        it('flags a component inside a prefab instance referencing a plain-scene node', async () => {
+            wire({ rootUuid: 'instance-root', uuid: 'prefab-asset' }, null);
+
+            const result = await setTarget();
+
+            expect(result.data.persistenceVerified).toBe(false);
+            expect(result.data.warning).toMatch(/prefab-instance boundary/);
+        });
+
+        it('does NOT flag a reference between two plain-scene nodes', async () => {
+            wire(null, null);
+
+            const result = await setTarget();
+
+            expect(result.success).toBe(true);
+            expect(result.data.changeVerified).toBe(true);
+            expect(result.data.persistenceVerified).toBeUndefined();
+            expect(result.data.warning).toBeUndefined();
+        });
+
+        it('does NOT flag a reference between two nodes inside the SAME prefab instance', async () => {
+            const sameInstance = { rootUuid: 'instance-root', uuid: 'prefab-asset' };
+            wire({ ...sameInstance }, { ...sameInstance });
+
+            const result = await setTarget();
+
+            expect(result.success).toBe(true);
+            expect(result.data.persistenceVerified).toBeUndefined();
+            expect(result.data.warning).toBeUndefined();
+        });
+
+        it('flags a reference between two DIFFERENT prefab instances', async () => {
+            wire({ rootUuid: 'instance-a', uuid: 'prefab-asset' }, { rootUuid: 'instance-b', uuid: 'prefab-asset' });
+
+            const result = await setTarget();
+
+            expect(result.data.persistenceVerified).toBe(false);
+            expect(result.data.warning).toBeDefined();
+        });
+
+        it('propagates the warning through set_properties_batch per-entry results', async () => {
+            wire(null, { rootUuid: 'instance-root', uuid: 'prefab-asset' });
+
+            const result = await tool.execute('set_properties_batch', {
+                nodeUuid: HOST_NODE, componentType: HOST_TYPE,
+                properties: [{ property: 'target', propertyType: 'node', value: TARGET_NODE }]
+            });
+
+            expect(result.success).toBe(true);
+            const entry = result.data.results[0];
+            expect(entry.success).toBe(true);
+            expect(entry.persistenceVerified).toBe(false);
+            expect(entry.warning).toMatch(/cc\.TargetOverrideInfo/);
+        });
+    });
 });
