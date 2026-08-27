@@ -3,6 +3,7 @@ import { BaseActionTool } from './base-action-tool';
 import { analyzeProperty, extractComponentPropertyDump, generateComponentSuggestion, convertPropertyValue, getAvailableComponentsList, redirectNodePropertyAccess, verifyComponentPropertyChange, SUPPORTED_PROPERTY_TYPES } from './manage-component-property-helpers';
 import { applyPropertyToEditor } from './manage-component-editor-apply';
 import { attachScriptToNode } from './manage-component-script-attach';
+import { detectPrefabOverrideRisk } from './manage-component-prefab-guard';
 
 export class ManageComponent extends BaseActionTool {
     readonly name = 'manage_component';
@@ -321,7 +322,10 @@ export class ManageComponent extends BaseActionTool {
             componentType,
             property,
             actualValue: fieldResult.actualValue,
-            changeVerified: fieldResult.changeVerified
+            changeVerified: fieldResult.changeVerified,
+            // Only present when the write crosses a prefab-instance boundary (issue #48):
+            // the live read-back verified, but the value may not survive a save.
+            ...(fieldResult.warning ? { persistenceVerified: fieldResult.persistenceVerified, warning: fieldResult.warning } : {})
         }, `Successfully set ${componentType}.${property}`);
     }
 
@@ -347,7 +351,7 @@ export class ManageComponent extends BaseActionTool {
             return resolution.result;
         }
 
-        const results: Array<{ property: string; success: boolean; actualValue?: any; changeVerified?: boolean; error?: string }> = [];
+        const results: Array<{ property: string; success: boolean; actualValue?: any; changeVerified?: boolean; persistenceVerified?: boolean; warning?: string; error?: string }> = [];
 
         for (const entry of properties) {
             const property = entry?.property;
@@ -373,7 +377,8 @@ export class ManageComponent extends BaseActionTool {
                     success: fieldResult.success,
                     actualValue: fieldResult.actualValue,
                     changeVerified: fieldResult.changeVerified,
-                    error: fieldResult.error
+                    error: fieldResult.error,
+                    ...(fieldResult.warning ? { persistenceVerified: fieldResult.persistenceVerified, warning: fieldResult.warning } : {})
                 });
             } catch (err: any) {
                 // Defensive: one bad field must never abort the batch.
@@ -500,7 +505,7 @@ export class ManageComponent extends BaseActionTool {
         targetComponent: any,
         rawComponentIndex: number,
         field: { property: string; propertyType: string; value: any }
-    ): Promise<{ success: boolean; actualValue?: any; changeVerified?: boolean; error?: string }> {
+    ): Promise<{ success: boolean; actualValue?: any; changeVerified?: boolean; persistenceVerified?: boolean; warning?: string; error?: string }> {
         const { property, propertyType, value } = field;
         try {
             console.log(`[ManageComponent] Setting ${componentType}.${property} (type: ${propertyType}) = ${JSON.stringify(value)} on node ${nodeUuid}`);
@@ -545,6 +550,22 @@ export class ManageComponent extends BaseActionTool {
                     actualValue: verification.actualValue,
                     changeVerified: false,
                     error: `Property '${componentType}.${property}' write did not verify: expected ${JSON.stringify(actualExpectedValue)} but the editor reads back ${JSON.stringify(verification.actualValue)}`
+                };
+            }
+
+            // Issue #48: verification above re-read the LIVE scene, which cannot observe a
+            // reference lost at serialization. A reference crossing a prefab-instance boundary
+            // needs a cc.TargetOverrideInfo record that `scene:set-property` never creates, so
+            // report the write as live-verified but NOT persistence-verified rather than
+            // returning a bare changeVerified:true the caller would read as durable.
+            const prefabRisk = await detectPrefabOverrideRisk(
+                nodeUuid, propertyType, processedValue,
+                (uuid: string) => Editor.Message.request('scene', 'query-node', uuid)
+            );
+            if (prefabRisk.atRisk) {
+                return {
+                    success: true, actualValue: verification.actualValue, changeVerified: true,
+                    persistenceVerified: false, warning: prefabRisk.warning
                 };
             }
 
