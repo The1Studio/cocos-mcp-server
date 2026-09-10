@@ -231,3 +231,74 @@ describe('PrefabCreationService — component property capture (#28)', () => {
         expect(result.success).toBe(true);
     });
 });
+
+/**
+ * Font assets were serialized as null on every cc.Label.
+ *
+ * `processComponentProperty` recognises an asset by an allowlist of type names, and the list
+ * carried `cc.Font` but not its concrete subclasses — the dump for a Label's font reports
+ * `cc.TTFFont`. Missing the asset branch, the value fell through to the component-reference
+ * branch, whose catch-all is `type.startsWith('cc.')`. That matched, the uuid was not in the
+ * component index, and the branch returned null "external ref". The prefab then loaded with no
+ * font while the same node in the scene rendered correctly.
+ */
+describe('PrefabCreationService — font and other concrete asset types', () => {
+    let service: PrefabCreationService;
+
+    beforeEach(() => { service = new PrefabCreationService(); });
+
+    const ref = (type: string, uuid: string) => ({ type, value: { uuid } });
+    const call = (p: any) => (service as any).processComponentProperty(p, {
+        nodeUuidToIndex: new Map(), componentUuidToIndex: new Map(),
+    });
+
+    it('serializes a cc.TTFFont reference as an asset, not a dangling component ref', () => {
+        const out = call(ref('cc.TTFFont', '9f8ec1aa-affd-420e-8868-22e9e88bb581'));
+        expect(out).not.toBeNull();
+        expect(out.__uuid__).toBe('9f8ec1aa-affd-420e-8868-22e9e88bb581');
+        expect(out.__expectedType__).toBe('cc.TTFFont');
+    });
+
+    it('serializes cc.BitmapFont and cc.LabelAtlas the same way', () => {
+        for (const t of ['cc.BitmapFont', 'cc.LabelAtlas']) {
+            const out = call(ref(t, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'));
+            expect(out).not.toBeNull();
+            expect(out.__expectedType__).toBe(t);
+        }
+    });
+
+    it('keeps serializing the asset types that already worked', () => {
+        const out = call(ref('cc.SpriteFrame', '16800020-83e2-48fa-9f23-f89779c630af@f9941'));
+        expect(out.__expectedType__).toBe('cc.SpriteFrame');
+        expect(out.__uuid__).toContain('@f9941');
+    });
+
+    it('still nulls a genuinely external component reference', () => {
+        expect(call(ref('cc.Button', 'not-in-this-prefab'))).toBeNull();
+    });
+
+    // Measured against this project's 46 editor-authored .prefab/.scene files: all 560 asset
+    // `__uuid__` values are full uuids and none is compressed. A compressed uuid resolves to
+    // nothing, and the defect hid behind the sprite-frame case, whose 37-char sub-asset uuid
+    // the old compressor skipped over.
+    it('writes a plain asset uuid verbatim rather than compressing it', () => {
+        for (const t of ['cc.TTFFont', 'cc.Texture2D', 'cc.Material', 'cc.AudioClip']) {
+            expect(call(ref(t, '9f8ec1aa-affd-420e-8868-22e9e88bb581')).__uuid__)
+                .toBe('9f8ec1aa-affd-420e-8868-22e9e88bb581');
+        }
+    });
+
+    it('writes an array of asset references with full uuids too', () => {
+        const out = (service as any).processComponentProperty({
+            type: 'cc.SpriteFrame[]',
+            elementTypeData: { type: 'cc.SpriteFrame' },
+            value: [{ uuid: '0498a60a-90e8-4334-bd55-db75c722d651@f9941' },
+                { uuid: 'dd255c32-1d56-4ed6-9d1e-8396d22210a3' }],
+        }, { nodeUuidToIndex: new Map(), componentUuidToIndex: new Map() });
+
+        expect(out.map((e: any) => e.__uuid__)).toEqual([
+            '0498a60a-90e8-4334-bd55-db75c722d651@f9941',
+            'dd255c32-1d56-4ed6-9d1e-8396d22210a3',
+        ]);
+    });
+});

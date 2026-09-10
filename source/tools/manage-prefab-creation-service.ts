@@ -498,6 +498,25 @@ export class PrefabCreationService {
         return { data: fallback, source: 'in-memory' };
     }
 
+    /** Type names whose dump value is an ASSET reference rather than a component reference. */
+    private static readonly ASSET_TYPES = new Set([
+        'cc.Prefab', 'cc.Texture2D', 'cc.SpriteFrame', 'cc.Material', 'cc.AnimationClip',
+        'cc.AudioClip', 'cc.Font', 'cc.Asset', 'cc.TTFFont', 'cc.BitmapFont', 'cc.LabelAtlas',
+        'cc.SpriteAtlas', 'cc.JsonAsset', 'cc.TextAsset', 'cc.ParticleAsset', 'cc.Mesh',
+        'cc.Skeleton', 'cc.RenderTexture', 'cc.PhysicsMaterial', 'cc.SceneAsset', 'cc.EffectAsset',
+    ]);
+
+    /**
+     * An asset is either explicitly listed or named by a suffix no component type uses.
+     * The suffix arm is what keeps a future concrete asset subclass from silently regressing
+     * into the component-reference branch the way cc.TTFFont did.
+     */
+    private static isAssetType(type: string | undefined): boolean {
+        if (!type) return false;
+        if (PrefabCreationService.ASSET_TYPES.has(type)) return true;
+        return /(?:Font|Asset|Atlas|Clip)$/.test(type);
+    }
+
     /**
      * Process component property values, ensuring format matches manually-created prefabs.
      * Handles node refs, asset refs, component refs, typed math/color objects, and arrays.
@@ -519,10 +538,18 @@ export class PrefabCreationService {
             return null;
         }
 
-        // Asset references
-        if (value?.uuid && ['cc.Prefab', 'cc.Texture2D', 'cc.SpriteFrame', 'cc.Material', 'cc.AnimationClip', 'cc.AudioClip', 'cc.Font', 'cc.Asset'].includes(type)) {
-            const uuidToUse = type === 'cc.Prefab' ? value.uuid : this.uuidToCompressedId(value.uuid);
-            return { "__uuid__": uuidToUse, "__expectedType__": type };
+        // Asset references.
+        // The list must name CONCRETE types, not just base classes: a cc.Label's font dump reports
+        // `cc.TTFFont`, never `cc.Font`. Missing here, it fell through to the component-reference
+        // branch below, whose `type.startsWith('cc.')` catch-all matched it, found no entry in the
+        // component index, and returned null — so every label in a created prefab lost its font.
+        // The uuid is written verbatim. The editor's own serializer never compresses an asset
+        // `__uuid__` in a .prefab/.scene; compressing one produced a reference that resolved to
+        // nothing. This went unseen because a sprite-frame sub-asset uuid ('<uuid>@f9941') is 37
+        // chars and failed the old compressor's 32-char guard, so sprites passed through intact
+        // while every plain-uuid asset — fonts first — was mangled.
+        if (value?.uuid && PrefabCreationService.isAssetType(type)) {
+            return { "__uuid__": value.uuid, "__expectedType__": type };
         }
 
         // Component references
@@ -552,7 +579,7 @@ export class PrefabCreationService {
                 }).filter(Boolean);
             }
             if (propData.elementTypeData?.type?.startsWith('cc.')) {
-                return value.map((item: any) => item?.uuid ? { "__uuid__": this.uuidToCompressedId(item.uuid), "__expectedType__": propData.elementTypeData.type } : null).filter(Boolean);
+                return value.map((item: any) => item?.uuid ? { "__uuid__": item.uuid, "__expectedType__": propData.elementTypeData.type } : null).filter(Boolean);
             }
             return value.map((item: any) => item?.value !== undefined ? item.value : item);
         }
@@ -703,20 +730,4 @@ export class PrefabCreationService {
         return fileId;
     }
 
-    /**
-     * Convert UUID to Cocos Creator compressed format.
-     * First 5 hex chars kept as-is; remaining 27 chars compressed to 18 via base64 encoding.
-     */
-    private uuidToCompressedId(uuid: string): string {
-        const BASE64_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-        const cleanUuid = uuid.replace(/-/g, '').toLowerCase();
-        if (cleanUuid.length !== 32) return uuid;
-        let result = cleanUuid.substring(0, 5);
-        const remainder = cleanUuid.substring(5);
-        for (let i = 0; i < remainder.length; i += 3) {
-            const value = parseInt((remainder[i] || '0') + (remainder[i + 1] || '0') + (remainder[i + 2] || '0'), 16);
-            result += BASE64_KEYS[(value >> 6) & 63] + BASE64_KEYS[value & 63];
-        }
-        return result;
-    }
 }

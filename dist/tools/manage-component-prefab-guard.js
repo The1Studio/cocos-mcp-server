@@ -1,0 +1,91 @@
+"use strict";
+/**
+ * Prefab-instance boundary detection for component reference writes (issue #48).
+ *
+ * A reference that crosses a prefab-instance boundary does NOT persist through the
+ * normal serialized field. Cocos Creator stores it as a `cc.TargetOverrideInfo`
+ * record on the owning instance's `cc.PrefabInfo.targetOverrides`; the field itself
+ * serializes as `null` by design. `scene:set-property` writes only the live value —
+ * it creates no override record — so the write is real in memory, verifies against a
+ * live read-back, and is then lost on save.
+ *
+ * The post-write check in `applySingleProperty` re-reads the LIVE scene, so it cannot
+ * observe this class of loss by construction. This module supplies the missing signal:
+ * it does not change the write, it tells the caller the write may not survive a save.
+ *
+ * Detection uses the node dump's `__prefab__` block — the same discriminator
+ * `ManageComponent`'s sibling `ManagePrefab.resolvePrefabContext` already drives both
+ * `apply-prefab` and `restore-prefab` from.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PREFAB_SENSITIVE_PROPERTY_TYPES = void 0;
+exports.extractReferencedNodeUuids = extractReferencedNodeUuids;
+exports.detectPrefabOverrideRisk = detectPrefabOverrideRisk;
+/** Reference propertyTypes whose value is one or more node UUIDs — the only ones that can cross a prefab boundary. */
+exports.PREFAB_SENSITIVE_PROPERTY_TYPES = ['node', 'component', 'nodeArray', 'componentArray'];
+const WARNING = 'Live value set and verified, but this reference crosses a prefab-instance boundary. ' +
+    'A cross-prefab reference persists only as a cc.TargetOverrideInfo record on the instance\'s ' +
+    'cc.PrefabInfo.targetOverrides — this write does not create one, so the field may read back null ' +
+    'after the scene or prefab is saved. Verify the saved asset before relying on this reference.';
+/**
+ * Pull the referenced node UUIDs out of an already-converted property value.
+ * `convertPropertyValue` normalises `node`/`nodeArray` to `{ uuid }` shapes and
+ * `component`/`componentArray` to bare node-UUID strings, so both spellings land here.
+ */
+function extractReferencedNodeUuids(propertyType, processedValue) {
+    if (!exports.PREFAB_SENSITIVE_PROPERTY_TYPES.includes(propertyType))
+        return [];
+    const items = Array.isArray(processedValue) ? processedValue : [processedValue];
+    const uuids = [];
+    for (const item of items) {
+        if (typeof item === 'string' && item) {
+            uuids.push(item);
+        }
+        else if (item && typeof item === 'object' && typeof item.uuid === 'string' && item.uuid) {
+            uuids.push(item.uuid);
+        }
+    }
+    return uuids;
+}
+/**
+ * Identify the prefab instance a node belongs to, or null when it sits in plain scene space.
+ * Returns the instance ROOT uuid so two nodes inside the same instance compare equal.
+ * A query failure yields null — this check is advisory and must never break a write.
+ */
+async function prefabInstanceRoot(nodeUuid, queryNode) {
+    let dump;
+    try {
+        dump = await queryNode(nodeUuid);
+    }
+    catch (_a) {
+        return null;
+    }
+    const prefab = dump === null || dump === void 0 ? void 0 : dump.__prefab__;
+    if (!prefab)
+        return null;
+    return prefab.rootUuid || nodeUuid;
+}
+/**
+ * Report whether a reference write crosses a prefab-instance boundary.
+ *
+ * At risk when the component's node and a referenced node resolve to DIFFERENT
+ * prefab-instance roots — including the plain-scene-to-instance and
+ * instance-to-plain-scene directions. Two nodes inside the same instance, and two
+ * nodes both outside any instance, serialize normally and are not flagged.
+ */
+async function detectPrefabOverrideRisk(nodeUuid, propertyType, processedValue, queryNode) {
+    const targetUuids = extractReferencedNodeUuids(propertyType, processedValue);
+    if (targetUuids.length === 0)
+        return { atRisk: false };
+    const sourceRoot = await prefabInstanceRoot(nodeUuid, queryNode);
+    for (const targetUuid of targetUuids) {
+        if (targetUuid === nodeUuid)
+            continue;
+        const targetRoot = await prefabInstanceRoot(targetUuid, queryNode);
+        if (targetRoot !== sourceRoot) {
+            return { atRisk: true, warning: WARNING };
+        }
+    }
+    return { atRisk: false };
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoibWFuYWdlLWNvbXBvbmVudC1wcmVmYWItZ3VhcmQuanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi8uLi9zb3VyY2UvdG9vbHMvbWFuYWdlLWNvbXBvbmVudC1wcmVmYWItZ3VhcmQudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IjtBQUFBOzs7Ozs7Ozs7Ozs7Ozs7OztHQWlCRzs7O0FBdUJILGdFQWFDO0FBOEJELDREQWtCQztBQWxGRCxzSEFBc0g7QUFDekcsUUFBQSwrQkFBK0IsR0FBRyxDQUFDLE1BQU0sRUFBRSxXQUFXLEVBQUUsV0FBVyxFQUFFLGdCQUFnQixDQUFVLENBQUM7QUFTN0csTUFBTSxPQUFPLEdBQ1Qsc0ZBQXNGO0lBQ3RGLDhGQUE4RjtJQUM5RixrR0FBa0c7SUFDbEcsOEZBQThGLENBQUM7QUFFbkc7Ozs7R0FJRztBQUNILFNBQWdCLDBCQUEwQixDQUFDLFlBQW9CLEVBQUUsY0FBbUI7SUFDaEYsSUFBSSxDQUFFLHVDQUFxRCxDQUFDLFFBQVEsQ0FBQyxZQUFZLENBQUM7UUFBRSxPQUFPLEVBQUUsQ0FBQztJQUU5RixNQUFNLEtBQUssR0FBRyxLQUFLLENBQUMsT0FBTyxDQUFDLGNBQWMsQ0FBQyxDQUFDLENBQUMsQ0FBQyxjQUFjLENBQUMsQ0FBQyxDQUFDLENBQUMsY0FBYyxDQUFDLENBQUM7SUFDaEYsTUFBTSxLQUFLLEdBQWEsRUFBRSxDQUFDO0lBQzNCLEtBQUssTUFBTSxJQUFJLElBQUksS0FBSyxFQUFFLENBQUM7UUFDdkIsSUFBSSxPQUFPLElBQUksS0FBSyxRQUFRLElBQUksSUFBSSxFQUFFLENBQUM7WUFDbkMsS0FBSyxDQUFDLElBQUksQ0FBQyxJQUFJLENBQUMsQ0FBQztRQUNyQixDQUFDO2FBQU0sSUFBSSxJQUFJLElBQUksT0FBTyxJQUFJLEtBQUssUUFBUSxJQUFJLE9BQU8sSUFBSSxDQUFDLElBQUksS0FBSyxRQUFRLElBQUksSUFBSSxDQUFDLElBQUksRUFBRSxDQUFDO1lBQ3hGLEtBQUssQ0FBQyxJQUFJLENBQUMsSUFBSSxDQUFDLElBQUksQ0FBQyxDQUFDO1FBQzFCLENBQUM7SUFDTCxDQUFDO0lBQ0QsT0FBTyxLQUFLLENBQUM7QUFDakIsQ0FBQztBQUVEOzs7O0dBSUc7QUFDSCxLQUFLLFVBQVUsa0JBQWtCLENBQzdCLFFBQWdCLEVBQ2hCLFNBQXlDO0lBRXpDLElBQUksSUFBUyxDQUFDO0lBQ2QsSUFBSSxDQUFDO1FBQ0QsSUFBSSxHQUFHLE1BQU0sU0FBUyxDQUFDLFFBQVEsQ0FBQyxDQUFDO0lBQ3JDLENBQUM7SUFBQyxXQUFNLENBQUM7UUFDTCxPQUFPLElBQUksQ0FBQztJQUNoQixDQUFDO0lBQ0QsTUFBTSxNQUFNLEdBQUcsSUFBSSxhQUFKLElBQUksdUJBQUosSUFBSSxDQUFFLFVBQVUsQ0FBQztJQUNoQyxJQUFJLENBQUMsTUFBTTtRQUFFLE9BQU8sSUFBSSxDQUFDO0lBQ3pCLE9BQU8sTUFBTSxDQUFDLFFBQVEsSUFBSSxRQUFRLENBQUM7QUFDdkMsQ0FBQztBQUVEOzs7Ozs7O0dBT0c7QUFDSSxLQUFLLFVBQVUsd0JBQXdCLENBQzFDLFFBQWdCLEVBQ2hCLFlBQW9CLEVBQ3BCLGNBQW1CLEVBQ25CLFNBQXlDO0lBRXpDLE1BQU0sV0FBVyxHQUFHLDBCQUEwQixDQUFDLFlBQVksRUFBRSxjQUFjLENBQUMsQ0FBQztJQUM3RSxJQUFJLFdBQVcsQ0FBQyxNQUFNLEtBQUssQ0FBQztRQUFFLE9BQU8sRUFBRSxNQUFNLEVBQUUsS0FBSyxFQUFFLENBQUM7SUFFdkQsTUFBTSxVQUFVLEdBQUcsTUFBTSxrQkFBa0IsQ0FBQyxRQUFRLEVBQUUsU0FBUyxDQUFDLENBQUM7SUFDakUsS0FBSyxNQUFNLFVBQVUsSUFBSSxXQUFXLEVBQUUsQ0FBQztRQUNuQyxJQUFJLFVBQVUsS0FBSyxRQUFRO1lBQUUsU0FBUztRQUN0QyxNQUFNLFVBQVUsR0FBRyxNQUFNLGtCQUFrQixDQUFDLFVBQVUsRUFBRSxTQUFTLENBQUMsQ0FBQztRQUNuRSxJQUFJLFVBQVUsS0FBSyxVQUFVLEVBQUUsQ0FBQztZQUM1QixPQUFPLEVBQUUsTUFBTSxFQUFFLElBQUksRUFBRSxPQUFPLEVBQUUsT0FBTyxFQUFFLENBQUM7UUFDOUMsQ0FBQztJQUNMLENBQUM7SUFDRCxPQUFPLEVBQUUsTUFBTSxFQUFFLEtBQUssRUFBRSxDQUFDO0FBQzdCLENBQUMiLCJzb3VyY2VzQ29udGVudCI6WyIvKipcbiAqIFByZWZhYi1pbnN0YW5jZSBib3VuZGFyeSBkZXRlY3Rpb24gZm9yIGNvbXBvbmVudCByZWZlcmVuY2Ugd3JpdGVzIChpc3N1ZSAjNDgpLlxuICpcbiAqIEEgcmVmZXJlbmNlIHRoYXQgY3Jvc3NlcyBhIHByZWZhYi1pbnN0YW5jZSBib3VuZGFyeSBkb2VzIE5PVCBwZXJzaXN0IHRocm91Z2ggdGhlXG4gKiBub3JtYWwgc2VyaWFsaXplZCBmaWVsZC4gQ29jb3MgQ3JlYXRvciBzdG9yZXMgaXQgYXMgYSBgY2MuVGFyZ2V0T3ZlcnJpZGVJbmZvYFxuICogcmVjb3JkIG9uIHRoZSBvd25pbmcgaW5zdGFuY2UncyBgY2MuUHJlZmFiSW5mby50YXJnZXRPdmVycmlkZXNgOyB0aGUgZmllbGQgaXRzZWxmXG4gKiBzZXJpYWxpemVzIGFzIGBudWxsYCBieSBkZXNpZ24uIGBzY2VuZTpzZXQtcHJvcGVydHlgIHdyaXRlcyBvbmx5IHRoZSBsaXZlIHZhbHVlIOKAlFxuICogaXQgY3JlYXRlcyBubyBvdmVycmlkZSByZWNvcmQg4oCUIHNvIHRoZSB3cml0ZSBpcyByZWFsIGluIG1lbW9yeSwgdmVyaWZpZXMgYWdhaW5zdCBhXG4gKiBsaXZlIHJlYWQtYmFjaywgYW5kIGlzIHRoZW4gbG9zdCBvbiBzYXZlLlxuICpcbiAqIFRoZSBwb3N0LXdyaXRlIGNoZWNrIGluIGBhcHBseVNpbmdsZVByb3BlcnR5YCByZS1yZWFkcyB0aGUgTElWRSBzY2VuZSwgc28gaXQgY2Fubm90XG4gKiBvYnNlcnZlIHRoaXMgY2xhc3Mgb2YgbG9zcyBieSBjb25zdHJ1Y3Rpb24uIFRoaXMgbW9kdWxlIHN1cHBsaWVzIHRoZSBtaXNzaW5nIHNpZ25hbDpcbiAqIGl0IGRvZXMgbm90IGNoYW5nZSB0aGUgd3JpdGUsIGl0IHRlbGxzIHRoZSBjYWxsZXIgdGhlIHdyaXRlIG1heSBub3Qgc3Vydml2ZSBhIHNhdmUuXG4gKlxuICogRGV0ZWN0aW9uIHVzZXMgdGhlIG5vZGUgZHVtcCdzIGBfX3ByZWZhYl9fYCBibG9jayDigJQgdGhlIHNhbWUgZGlzY3JpbWluYXRvclxuICogYE1hbmFnZUNvbXBvbmVudGAncyBzaWJsaW5nIGBNYW5hZ2VQcmVmYWIucmVzb2x2ZVByZWZhYkNvbnRleHRgIGFscmVhZHkgZHJpdmVzIGJvdGhcbiAqIGBhcHBseS1wcmVmYWJgIGFuZCBgcmVzdG9yZS1wcmVmYWJgIGZyb20uXG4gKi9cblxuLyoqIFJlZmVyZW5jZSBwcm9wZXJ0eVR5cGVzIHdob3NlIHZhbHVlIGlzIG9uZSBvciBtb3JlIG5vZGUgVVVJRHMg4oCUIHRoZSBvbmx5IG9uZXMgdGhhdCBjYW4gY3Jvc3MgYSBwcmVmYWIgYm91bmRhcnkuICovXG5leHBvcnQgY29uc3QgUFJFRkFCX1NFTlNJVElWRV9QUk9QRVJUWV9UWVBFUyA9IFsnbm9kZScsICdjb21wb25lbnQnLCAnbm9kZUFycmF5JywgJ2NvbXBvbmVudEFycmF5J10gYXMgY29uc3Q7XG5cbmV4cG9ydCBpbnRlcmZhY2UgUHJlZmFiT3ZlcnJpZGVSaXNrIHtcbiAgICAvKiogVHJ1ZSB3aGVuIHRoZSByZWZlcmVuY2UgY3Jvc3NlcyBhIHByZWZhYi1pbnN0YW5jZSBib3VuZGFyeSBhbmQgbmVlZHMgYSBjYy5UYXJnZXRPdmVycmlkZUluZm8gdG8gc3Vydml2ZSBhIHNhdmUuICovXG4gICAgYXRSaXNrOiBib29sZWFuO1xuICAgIC8qKiBDYWxsZXItZmFjaW5nIGV4cGxhbmF0aW9uLiBQcmVzZW50IG9ubHkgd2hlbiBgYXRSaXNrYC4gKi9cbiAgICB3YXJuaW5nPzogc3RyaW5nO1xufVxuXG5jb25zdCBXQVJOSU5HID1cbiAgICAnTGl2ZSB2YWx1ZSBzZXQgYW5kIHZlcmlmaWVkLCBidXQgdGhpcyByZWZlcmVuY2UgY3Jvc3NlcyBhIHByZWZhYi1pbnN0YW5jZSBib3VuZGFyeS4gJyArXG4gICAgJ0EgY3Jvc3MtcHJlZmFiIHJlZmVyZW5jZSBwZXJzaXN0cyBvbmx5IGFzIGEgY2MuVGFyZ2V0T3ZlcnJpZGVJbmZvIHJlY29yZCBvbiB0aGUgaW5zdGFuY2VcXCdzICcgK1xuICAgICdjYy5QcmVmYWJJbmZvLnRhcmdldE92ZXJyaWRlcyDigJQgdGhpcyB3cml0ZSBkb2VzIG5vdCBjcmVhdGUgb25lLCBzbyB0aGUgZmllbGQgbWF5IHJlYWQgYmFjayBudWxsICcgK1xuICAgICdhZnRlciB0aGUgc2NlbmUgb3IgcHJlZmFiIGlzIHNhdmVkLiBWZXJpZnkgdGhlIHNhdmVkIGFzc2V0IGJlZm9yZSByZWx5aW5nIG9uIHRoaXMgcmVmZXJlbmNlLic7XG5cbi8qKlxuICogUHVsbCB0aGUgcmVmZXJlbmNlZCBub2RlIFVVSURzIG91dCBvZiBhbiBhbHJlYWR5LWNvbnZlcnRlZCBwcm9wZXJ0eSB2YWx1ZS5cbiAqIGBjb252ZXJ0UHJvcGVydHlWYWx1ZWAgbm9ybWFsaXNlcyBgbm9kZWAvYG5vZGVBcnJheWAgdG8gYHsgdXVpZCB9YCBzaGFwZXMgYW5kXG4gKiBgY29tcG9uZW50YC9gY29tcG9uZW50QXJyYXlgIHRvIGJhcmUgbm9kZS1VVUlEIHN0cmluZ3MsIHNvIGJvdGggc3BlbGxpbmdzIGxhbmQgaGVyZS5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIGV4dHJhY3RSZWZlcmVuY2VkTm9kZVV1aWRzKHByb3BlcnR5VHlwZTogc3RyaW5nLCBwcm9jZXNzZWRWYWx1ZTogYW55KTogc3RyaW5nW10ge1xuICAgIGlmICghKFBSRUZBQl9TRU5TSVRJVkVfUFJPUEVSVFlfVFlQRVMgYXMgcmVhZG9ubHkgc3RyaW5nW10pLmluY2x1ZGVzKHByb3BlcnR5VHlwZSkpIHJldHVybiBbXTtcblxuICAgIGNvbnN0IGl0ZW1zID0gQXJyYXkuaXNBcnJheShwcm9jZXNzZWRWYWx1ZSkgPyBwcm9jZXNzZWRWYWx1ZSA6IFtwcm9jZXNzZWRWYWx1ZV07XG4gICAgY29uc3QgdXVpZHM6IHN0cmluZ1tdID0gW107XG4gICAgZm9yIChjb25zdCBpdGVtIG9mIGl0ZW1zKSB7XG4gICAgICAgIGlmICh0eXBlb2YgaXRlbSA9PT0gJ3N0cmluZycgJiYgaXRlbSkge1xuICAgICAgICAgICAgdXVpZHMucHVzaChpdGVtKTtcbiAgICAgICAgfSBlbHNlIGlmIChpdGVtICYmIHR5cGVvZiBpdGVtID09PSAnb2JqZWN0JyAmJiB0eXBlb2YgaXRlbS51dWlkID09PSAnc3RyaW5nJyAmJiBpdGVtLnV1aWQpIHtcbiAgICAgICAgICAgIHV1aWRzLnB1c2goaXRlbS51dWlkKTtcbiAgICAgICAgfVxuICAgIH1cbiAgICByZXR1cm4gdXVpZHM7XG59XG5cbi8qKlxuICogSWRlbnRpZnkgdGhlIHByZWZhYiBpbnN0YW5jZSBhIG5vZGUgYmVsb25ncyB0bywgb3IgbnVsbCB3aGVuIGl0IHNpdHMgaW4gcGxhaW4gc2NlbmUgc3BhY2UuXG4gKiBSZXR1cm5zIHRoZSBpbnN0YW5jZSBST09UIHV1aWQgc28gdHdvIG5vZGVzIGluc2lkZSB0aGUgc2FtZSBpbnN0YW5jZSBjb21wYXJlIGVxdWFsLlxuICogQSBxdWVyeSBmYWlsdXJlIHlpZWxkcyBudWxsIOKAlCB0aGlzIGNoZWNrIGlzIGFkdmlzb3J5IGFuZCBtdXN0IG5ldmVyIGJyZWFrIGEgd3JpdGUuXG4gKi9cbmFzeW5jIGZ1bmN0aW9uIHByZWZhYkluc3RhbmNlUm9vdChcbiAgICBub2RlVXVpZDogc3RyaW5nLFxuICAgIHF1ZXJ5Tm9kZTogKHV1aWQ6IHN0cmluZykgPT4gUHJvbWlzZTxhbnk+XG4pOiBQcm9taXNlPHN0cmluZyB8IG51bGw+IHtcbiAgICBsZXQgZHVtcDogYW55O1xuICAgIHRyeSB7XG4gICAgICAgIGR1bXAgPSBhd2FpdCBxdWVyeU5vZGUobm9kZVV1aWQpO1xuICAgIH0gY2F0Y2gge1xuICAgICAgICByZXR1cm4gbnVsbDtcbiAgICB9XG4gICAgY29uc3QgcHJlZmFiID0gZHVtcD8uX19wcmVmYWJfXztcbiAgICBpZiAoIXByZWZhYikgcmV0dXJuIG51bGw7XG4gICAgcmV0dXJuIHByZWZhYi5yb290VXVpZCB8fCBub2RlVXVpZDtcbn1cblxuLyoqXG4gKiBSZXBvcnQgd2hldGhlciBhIHJlZmVyZW5jZSB3cml0ZSBjcm9zc2VzIGEgcHJlZmFiLWluc3RhbmNlIGJvdW5kYXJ5LlxuICpcbiAqIEF0IHJpc2sgd2hlbiB0aGUgY29tcG9uZW50J3Mgbm9kZSBhbmQgYSByZWZlcmVuY2VkIG5vZGUgcmVzb2x2ZSB0byBESUZGRVJFTlRcbiAqIHByZWZhYi1pbnN0YW5jZSByb290cyDigJQgaW5jbHVkaW5nIHRoZSBwbGFpbi1zY2VuZS10by1pbnN0YW5jZSBhbmRcbiAqIGluc3RhbmNlLXRvLXBsYWluLXNjZW5lIGRpcmVjdGlvbnMuIFR3byBub2RlcyBpbnNpZGUgdGhlIHNhbWUgaW5zdGFuY2UsIGFuZCB0d29cbiAqIG5vZGVzIGJvdGggb3V0c2lkZSBhbnkgaW5zdGFuY2UsIHNlcmlhbGl6ZSBub3JtYWxseSBhbmQgYXJlIG5vdCBmbGFnZ2VkLlxuICovXG5leHBvcnQgYXN5bmMgZnVuY3Rpb24gZGV0ZWN0UHJlZmFiT3ZlcnJpZGVSaXNrKFxuICAgIG5vZGVVdWlkOiBzdHJpbmcsXG4gICAgcHJvcGVydHlUeXBlOiBzdHJpbmcsXG4gICAgcHJvY2Vzc2VkVmFsdWU6IGFueSxcbiAgICBxdWVyeU5vZGU6ICh1dWlkOiBzdHJpbmcpID0+IFByb21pc2U8YW55PlxuKTogUHJvbWlzZTxQcmVmYWJPdmVycmlkZVJpc2s+IHtcbiAgICBjb25zdCB0YXJnZXRVdWlkcyA9IGV4dHJhY3RSZWZlcmVuY2VkTm9kZVV1aWRzKHByb3BlcnR5VHlwZSwgcHJvY2Vzc2VkVmFsdWUpO1xuICAgIGlmICh0YXJnZXRVdWlkcy5sZW5ndGggPT09IDApIHJldHVybiB7IGF0UmlzazogZmFsc2UgfTtcblxuICAgIGNvbnN0IHNvdXJjZVJvb3QgPSBhd2FpdCBwcmVmYWJJbnN0YW5jZVJvb3Qobm9kZVV1aWQsIHF1ZXJ5Tm9kZSk7XG4gICAgZm9yIChjb25zdCB0YXJnZXRVdWlkIG9mIHRhcmdldFV1aWRzKSB7XG4gICAgICAgIGlmICh0YXJnZXRVdWlkID09PSBub2RlVXVpZCkgY29udGludWU7XG4gICAgICAgIGNvbnN0IHRhcmdldFJvb3QgPSBhd2FpdCBwcmVmYWJJbnN0YW5jZVJvb3QodGFyZ2V0VXVpZCwgcXVlcnlOb2RlKTtcbiAgICAgICAgaWYgKHRhcmdldFJvb3QgIT09IHNvdXJjZVJvb3QpIHtcbiAgICAgICAgICAgIHJldHVybiB7IGF0UmlzazogdHJ1ZSwgd2FybmluZzogV0FSTklORyB9O1xuICAgICAgICB9XG4gICAgfVxuICAgIHJldHVybiB7IGF0UmlzazogZmFsc2UgfTtcbn1cbiJdfQ==
