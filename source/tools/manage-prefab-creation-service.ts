@@ -218,6 +218,10 @@ export class PrefabCreationService {
                 if (nodeData.position) node.position = nodeData.position;
                 if (nodeData.rotation) node.rotation = nodeData.rotation;
                 if (nodeData.scale) node.scale = nodeData.scale;
+                // The layer is carried for the same reason: createEngineStandardNode hardcoded
+                // DEFAULT, so every node of a created prefab landed on the DEFAULT layer and a
+                // UI prefab (UI_2D) was culled by the UI camera — it rendered nothing.
+                if (nodeData.layer !== undefined) node.layer = nodeData.layer;
                 if (nodeData.__comps__) {
                     // `properties` carries the live property dump through to serialization.
                     // Reducing each component to type/uuid/enabled discarded every configured
@@ -353,11 +357,42 @@ export class PrefabCreationService {
         context.currentId = prefabInfoIndex + 1;
     }
 
+    /** `cc.Layers.Enum.DEFAULT` (1 << 30) — the fallback when a node dump carries no layer. */
+    private static readonly DEFAULT_LAYER = 1073741824;
+
+    /**
+     * Euler angles in DEGREES to a quaternion, matching `cc.Quat.fromEuler` exactly.
+     * Verified against Cocos Creator 3.8.7: euler (10, 20, 30) serializes as
+     * (0.12767944069578063, 0.18930785741199999, 0.2392983377447303, 0.943714364147489).
+     */
+    private static eulerDegreesToQuat(e: any): { x: number; y: number; z: number; w: number } {
+        const halfToRad = 0.5 * Math.PI / 180;
+        const x = (e.x || 0) * halfToRad, y = (e.y || 0) * halfToRad, z = (e.z || 0) * halfToRad;
+        const sx = Math.sin(x), cx = Math.cos(x);
+        const sy = Math.sin(y), cy = Math.cos(y);
+        const sz = Math.sin(z), cz = Math.cos(z);
+        return {
+            x: sx * cy * cz + cx * sy * sz,
+            y: cx * sy * cz + sx * cy * sz,
+            z: cx * cy * sz - sx * sy * cz,
+            w: cx * cy * cz - sx * sy * sz,
+        };
+    }
+
     private createEngineStandardNode(nodeData: any, parentNodeIndex: number | null, nodeName?: string): any {
         const name = nodeName || nodeData.name?.value || nodeData.name || 'Node';
         const lpos = nodeData.position?.value || nodeData.lpos?.value || nodeData._lpos || { x: 0, y: 0, z: 0 };
-        const lrot = nodeData.rotation?.value || nodeData.lrot?.value || nodeData._lrot || { x: 0, y: 0, z: 0, w: 1 };
+        const rotDump = nodeData.rotation?.value || nodeData.lrot?.value || nodeData._lrot || { x: 0, y: 0, z: 0, w: 1 };
+        // `query-node` reports rotation as EULER DEGREES (cc.Vec3, no `w`) — the value the
+        // inspector's Rotation field shows. `_lrot` is a quaternion, so passing the dump
+        // straight through stored a degree in a quaternion component: a -0.1 degree tilt was
+        // written as {z: -0.1, w: 1}, which the engine reads back as roughly -11.46 degrees.
+        const isQuat = rotDump.w !== undefined;
+        const lrot = isQuat ? rotDump : PrefabCreationService.eulerDegreesToQuat(rotDump);
+        const euler = isQuat ? { x: 0, y: 0, z: 0 } : rotDump;
         const lscale = nodeData.scale?.value || nodeData.lscale?.value || nodeData._lscale || { x: 1, y: 1, z: 1 };
+        const layerDump = nodeData.layer?.value !== undefined ? nodeData.layer.value : nodeData.layer;
+        const layer = typeof layerDump === 'number' ? layerDump : PrefabCreationService.DEFAULT_LAYER;
         return {
             "__type__": "cc.Node", "_name": name, "_objFlags": 0, "__editorExtras__": {},
             "_parent": parentNodeIndex !== null ? { "__id__": parentNodeIndex } : null,
@@ -365,7 +400,8 @@ export class PrefabCreationService {
             "_lpos": { "__type__": "cc.Vec3", "x": lpos.x || 0, "y": lpos.y || 0, "z": lpos.z || 0 },
             "_lrot": { "__type__": "cc.Quat", "x": lrot.x || 0, "y": lrot.y || 0, "z": lrot.z || 0, "w": lrot.w !== undefined ? lrot.w : 1 },
             "_lscale": { "__type__": "cc.Vec3", "x": lscale.x !== undefined ? lscale.x : 1, "y": lscale.y !== undefined ? lscale.y : 1, "z": lscale.z !== undefined ? lscale.z : 1 },
-            "_mobility": 0, "_layer": 1073741824, "_euler": { "__type__": "cc.Vec3", "x": 0, "y": 0, "z": 0 }, "_id": ""
+            "_mobility": 0, "_layer": layer,
+            "_euler": { "__type__": "cc.Vec3", "x": euler.x || 0, "y": euler.y || 0, "z": euler.z || 0 }, "_id": ""
         };
     }
 
