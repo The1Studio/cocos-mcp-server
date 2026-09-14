@@ -77,3 +77,96 @@ describe('PrefabCreationService — transform carry-through (issue #50)', () => 
         expect(enhanced.components).toBeUndefined();
     });
 });
+
+/**
+ * Regression test for the euler/quaternion mix-up and the dropped layer.
+ *
+ * `query-node` reports `rotation` as EULER DEGREES (a cc.Vec3, no `w`) — the same value the
+ * inspector's Rotation field shows. `_lrot` is a quaternion, so writing the dump straight
+ * through stored a degree value in a quaternion component: a -0.1 degree tilt serialized as
+ * `{z: -0.1, w: 1}`, which the engine reads back as roughly -11.46 degrees. The tests above
+ * missed this because they mock `rotation` as a quaternion, a shape the editor never sends.
+ *
+ * `_layer` was hardcoded to DEFAULT (1 << 30), so every node in a created prefab landed on
+ * the DEFAULT layer. A UI prefab whose nodes must be UI_2D (1 << 25) is culled by the UI
+ * camera and renders nothing, while the same node in the scene renders correctly.
+ *
+ * Reference values are taken from a real Cocos Creator 3.8.7 scene: a node with euler
+ * z = -0.1 serializes `_lrot` as z = -0.0008726645152351496, w = 0.9999996192282494.
+ */
+describe('PrefabCreationService — euler rotation and layer', () => {
+    let service: PrefabCreationService;
+    let requestMock: jest.Mock;
+
+    const UI_2D = 33554432;
+    const DEFAULT_LAYER = 1073741824;
+
+    beforeEach(() => {
+        service = new PrefabCreationService();
+        requestMock = (global as any).Editor.Message.request as jest.Mock;
+        requestMock.mockReset();
+    });
+
+    it('converts an euler-degrees rotation dump into a quaternion', () => {
+        const node = (service as any).createEngineStandardNode({
+            name: { value: 'QrCode' },
+            rotation: { value: { x: 0, y: 0, z: -0.1 } },
+        }, null);
+
+        expect(node._lrot.x).toBeCloseTo(0, 12);
+        expect(node._lrot.y).toBeCloseTo(0, 12);
+        expect(node._lrot.z).toBeCloseTo(-0.0008726645152351496, 12);
+        expect(node._lrot.w).toBeCloseTo(0.9999996192282494, 12);
+    });
+
+    it('carries the euler degrees through to _euler', () => {
+        const node = (service as any).createEngineStandardNode({
+            name: { value: 'QrCode' },
+            rotation: { value: { x: 0, y: 0, z: -0.1 } },
+        }, null);
+
+        expect(node._euler).toEqual({ __type__: 'cc.Vec3', x: 0, y: 0, z: -0.1 });
+    });
+
+    it('passes a genuine quaternion dump through unconverted', () => {
+        const node = (service as any).createEngineStandardNode({
+            name: { value: 'Enemy' },
+            rotation: { value: { x: 0, y: 0, z: 0.7071, w: 0.7071 } },
+        }, null);
+
+        expect(node._lrot).toEqual({ __type__: 'cc.Quat', x: 0, y: 0, z: 0.7071, w: 0.7071 });
+    });
+
+    it('serializes the node layer from the dump instead of hardcoding DEFAULT', () => {
+        const node = (service as any).createEngineStandardNode({
+            name: { value: 'Background' },
+            layer: { value: UI_2D },
+        }, null);
+
+        expect(node._layer).toBe(UI_2D);
+    });
+
+    it('accepts a bare layer value as well as a wrapped one', () => {
+        const node = (service as any).createEngineStandardNode({ name: { value: 'Background' }, layer: UI_2D }, null);
+
+        expect(node._layer).toBe(UI_2D);
+    });
+
+    it('falls back to DEFAULT when the dump carries no layer', () => {
+        const node = (service as any).createEngineStandardNode({ name: { value: 'NoLayer' } }, null);
+
+        expect(node._layer).toBe(DEFAULT_LAYER);
+    });
+
+    it('enhanceTreeWithMCPComponents carries the layer onto the node', async () => {
+        requestMock.mockResolvedValueOnce({
+            name: { value: 'Background' },
+            position: { value: { x: 0, y: -53, z: 0 } },
+            layer: { value: UI_2D },
+        });
+
+        const enhanced = await (service as any).enhanceTreeWithMCPComponents({ uuid: 'node-uuid-3', name: 'Background' });
+
+        expect(enhanced.layer).toEqual({ value: UI_2D });
+    });
+});
