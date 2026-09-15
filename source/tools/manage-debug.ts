@@ -605,6 +605,7 @@ export class ManageDebug extends BaseActionTool {
                         matchedLine: line,
                         context: contextLinesArray
                     });
+                    resultCount++;
                 }
             }
 
