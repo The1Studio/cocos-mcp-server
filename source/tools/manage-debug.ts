@@ -576,10 +576,10 @@ export class ManageDebug extends BaseActionTool {
             // Create regex pattern (support both string and regex patterns)
             let regex: RegExp;
             try {
-                regex = new RegExp(pattern, 'gi');
+                regex = new RegExp(pattern, 'i');
             } catch {
                 // If pattern is not valid regex, treat as literal string
-                regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
             }
 
             const matches: any[] = [];
@@ -605,11 +605,6 @@ export class ManageDebug extends BaseActionTool {
                         matchedLine: line,
                         context: contextLinesArray
                     });
-
-                    resultCount++;
-
-                    // Reset regex lastIndex for global search
-                    regex.lastIndex = 0;
                 }
             }
 
