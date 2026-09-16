@@ -52,6 +52,42 @@ describe('ExecuteMenuItem', () => {
             expect(result.success).toBe(true);
             expect(result.data).toEqual({ menuPath: 'Edit/Undo' });
         });
+
+        it('returns error for a path under an unknown category, without sending', async () => {
+            const mockSend = (global as any).Editor.Message.send as jest.Mock;
+
+            const result = await tool.execute('execute', { menuPath: 'Developr/Reload' });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/unknown menu path/i);
+            expect(mockSend).not.toHaveBeenCalled();
+        });
+
+        it('returns error for a path with no separator under an unknown category', async () => {
+            const result = await tool.execute('execute', { menuPath: 'Nonexistent' });
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/unknown menu path/i);
+        });
+
+        it('allows an unlisted item under a known category (list is not exhaustive)', async () => {
+            // KNOWN_MENU_ITEMS is documented as not exhaustive — a real menu item absent
+            // from it must not become un-executable.
+            const mockSend = (global as any).Editor.Message.send as jest.Mock;
+
+            const result = await tool.execute('execute', { menuPath: 'Node/Create Render Nodes/Mask' });
+            expect(result.success).toBe(true);
+            expect(mockSend).toHaveBeenCalledWith('menu', 'click', 'Node/Create Render Nodes/Mask');
+        });
+
+        it('accepts every path that search reports', async () => {
+            const searched = await tool.execute('search', { keyword: '/' });
+            const matches = searched.data.matches as string[];
+            expect(matches.length).toBeGreaterThan(0);
+
+            for (const menuPath of matches) {
+                const result = await tool.execute('execute', { menuPath });
+                expect(result.success).toBe(true);
+            }
+        });
     });
 
     describe('list action', () => {
