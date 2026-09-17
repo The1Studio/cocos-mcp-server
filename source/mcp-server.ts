@@ -1,50 +1,7 @@
 import * as http from 'http';
 import * as url from 'url';
 import { MCPServerSettings, ServerStatus, ToolDefinition, ActionToolExecutor } from './types';
-import { ManageScene } from './tools/manage-scene';
-import { ManageNode } from './tools/manage-node';
-import { ManageComponent } from './tools/manage-component';
-import { ManagePrefab } from './tools/manage-prefab';
-import { ManageAsset } from './tools/manage-asset';
-import { ManageProject } from './tools/manage-project';
-import { ManageDebug } from './tools/manage-debug';
-import { ManagePreferences } from './tools/manage-preferences';
-import { ManageServer } from './tools/manage-server';
-import { ManageBroadcast } from './tools/manage-broadcast';
-import { ManageSceneView } from './tools/manage-scene-view';
-import { ManageNodeHierarchy } from './tools/manage-node-hierarchy';
-import { ManageSceneQuery } from './tools/manage-scene-query';
-import { ManageUndo } from './tools/manage-undo';
-import { ManageReferenceImage } from './tools/manage-reference-image';
-import { ManageValidation } from './tools/manage-validation';
-import { ManageSelection } from './tools/manage-selection';
-import { ManageScript } from './tools/manage-script';
-import { ManageMaterial } from './tools/manage-material';
-import { ManageAnimation } from './tools/manage-animation';
-// Phase 1: Core Tools
-import { ManageLight } from './tools/manage-light';
-import { ManageCamera } from './tools/manage-camera';
-import { ManagePhysics } from './tools/manage-physics';
-import { ManageUI } from './tools/manage-ui';
-import { BatchExecute } from './tools/batch-execute';
-// Phase 2: Game Tools
-import { ManageAudio } from './tools/manage-audio';
-import { ManageParticle } from './tools/manage-particle';
-import { ManageTween } from './tools/manage-tween';
-import { ManageEditor } from './tools/manage-editor';
-// Phase 3: Specialized Tools
-import { ManageTilemap } from './tools/manage-tilemap';
-import { ManageSpine } from './tools/manage-spine';
-import { ManageDragonBones } from './tools/manage-dragonbones';
-import { ExecuteMenuItem } from './tools/execute-menu-item';
-import { ManageTerrain } from './tools/manage-terrain';
-// Phase 4: Polish Tools
-import { ManageRenderPipeline } from './tools/manage-render-pipeline';
-import { ManageShaderEffect } from './tools/manage-shader-effect';
-import { ManageMesh } from './tools/manage-mesh';
-import { ManageProfiler } from './tools/manage-profiler';
-import { ManageVideo } from './tools/manage-video';
-import { ManageInput } from './tools/manage-input';
+import { createAllTools } from './tools/tool-registry';
 import { CocosResources } from './resources/cocos-resources';
 import { enqueueMutation } from './tools/mutation-queue';
 
@@ -67,52 +24,7 @@ export class MCPServer {
     private initializeTools(): void {
         try {
             console.log('[MCPServer] Initializing v2 action-based tools...');
-            const tools: ActionToolExecutor[] = [
-                new ManageScene(),
-                new ManageNode(),
-                new ManageComponent(),
-                new ManagePrefab(),
-                new ManageAsset(),
-                new ManageProject(),
-                new ManageDebug(),
-                new ManagePreferences(),
-                new ManageServer(),
-                new ManageBroadcast(),
-                new ManageSceneView(),
-                new ManageNodeHierarchy(),
-                new ManageSceneQuery(),
-                new ManageUndo(),
-                new ManageReferenceImage(),
-                new ManageValidation(),
-                new ManageSelection(),
-                new ManageScript(),
-                new ManageMaterial(),
-                new ManageAnimation(),
-                // Phase 1: Core Tools
-                new ManageLight(),
-                new ManageCamera(),
-                new ManagePhysics(),
-                new ManageUI(),
-                new BatchExecute({ executeToolCall: this.executeToolCall.bind(this) }),
-                // Phase 2: Game Tools
-                new ManageAudio(),
-                new ManageParticle(),
-                new ManageTween(),
-                new ManageEditor(),
-                // Phase 3: Specialized Tools
-                new ManageTilemap(),
-                new ManageSpine(),
-                new ManageDragonBones(),
-                new ExecuteMenuItem(),
-                new ManageTerrain(),
-                // Phase 4: Polish Tools
-                new ManageRenderPipeline(),
-                new ManageShaderEffect(),
-                new ManageMesh(),
-                new ManageProfiler(),
-                new ManageVideo(),
-                new ManageInput(),
-            ];
+            const tools: ActionToolExecutor[] = createAllTools({ executeToolCall: this.executeToolCall.bind(this) });
             for (const tool of tools) {
                 this.toolExecutors.set(tool.name, tool);
                 this.toolDefinitions.push({
