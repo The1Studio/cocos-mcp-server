@@ -49,7 +49,13 @@ export class ManageNodeHierarchy extends BaseActionTool {
     protected actionHandlers: Record<string, (args: Record<string, any>) => Promise<ActionToolResult>> = {
         reset_property: (args) => this.resetProperty(args.uuid, args.path),
         move_array_element: (args) => this.moveArrayElement(args.uuid, args.path, coerceInt(args.target)!, coerceInt(args.offset)!),
-        remove_array_element: (args) => this.removeArrayElement(args.uuid, args.path, coerceInt(args.index)!),
+        remove_array_element: (args) => {
+            const index = coerceInt(args.index);
+            if (index === undefined) {
+                return Promise.resolve(errorResult('remove_array_element requires a numeric index'));
+            }
+            return this.removeArrayElement(args.uuid, args.path, index);
+        },
         copy: (args) => this.copyNode(normalizeStringArray(args.uuids)!),
         paste: (args) => this.pasteNode(args.target, normalizeStringArray(args.uuids)!, coerceBool(args.keepWorldTransform) ?? false),
         cut: (args) => this.cutNode(normalizeStringArray(args.uuids)!),
@@ -65,7 +71,11 @@ export class ManageNodeHierarchy extends BaseActionTool {
                 uuid,
                 path,
                 dump: { value: null }
-            }).then(() => {
+            }).then((result: boolean) => {
+                if (result === false) {
+                    resolve(errorResult(`Editor rejected reset-property for '${path}' on node ${uuid}.`));
+                    return;
+                }
                 resolve(successResult(null, `Property '${path}' reset to default value`));
             }).catch((err: Error) => {
                 resolve(errorResult(err.message));
@@ -75,7 +85,15 @@ export class ManageNodeHierarchy extends BaseActionTool {
 
     private async moveArrayElement(uuid: string, path: string, target: number, offset: number): Promise<ActionToolResult> {
         return new Promise((resolve) => {
-            Editor.Message.request('scene', 'move-array-element', { uuid, path, target, offset }).then(() => {
+            // The @cocos/creator-types declaration claims `result: void`, but the editor
+            // actually resolves a boolean success flag here (mirrors 'restore-prefab' in
+            // manage-prefab.ts, whose declared `void` return is equally stale) — cast past
+            // the wrong type rather than silently discarding the real result.
+            (Editor.Message.request as any)('scene', 'move-array-element', { uuid, path, target, offset }).then((result: boolean) => {
+                if (result === false) {
+                    resolve(errorResult(`Editor rejected move-array-element at index ${target} on '${path}' for node ${uuid}.`));
+                    return;
+                }
                 resolve(successResult(null, `Array element at index ${target} moved by ${offset}`));
             }).catch((err: Error) => {
                 resolve(errorResult(err.message));
@@ -85,7 +103,13 @@ export class ManageNodeHierarchy extends BaseActionTool {
 
     private async removeArrayElement(uuid: string, path: string, index: number): Promise<ActionToolResult> {
         return new Promise((resolve) => {
-            Editor.Message.request('scene', 'remove-array-element', { uuid, path, index }).then(() => {
+            // See moveArrayElement above — 'remove-array-element' has the same stale
+            // `result: void` declaration despite resolving a real boolean at runtime.
+            (Editor.Message.request as any)('scene', 'remove-array-element', { uuid, path, index }).then((result: boolean) => {
+                if (result === false) {
+                    resolve(errorResult(`Editor rejected remove-array-element at index ${index} on '${path}' for node ${uuid}.`));
+                    return;
+                }
                 resolve(successResult(null, `Array element at index ${index} removed`));
             }).catch((err: Error) => {
                 resolve(errorResult(err.message));
