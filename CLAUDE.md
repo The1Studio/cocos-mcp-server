@@ -22,7 +22,7 @@ npm run watch      # Watch mode for development
 
 Verify changes compile cleanly with `npm run build`, then run the Jest suite with `npm test`.
 
-**IMPORTANT — commit the rebuilt `dist/` with your `source/` change.** `dist/` is tracked in git and is what Cocos Creator actually loads (there is no build step on the consumer side). A source-only commit ships a stale compiled artifact, so the fix never takes effect. Always `npm run build` and stage the updated `dist/**` files in the SAME commit/PR as the `source/**` change (see PRs #4, #5 for the correct pattern).
+**IMPORTANT — commit the rebuilt `dist/` with your `source/` change.** `dist/` is tracked in git and is what Cocos Creator actually loads (there is no build step on the consumer side). A source-only commit ships a stale compiled artifact, so the fix never takes effect. Always `npm run build` and stage the updated `dist/**` files in the SAME commit/PR as the `source/**` change (see PRs #4, #5 for the correct pattern). This has recurred (PRs #92, #93 — see #109), so it is now enforced mechanically: run `npm run check:dist` to rebuild and diff `dist/` against `source/` on demand, and it also runs automatically as `pretest` before `npm test` (see `scripts/check-dist-drift.js`).
 
 ## Architecture (v2.0)
 

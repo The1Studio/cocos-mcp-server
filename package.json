@@ -9,6 +9,8 @@
         "preinstall": "node ./scripts/preinstall.js",
         "build": "tsc",
         "watch": "tsc -w",
+        "check:dist": "node ./scripts/check-dist-drift.js",
+        "pretest": "node ./scripts/check-dist-drift.js",
         "test": "jest --passWithNoTests"
     },
     "description": "i18n:cocos-mcp-server.description",
