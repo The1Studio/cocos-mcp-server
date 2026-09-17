@@ -2,6 +2,30 @@ import { join } from 'path';
 import { findNodeByUuidDeep } from './scene-node-lookup';
 module.paths.push(join(Editor.App.path, 'node_modules'));
 
+/** Split a "#RRGGBB" hex string into its 0-255 channel values. */
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+    const clean = hex.replace('#', '');
+    return {
+        r: parseInt(clean.substring(0, 2), 16),
+        g: parseInt(clean.substring(2, 4), 16),
+        b: parseInt(clean.substring(4, 6), 16),
+    };
+}
+
+/**
+ * Resolve a caller-supplied fog type — a bare enum name ("LINEAR"), a
+ * "FogType.LINEAR" form, a number, or a numeric string — into the numeric
+ * value cc.FogInfo.FogType expects. Returns undefined when unrecognized so
+ * the caller can reject it instead of writing a raw string onto fog.type.
+ */
+function resolveFogType(value: string | number, fogTypeEnum: Record<string, number>): number | undefined {
+    if (typeof value === 'number') return value;
+    const trimmed = String(value).trim();
+    if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+    const name = trimmed.replace(/^FogType\./i, '').toUpperCase();
+    return name in fogTypeEnum ? fogTypeEnum[name] : undefined;
+}
+
 export const methods: { [key: string]: (...any: any) => any } = {
     /**
      * Create a new scene
@@ -1818,24 +1842,45 @@ export const methods: { [key: string]: (...any: any) => any } = {
 
     setFogSettings(enabled: boolean | undefined, fogColor: string | undefined, type: string | undefined, fogStart: number | undefined, fogEnd: number | undefined, fogDensity: number | undefined) {
         try {
-            const { director, Color } = require('cc');
+            const { director, Color, FogInfo } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
             const fog = scene.globals && scene.globals.fog;
             if (!fog) return { success: false, error: 'Fog globals not available — 3D scene required' };
             if (enabled !== undefined) fog.enabled = enabled;
-            if (type !== undefined) fog.type = type;
+            if (type !== undefined) {
+                const resolvedType = resolveFogType(type, FogInfo.FogType);
+                if (resolvedType === undefined) return { success: false, error: `Unknown fog type: ${type}` };
+                fog.type = resolvedType;
+            }
             if (fogStart !== undefined) fog.fogStart = fogStart;
             if (fogEnd !== undefined) fog.fogEnd = fogEnd;
             if (fogDensity !== undefined) fog.fogDensity = fogDensity;
             if (fogColor !== undefined) {
-                const hex = fogColor.replace('#', '');
-                const r = parseInt(hex.substring(0, 2), 16);
-                const g = parseInt(hex.substring(2, 4), 16);
-                const b = parseInt(hex.substring(4, 6), 16);
+                const { r, g, b } = hexToRgb(fogColor);
                 fog.fogColor = new Color(r, g, b, 255);
             }
             return { success: true, data: { enabled: fog.enabled, type: fog.type, fogStart: fog.fogStart, fogEnd: fog.fogEnd, fogDensity: fog.fogDensity } };
+        } catch (error: any) { return { success: false, error: error.message }; }
+    },
+
+    setAmbientSettings(skyColor: string | undefined, groundAlbedo: string | undefined, skyIllum: number | undefined) {
+        try {
+            const { director, Color, Vec4 } = require('cc');
+            const scene = director.getScene();
+            if (!scene) return { success: false, error: 'No active scene' };
+            const env = scene.globals && scene.globals.environment;
+            if (!env) return { success: false, error: 'Ambient/environment globals not available — 3D scene required' };
+            if (skyColor !== undefined) {
+                const { r, g, b } = hexToRgb(skyColor);
+                env.skyColor = Vec4.fromColor(new Vec4(), new Color(r, g, b, 255));
+            }
+            if (groundAlbedo !== undefined) {
+                const { r, g, b } = hexToRgb(groundAlbedo);
+                env.groundAlbedo = Vec4.fromColor(new Vec4(), new Color(r, g, b, 255));
+            }
+            if (skyIllum !== undefined) env.skyIllum = skyIllum;
+            return { success: true, data: { skyColor: env.skyColor, groundAlbedo: env.groundAlbedo, skyIllum: env.skyIllum } };
         } catch (error: any) { return { success: false, error: error.message }; }
     },
 
