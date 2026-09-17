@@ -124,6 +124,18 @@ export async function applyPropertyToEditor(
             uuid: nodeUuid, path: propertyPath, dump: { value: processedValue, type: 'cc.Node' }
         });
 
+    } else if (propertyType === 'component' && processedValue && typeof processedValue === 'object' && 'uuid' in processedValue) {
+        // Issue #75: clearing a component reference (`convertPropertyValue` returns
+        // `{ uuid: '' }` for a null/'' input) — write it DIRECTLY. There is no target to
+        // resolve, and resolveComponentReference would only report '' as neither a node
+        // uuid nor a component uuid.
+        const expectedComponentType = await resolveExpectedComponentType(nodeUuid, componentType, property, getComponentInfo);
+        await Editor.Message.request('scene', 'set-property', {
+            uuid: nodeUuid, path: propertyPath,
+            dump: { value: { uuid: '' }, type: expectedComponentType || 'cc.Component' }
+        });
+        actualExpectedValue = { uuid: '' };
+
     } else if (propertyType === 'component' && typeof processedValue === 'string') {
         actualExpectedValue = await applyComponentReference(
             nodeUuid, propertyPath, componentType, property, processedValue, getComponentInfo
@@ -171,6 +183,60 @@ export async function applyPropertyToEditor(
 }
 
 /**
+ * Treat 'Unknown' as missing — it appears when a previous assignment stored a value
+ * whose runtime type didn't match the @property declared type, leaving the dump's
+ * type field stale.
+ */
+function isUsableType(t: any): boolean {
+    return typeof t === 'string' && t.length > 0 && t !== 'Unknown';
+}
+
+/**
+ * Resolve the DECLARED type of a `component`/`componentArray` @property from the holder
+ * component's own dump. Extracted from `resolveComponentReference` so a reference CLEAR
+ * (issue #75, `{ uuid: '' }`) can get the type it needs for the `set-property` dump
+ * without going through that function's TARGET resolution — there is nothing to resolve
+ * for an empty target, and it would only fail trying.
+ */
+async function resolveExpectedComponentType(
+    nodeUuid: string,
+    componentType: string,
+    property: string,
+    getComponentInfo: (nodeUuid: string, componentType: string) => Promise<ActionToolResult>
+): Promise<string> {
+    const currentComponentInfo = await getComponentInfo(nodeUuid, componentType);
+    // Walk dotted property paths through nested CCClass group dumps to find the metadata descriptor.
+    let propertyMeta: any = currentComponentInfo.success ? currentComponentInfo.data?.properties : undefined;
+    if (propertyMeta) {
+        const segments = property.split('.');
+        for (let i = 0; i < segments.length && propertyMeta; i++) {
+            propertyMeta = propertyMeta[segments[i]];
+            const isLeaf = i === segments.length - 1;
+            if (!isLeaf && propertyMeta && typeof propertyMeta === 'object' && 'value' in propertyMeta && typeof propertyMeta.value === 'object') {
+                propertyMeta = propertyMeta.value;
+            }
+        }
+    }
+
+    let expectedComponentType = '';
+    if (propertyMeta && typeof propertyMeta === 'object') {
+        if (isUsableType(propertyMeta.type)) {
+            expectedComponentType = propertyMeta.type;
+        } else if (isUsableType(propertyMeta.ctor)) {
+            expectedComponentType = propertyMeta.ctor;
+        } else if (propertyMeta.extends && Array.isArray(propertyMeta.extends)) {
+            for (const extendType of propertyMeta.extends) {
+                if (extendType.startsWith('cc.') && extendType !== 'cc.Component' && extendType !== 'cc.Object') {
+                    expectedComponentType = extendType;
+                    break;
+                }
+            }
+        }
+    }
+    return expectedComponentType;
+}
+
+/**
  * Resolve a target node's component reference to its scene component id, WITHOUT
  * performing the `set-property` write. Shared by the single-`component` propertyType
  * (which writes one `{ uuid }` value) and the `componentArray` propertyType (which
@@ -186,40 +252,7 @@ async function resolveComponentReference(
 ): Promise<{ componentId: string; expectedComponentType: string }> {
     console.log(`[ManageComponent] Setting component reference - finding component on node: ${targetNodeUuid}`);
 
-    let expectedComponentType = '';
-    const currentComponentInfo = await getComponentInfo(nodeUuid, componentType);
-    // Walk dotted property paths through nested CCClass group dumps to find the metadata descriptor.
-    let propertyMeta: any = currentComponentInfo.success ? currentComponentInfo.data?.properties : undefined;
-    if (propertyMeta) {
-        const segments = property.split('.');
-        for (let i = 0; i < segments.length && propertyMeta; i++) {
-            propertyMeta = propertyMeta[segments[i]];
-            const isLeaf = i === segments.length - 1;
-            if (!isLeaf && propertyMeta && typeof propertyMeta === 'object' && 'value' in propertyMeta && typeof propertyMeta.value === 'object') {
-                propertyMeta = propertyMeta.value;
-            }
-        }
-    }
-    // Treat 'Unknown' as missing — it appears when a previous assignment stored
-    // a value whose runtime type didn't match the @property declared type, leaving
-    // the dump's type field stale.
-    const isUsableType = (t: any) => typeof t === 'string' && t.length > 0 && t !== 'Unknown';
-    if (propertyMeta) {
-        if (propertyMeta && typeof propertyMeta === 'object') {
-            if (isUsableType(propertyMeta.type)) {
-                expectedComponentType = propertyMeta.type;
-            } else if (isUsableType(propertyMeta.ctor)) {
-                expectedComponentType = propertyMeta.ctor;
-            } else if (propertyMeta.extends && Array.isArray(propertyMeta.extends)) {
-                for (const extendType of propertyMeta.extends) {
-                    if (extendType.startsWith('cc.') && extendType !== 'cc.Component' && extendType !== 'cc.Object') {
-                        expectedComponentType = extendType;
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    let expectedComponentType = await resolveExpectedComponentType(nodeUuid, componentType, property, getComponentInfo);
 
     // `query-node` REJECTS on some editor builds and resolves falsy on others; both mean
     // the same thing here — the value is not a node uuid.
@@ -263,10 +296,27 @@ async function resolveComponentReference(
         // HeroDragController) resolve unrejected. A direct.type that is itself unusable
         // ('Unknown'/blank) cannot disprove a match, so it is left to fall through.
         if (expectedComponentType && isUsableType(direct.type) && direct.type !== expectedComponentType) {
-            throw new Error(
-                `Component uuid '${targetNodeUuid}' is a '${direct.type}', but property '${property}' ` +
-                `on '${componentType}' requires a '${expectedComponentType}'.`
-            );
+            // Issue #81: the same polymorphic gap issue #45 fixed on the node-uuid path
+            // below — expectedComponentType may be a BASE class while direct.type is a
+            // SUBCLASS. A literal string mismatch can't disprove that; ask the live
+            // class registry before rejecting a component that would actually satisfy
+            // the declared property type.
+            let isSubclass = false;
+            try {
+                const subclassResult: any = await Editor.Message.request('scene', 'execute-scene-script', {
+                    name: 'cocos-mcp-server', method: 'isComponentTypeSubclassOf', args: [direct.type, expectedComponentType]
+                });
+                isSubclass = !!(subclassResult && subclassResult.success && subclassResult.data && subclassResult.data.isSubclass);
+            } catch {
+                isSubclass = false;
+            }
+
+            if (!isSubclass) {
+                throw new Error(
+                    `Component uuid '${targetNodeUuid}' is a '${direct.type}', but property '${property}' ` +
+                    `on '${componentType}' requires a '${expectedComponentType}'.`
+                );
+            }
         }
 
         return { componentId: direct.uuid, expectedComponentType: directType };
