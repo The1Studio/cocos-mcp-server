@@ -155,6 +155,47 @@ describe('ManageNode', () => {
         });
     });
 
+    // Regression: issue #74 — `delete` awaited `remove-node` and reported success
+    // unconditionally, with no read-back confirming the node actually left the graph.
+    // `remove-node` silently no-ops on a prefab-instance child in scene-edit context, so
+    // a resolved promise here does not guarantee the node was deleted (it also explains
+    // issue #73, where "deleted" nodes reappear because the delete never took effect).
+    describe('delete action (read-back verification, issue #74)', () => {
+        it('reports success when the read-back confirms the node no longer resolves', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce({}) // remove-node
+                .mockResolvedValueOnce(null); // query-node read-back: node gone
+
+            const result = await tool.execute('delete', { uuid: 'node-1' });
+
+            expect(result.success).toBe(true);
+        });
+
+        it('treats a rejected read-back query as confirmation the node was deleted', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce({}) // remove-node
+                .mockRejectedValueOnce(new Error('node not found')); // query-node rejects post-delete
+
+            const result = await tool.execute('delete', { uuid: 'node-1' });
+
+            expect(result.success).toBe(true);
+        });
+
+        it('reports failure when the read-back shows the node is still resolvable (prefab-instance child blocked)', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce({}) // remove-node resolves but is a silent no-op
+                .mockResolvedValueOnce({ uuid: { value: 'node-1' }, name: { value: 'Node' } }); // query-node still finds it
+
+            const result = await tool.execute('delete', { uuid: 'node-1' });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/did not take effect|still exists|prefab/i);
+        });
+    });
+
     describe('set_property (boolean coercion + read-back verification, issue #47)', () => {
         // set-property, then readNodeProperty's own query-node, then getNodeInfo's query-node.
         function mockHappyPath(mockRequest: jest.Mock, activeValue: boolean) {
