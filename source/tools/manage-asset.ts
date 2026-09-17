@@ -29,6 +29,34 @@ function escapeCsvField(field: string): string {
 }
 
 /**
+ * Importer names for asset kinds whose serialized file is not text — writing an
+ * arbitrary string over one of these (via `save`) would corrupt it rather than update
+ * it. Kept alongside the extension check below since not every asset lookup returns an
+ * `importer` (#99 item 1).
+ */
+const BINARY_IMPORTER_NAMES = new Set([
+    'image', 'texture', 'texture-cube', 'erp-texture-cube', 'sprite-frame',
+    'audio-clip', 'video-clip', 'ttf-font', 'bitmap-font',
+    'dragonbones', 'dragonbones-atlas', 'spine-data',
+    'gltf', 'gltf-mesh', 'gltf-material', 'gltf-embeded-image', 'gltf-scene', 'fbx', 'buffer'
+]);
+
+const BINARY_EXTENSIONS = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tga', '.psd', '.webp',
+    '.mp3', '.ogg', '.wav', '.m4a', '.ttf', '.otf', '.fnt',
+    '.fbx', '.obj', '.dae', '.glb', '.gltf', '.mp4', '.webm'
+]);
+
+/** True when `assetInfo`/`urlOrPath` names a binary asset kind that `save` must refuse. */
+function isBinaryAsset(assetInfo: any, urlOrPath: string): boolean {
+    if (assetInfo && typeof assetInfo.importer === 'string' && BINARY_IMPORTER_NAMES.has(assetInfo.importer)) {
+        return true;
+    }
+    const ext = path.extname(urlOrPath || '').toLowerCase();
+    return BINARY_EXTENSIONS.has(ext);
+}
+
+/**
  * Consolidated asset management tool.
  * Combines ProjectTools (asset methods) + AssetAdvancedTools into one action-based tool.
  */
@@ -98,28 +126,53 @@ export class ManageAsset extends BaseActionTool {
                 default: 'auto'
             },
             quality: { type: 'number', description: 'Compression quality (0.1-1.0)', minimum: 0.1, maximum: 1.0, default: 0.8 },
-            includeMetadata: { type: 'boolean', description: 'Include asset metadata in manifest', default: true }
+            includeMetadata: { type: 'boolean', description: 'Include asset metadata in manifest', default: true },
+            isFolder: {
+                type: 'boolean',
+                description: '[create] Explicitly create a folder, regardless of `content`. Use this instead of omitting `content` — many MCP transports coerce an omitted optional string to `""`, which otherwise makes folder creation unreachable.',
+                default: false
+            }
         },
         required: ['action']
     };
 
+    /**
+     * `manage_asset` actions historically read a different alias for the same "asset
+     * reference" concept — some `url`, some `assetPath`, some `urlOrUUID` — with no
+     * schema signal about which name a given action expected. A caller passing the
+     * documented `assetPath` to `create` silently forwarded `undefined`, surfacing as
+     * the editor's own unrelated `"options.target is required"` error (#80, #99 item 7).
+     * Every action below now resolves through this same alias set.
+     */
+    private resolveAssetArg(args: Record<string, any>): string | undefined {
+        return args.url || args.urlOrUUID || args.assetPath || undefined;
+    }
+
     protected actionHandlers: Record<string, (args: Record<string, any>) => Promise<ActionToolResult>> = {
         import: (args) => this.importAsset(args.sourcePath, args.targetFolder),
-        get_info: (args) => this.getAssetInfo(args.assetPath || args.urlOrUUID),
+        get_info: (args) => this.getAssetInfo(this.resolveAssetArg(args)),
         list: (args) => this.getAssets(args.type, args.folder),
-        refresh: (args) => this.refreshAssets(args.folder),
-        create: (args) => this.createAsset(args.url, args.content ?? null, args.overwrite === true || args.overwrite === 'true'),
+        // `folder` is the intended scope param; fall back to the asset-ref aliases only
+        // when it is omitted, so passing `url` instead of `folder` can never silently
+        // widen the refresh to the whole project (`db://assets`) — see refreshAssets().
+        refresh: (args) => this.refreshAssets(args.folder || this.resolveAssetArg(args)),
+        create: (args) => this.createAsset(
+            this.resolveAssetArg(args),
+            args.content ?? null,
+            args.overwrite === true || args.overwrite === 'true',
+            args.isFolder === true || args.isFolder === 'true'
+        ),
         copy: (args) => this.copyAsset(args.source, args.target, args.overwrite === true || args.overwrite === 'true'),
         move: (args) => this.moveAsset(args.source, args.target, args.overwrite === true || args.overwrite === 'true'),
-        delete: (args) => this.deleteAsset(args.url),
-        save: (args) => this.saveAsset(args.url || args.urlOrUUID, args.content),
-        reimport: (args) => this.reimportAsset(args.url || args.urlOrUUID || args.assetPath),
+        delete: (args) => this.deleteAsset(this.resolveAssetArg(args)),
+        save: (args) => this.saveAsset(this.resolveAssetArg(args), args.content),
+        reimport: (args) => this.reimportAsset(this.resolveAssetArg(args)),
         query_path: (args) => this.queryAssetPath(args.url || args.urlOrUUID),
         query_uuid: (args) => this.queryAssetUuid(args.url),
         query_url: (args) => this.queryAssetUrl(args.uuid),
         find_by_name: (args) => this.findAssetByName(args),
-        get_details: (args) => this.getAssetDetails(args.assetPath || args.urlOrUUID, args.includeSubAssets !== false),
-        save_meta: (args) => this.saveAssetMeta(args.urlOrUUID, args.content),
+        get_details: (args) => this.getAssetDetails(this.resolveAssetArg(args), args.includeSubAssets !== false),
+        save_meta: (args) => this.saveAssetMeta(this.resolveAssetArg(args), args.content),
         generate_url: (args) => this.generateAvailableUrl(args.url),
         query_db_ready: (_args) => this.queryAssetDbReady(),
         open_external: (args) => this.openAssetExternal(args.urlOrUUID),
@@ -147,7 +200,10 @@ export class ManageAsset extends BaseActionTool {
         }
     }
 
-    private async getAssetInfo(assetPath: string): Promise<ActionToolResult> {
+    private async getAssetInfo(assetPath?: string): Promise<ActionToolResult> {
+        if (!assetPath || typeof assetPath !== 'string' || assetPath.trim() === '') {
+            return errorResult('get_info requires one of: url, urlOrUUID, assetPath');
+        }
         try {
             const assetInfo: any = await Editor.Message.request('asset-db', 'query-asset-info', assetPath);
             if (!assetInfo) return errorResult('Asset not found');
@@ -191,6 +247,13 @@ export class ManageAsset extends BaseActionTool {
         }
     }
 
+    /**
+     * `folder` is the intended scope for this action; the dispatch table now falls
+     * back to the asset-ref aliases (`url`/`urlOrUUID`/`assetPath`) only when `folder`
+     * itself is omitted, so a caller who passes `url` still refreshes just that path
+     * instead of silently widening the refresh to the whole project (`db://assets`),
+     * which is what happened when a non-`folder` argument reached here as `undefined`.
+     */
     private async refreshAssets(folder?: string): Promise<ActionToolResult> {
         try {
             const targetPath = folder || 'db://assets';
@@ -201,11 +264,25 @@ export class ManageAsset extends BaseActionTool {
         }
     }
 
-    private async createAsset(url: string, content: string | null = null, overwrite: boolean = false): Promise<ActionToolResult> {
+    /**
+     * `content === null` (i.e. omitted) has always meant "create a folder". That
+     * inference breaks whenever the calling MCP transport coerces an omitted optional
+     * string to `""` before it reaches here — `content ?? null` never substitutes on an
+     * empty string, so it is forwarded down the FILE path and folder creation becomes
+     * unreachable through that transport. `isFolder` makes the intent explicit instead
+     * of inferring it from `content`, while `content === null` is kept as the original
+     * (still-valid) implicit form for backward compatibility (#99 item 6).
+     */
+    private async createAsset(url?: string, content: string | null = null, overwrite: boolean = false, isFolder: boolean = false): Promise<ActionToolResult> {
+        if (!url || typeof url !== 'string' || url.trim() === '') {
+            return errorResult('create requires one of: url, urlOrUUID, assetPath — naming the asset to create');
+        }
         try {
+            const folder = isFolder || content === null;
+            const effectiveContent = folder ? null : content;
             const options = { overwrite, rename: !overwrite };
-            const result: any = await Editor.Message.request('asset-db', 'create-asset', url, content, options);
-            const msg = content === null ? 'Folder created successfully' : 'File created successfully';
+            const result: any = await Editor.Message.request('asset-db', 'create-asset', url, effectiveContent, options);
+            const msg = folder ? 'Folder created successfully' : 'File created successfully';
             return successResult(result && result.uuid ? { uuid: result.uuid, url: result.url, message: msg } : { url, message: msg });
         } catch (err: any) {
             return errorResult(err.message || String(err));
@@ -234,17 +311,51 @@ export class ManageAsset extends BaseActionTool {
         }
     }
 
-    private async deleteAsset(url: string): Promise<ActionToolResult> {
+    /**
+     * `delete-asset` resolving its promise is not proof the file is gone — the old code
+     * trusted that resolution alone and reported success unconditionally. A read-back
+     * query immediately after now confirms the asset db no longer knows about the url
+     * before success is reported, mirroring the verify-don't-trust pattern already used
+     * by `manage_scene`'s `save` action (#99 item 5).
+     */
+    private async deleteAsset(url?: string): Promise<ActionToolResult> {
+        if (!url || typeof url !== 'string' || url.trim() === '') {
+            return errorResult('delete requires one of: url, urlOrUUID, assetPath');
+        }
         try {
             await Editor.Message.request('asset-db', 'delete-asset', url);
+            const stillPresent: any = await Editor.Message.request('asset-db', 'query-asset-info', url).catch(() => null);
+            if (stillPresent) {
+                return errorResult(`asset-db:delete-asset resolved, but '${url}' is still present in the asset DB immediately afterward — the delete did not take effect.`);
+            }
             return successResult({ url }, 'Asset deleted successfully');
         } catch (err: any) {
             return errorResult(err.message || String(err));
         }
     }
 
-    private async saveAsset(url: string, content: string): Promise<ActionToolResult> {
+    /**
+     * Forwarding an arbitrary string over a binary asset (e.g. writing text content
+     * over a `.png`) does not update it — it corrupts it. Query the target's importer
+     * before writing and refuse the write for a known-binary kind (#99 item 1).
+     * Legitimate text assets (.ts, .json, .txt, materials, scenes, ...) are unaffected.
+     */
+    private async saveAsset(url?: string, content?: string): Promise<ActionToolResult> {
+        if (!url || typeof url !== 'string' || url.trim() === '') {
+            return errorResult('save requires one of: url, urlOrUUID, assetPath');
+        }
+        if (typeof content !== 'string') {
+            return errorResult('save requires content: a string');
+        }
         try {
+            const assetInfo: any = await Editor.Message.request('asset-db', 'query-asset-info', url).catch(() => null);
+            if (assetInfo && typeof content === 'string' && isBinaryAsset(assetInfo, url)) {
+                return errorResult(
+                    `save cannot write string content over '${url}': it resolves to a binary asset ` +
+                    `(importer='${assetInfo.importer}', type='${assetInfo.type}'). Writing text content over a ` +
+                    'binary asset would corrupt it — use import/copy to replace binary asset content instead.'
+                );
+            }
             const result: any = await Editor.Message.request('asset-db', 'save-asset', url, content);
             return successResult(result && result.uuid ? { uuid: result.uuid, url: result.url } : { url }, 'Asset saved successfully');
         } catch (err: any) {
@@ -252,12 +363,29 @@ export class ManageAsset extends BaseActionTool {
         }
     }
 
-    private async reimportAsset(url: string): Promise<ActionToolResult> {
+    /**
+     * `reimport-asset` on a directory URL previously forwarded straight to the editor
+     * with no directory check, no child enumeration, and the boolean result was
+     * discarded — an unconditional success regardless of what actually happened. The
+     * decision here is REFUSE, not recurse: a folder does not have importable content
+     * of its own, so each child asset must be reimported by its own url (#96).
+     */
+    private async reimportAsset(url?: string): Promise<ActionToolResult> {
         if (!url || typeof url !== 'string' || url.trim() === '') {
-            return errorResult('reimport requires a url, urlOrUUID, or assetPath');
+            return errorResult('reimport requires one of: url, urlOrUUID, assetPath');
         }
         try {
-            await Editor.Message.request('asset-db', 'reimport-asset', url);
+            const info: any = await Editor.Message.request('asset-db', 'query-asset-info', url).catch(() => null);
+            if (info && info.isDirectory) {
+                return errorResult(
+                    `reimport does not accept a folder URL ('${url}' is a directory) — this action does not ` +
+                    'recurse into folder contents. Reimport each child asset individually by its own url instead.'
+                );
+            }
+            const result = await Editor.Message.request('asset-db', 'reimport-asset', url);
+            if (result === false) {
+                return errorResult(`asset-db:reimport-asset returned false for '${url}' — the editor rejected the reimport.`);
+            }
             return successResult({ url }, 'Asset reimported successfully');
         } catch (err: any) {
             return errorResult(err.message || String(err));
@@ -326,7 +454,10 @@ export class ManageAsset extends BaseActionTool {
         }
     }
 
-    private async getAssetDetails(assetPath: string, includeSubAssets: boolean = true): Promise<ActionToolResult> {
+    private async getAssetDetails(assetPath?: string, includeSubAssets: boolean = true): Promise<ActionToolResult> {
+        if (!assetPath || typeof assetPath !== 'string' || assetPath.trim() === '') {
+            return errorResult('get_details requires one of: url, urlOrUUID, assetPath');
+        }
         try {
             const assetInfoResult = await this.getAssetInfo(assetPath);
             if (!assetInfoResult.success) return assetInfoResult;
@@ -358,10 +489,37 @@ export class ManageAsset extends BaseActionTool {
 
     // ── From AssetAdvancedTools ───────────────────────────────────────────────
 
-    private async saveAssetMeta(urlOrUUID: string, content: string): Promise<ActionToolResult> {
+    /**
+     * The old implementation forwarded the caller's raw string straight to
+     * `save-asset-meta` with no parse, no merge, and no presence guard — a
+     * byte-identical `.png.meta` round-trip depended on the caller reconstructing the
+     * *entire* meta exactly, and any field it dropped (or the asset-db's own computed
+     * fields it never had) silently diverged the saved meta. Route through
+     * `query-asset-meta` -> merge -> `JSON.stringify` -> save instead, matching the
+     * pattern already used by `manage_material`/`manage_shader_effect` (#82). `content`
+     * is now a JSON *patch* merged onto the current meta, not the whole meta document.
+     */
+    private async saveAssetMeta(urlOrUUID?: string, content?: string): Promise<ActionToolResult> {
+        if (!urlOrUUID || typeof urlOrUUID !== 'string' || urlOrUUID.trim() === '') {
+            return errorResult('save_meta requires one of: url, urlOrUUID, assetPath');
+        }
+        if (content === undefined || content === null || content === '') {
+            return errorResult('save_meta requires content: a JSON string of the meta fields to merge (e.g. {"userData":{...}})');
+        }
+        let patch: any;
         try {
-            const result: any = await Editor.Message.request('asset-db', 'save-asset-meta', urlOrUUID, content);
-            return successResult({ uuid: result?.uuid, url: result?.url }, 'Asset meta saved successfully');
+            patch = JSON.parse(content);
+        } catch (err: any) {
+            return errorResult(`save_meta content is not valid JSON: ${err.message}`);
+        }
+        try {
+            const currentMeta: any = await Editor.Message.request('asset-db', 'query-asset-meta', urlOrUUID);
+            if (!currentMeta) {
+                return errorResult(`Could not read current meta for '${urlOrUUID}' — asset not found in the asset DB.`);
+            }
+            const mergedMeta = { ...currentMeta, ...patch };
+            const result: any = await Editor.Message.request('asset-db', 'save-asset-meta', urlOrUUID, JSON.stringify(mergedMeta));
+            return successResult({ uuid: result?.uuid ?? mergedMeta.uuid, url: result?.url }, 'Asset meta saved successfully');
         } catch (err: any) {
             return errorResult(err.message || String(err));
         }
