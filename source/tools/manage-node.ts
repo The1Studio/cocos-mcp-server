@@ -673,6 +673,28 @@ export class ManageNode extends BaseActionTool {
         if (!uuid) return errorResult('uuid is required for action=delete');
         try {
             await Editor.Message.request('scene', 'remove-node', { uuid });
+
+            // Issue #74: `remove-node` resolving without throwing does NOT mean the node
+            // actually left the graph — it silently no-ops for a prefab-instance child in
+            // scene-edit context (the same class of constraint moveNode already verifies
+            // against for #33). Read the node back: a rejected/empty query-node means the
+            // node is gone (success); a node that still resolves means the delete was
+            // blocked. This also explains issue #73, where "deleted" nodes reappeared —
+            // the delete never took effect, so a later create legitimately still saw them.
+            let stillExists = false;
+            try {
+                const nodeData: any = await Editor.Message.request('scene', 'query-node', uuid);
+                stillExists = !!nodeData;
+            } catch {
+                stillExists = false;
+            }
+            if (stillExists) {
+                return errorResult(
+                    `Node '${uuid}' still exists after delete: the delete did not take effect. ` +
+                    `This can happen when the node is a prefab instance's child and removal is blocked by the prefab link — try deleting it from prefab edit mode instead.`
+                );
+            }
+
             return successResult(null, 'Node deleted successfully');
         } catch (err: any) {
             return errorResult(err.message);
