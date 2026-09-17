@@ -3,15 +3,15 @@ import { ActionToolResult, successResult, errorResult } from '../types';
 
 export class ManageRenderPipeline extends BaseActionTool {
     readonly name = 'manage_render_pipeline';
-    readonly description = 'Manage render pipeline settings (3D only). Actions: get_info, set_shadow, set_fog, set_skybox, set_post_process. Controls shadows, fog, skybox, ambient light, and post-processing effects.';
-    readonly actions = ['get_info', 'set_shadow', 'set_fog', 'set_skybox', 'set_post_process'];
+    readonly description = 'Manage render pipeline settings (3D only). Actions: get_info, set_shadow, set_fog, set_skybox, set_ambient, set_post_process. Controls shadows, fog, skybox, ambient light, and post-processing effects.';
+    readonly actions = ['get_info', 'set_shadow', 'set_fog', 'set_skybox', 'set_ambient', 'set_post_process'];
     readonly inputSchema = {
         type: 'object',
         properties: {
             action: {
                 type: 'string',
-                enum: ['get_info', 'set_shadow', 'set_fog', 'set_skybox', 'set_post_process'],
-                description: 'Action: get_info=get pipeline settings, set_shadow=configure shadows, set_fog=configure fog, set_skybox=configure skybox, set_post_process=set post-processing'
+                enum: ['get_info', 'set_shadow', 'set_fog', 'set_skybox', 'set_ambient', 'set_post_process'],
+                description: 'Action: get_info=get pipeline settings, set_shadow=configure shadows, set_fog=configure fog, set_skybox=configure skybox, set_ambient=configure ambient light, set_post_process=set post-processing'
             },
             enabled: { type: 'boolean', description: '[set_shadow/set_fog/set_skybox/set_post_process] Enable or disable the feature' },
             type: { type: 'string', description: '[set_shadow] Shadow type (ShadowType.Planar or ShadowType.ShadowMap). [set_fog] Fog type (FogType.LINEAR/EXP/EXP_SQUARED/LAYERED)' },
@@ -22,6 +22,9 @@ export class ManageRenderPipeline extends BaseActionTool {
             fogDensity: { type: 'number', description: '[set_fog] Exponential fog density (0-1)' },
             useHDR: { type: 'boolean', description: '[set_skybox] Enable HDR skybox' },
             rotationAngle: { type: 'number', description: '[set_skybox] Skybox rotation angle in degrees' },
+            skyColor: { type: 'string', description: '[set_ambient] Sky (ambient) color as hex string (e.g. #CCCCCC)' },
+            groundAlbedo: { type: 'string', description: '[set_ambient] Ground albedo color as hex string (e.g. #666666)' },
+            skyIllum: { type: 'number', description: '[set_ambient] Sky illuminance' },
             bloom: { type: 'object', description: '[set_post_process] Bloom settings { enabled: bool, intensity: number }' },
             tonemap: { type: 'string', description: '[set_post_process] Tonemap mode (none/aces/filmic)' }
         },
@@ -33,6 +36,7 @@ export class ManageRenderPipeline extends BaseActionTool {
         set_shadow: (args) => this.setShadow(args),
         set_fog: (args) => this.setFog(args),
         set_skybox: (args) => this.setSkybox(args),
+        set_ambient: (args) => this.setAmbient(args),
         set_post_process: (args) => this.setPostProcess(args),
     };
 
@@ -72,6 +76,16 @@ export class ManageRenderPipeline extends BaseActionTool {
                 args: [args.enabled, args.useHDR, args.rotationAngle]
             });
             return successResult(result, 'Skybox settings updated');
+        } catch (err: any) { return errorResult(err.message); }
+    }
+
+    private async setAmbient(args: any): Promise<ActionToolResult> {
+        try {
+            const result = await Editor.Message.request('scene', 'execute-scene-script', {
+                name: 'cocos-mcp-server', method: 'setAmbientSettings',
+                args: [args.skyColor, args.groundAlbedo, args.skyIllum]
+            });
+            return successResult(result, 'Ambient settings updated');
         } catch (err: any) { return errorResult(err.message); }
     }
 

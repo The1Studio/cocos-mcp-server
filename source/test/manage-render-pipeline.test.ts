@@ -14,7 +14,7 @@ describe('ManageRenderPipeline', () => {
         });
 
         it('has actions array', () => {
-            expect(tool.actions).toEqual(['get_info', 'set_shadow', 'set_fog', 'set_skybox', 'set_post_process']);
+            expect(tool.actions).toEqual(['get_info', 'set_shadow', 'set_fog', 'set_skybox', 'set_ambient', 'set_post_process']);
         });
 
         it('has valid inputSchema', () => {
@@ -107,6 +107,24 @@ describe('ManageRenderPipeline', () => {
             expect(mockRequest).toHaveBeenCalledWith('scene', 'execute-scene-script', expect.objectContaining({
                 method: 'setSkyboxSettings',
                 args: [true, true, 45]
+            }));
+        });
+    });
+
+    describe('set_ambient action', () => {
+        it('calls Editor.Message.request with ambient params', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce({});
+
+            const result = await tool.execute('set_ambient', {
+                skyColor: '#804020',
+                groundAlbedo: '#102030',
+                skyIllum: 2.5
+            });
+            expect(result.success).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'execute-scene-script', expect.objectContaining({
+                method: 'setAmbientSettings',
+                args: ['#804020', '#102030', 2.5]
             }));
         });
     });
