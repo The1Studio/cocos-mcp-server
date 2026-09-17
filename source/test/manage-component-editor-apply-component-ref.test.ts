@@ -246,4 +246,77 @@ describe('applyPropertyToEditor — component references', () => {
             )
         ).rejects.toThrow(/Component type 'HeroDragController' not found on node/);
     });
+
+    // Issue #81: the DIRECT component-uuid path did the same exact-string-equality
+    // rejection issue #45 already fixed on the node-uuid path — a SUBCLASS component's
+    // own uuid was rejected outright even though it satisfies the declared base type.
+    it('resolves a SUBCLASS component when its OWN uuid is passed directly (not a node uuid)', async () => {
+        requestMock.mockImplementation((_m: string, action: string, arg: any) => {
+            if (action === 'query-node') return Promise.resolve(undefined);
+            if (action === 'query-component' && arg === TARGET_COMPONENT_UUID) {
+                return Promise.resolve({
+                    type: 'PipeCannon',
+                    value: { uuid: { value: TARGET_COMPONENT_UUID } }
+                });
+            }
+            if (action === 'execute-scene-script' && arg?.method === 'isComponentTypeSubclassOf') {
+                expect(arg.args).toEqual(['PipeCannon', EXPECTED_TYPE]);
+                return Promise.resolve({ success: true, data: { isSubclass: true } });
+            }
+            return Promise.resolve(undefined);
+        });
+
+        const result = await applyPropertyToEditor(
+            { ...baseArgs, value: TARGET_COMPONENT_UUID, processedValue: TARGET_COMPONENT_UUID },
+            getComponentInfo
+        );
+
+        expect(setPropertyPayload().dump).toEqual({
+            value: { uuid: TARGET_COMPONENT_UUID }, type: EXPECTED_TYPE
+        });
+        expect(result).toEqual({ uuid: TARGET_COMPONENT_UUID });
+    });
+
+    // The subclass fallback must not swallow a genuine mismatch on the direct-uuid path
+    // either — an unrelated concrete type must still be rejected.
+    it('still rejects a direct component uuid when the subclass fallback also finds no relation', async () => {
+        requestMock.mockImplementation((_m: string, action: string, arg: any) => {
+            if (action === 'query-node') return Promise.resolve(undefined);
+            if (action === 'query-component' && arg === TARGET_COMPONENT_UUID) {
+                return Promise.resolve({
+                    type: 'cc.Sprite',
+                    value: { uuid: { value: TARGET_COMPONENT_UUID } }
+                });
+            }
+            if (action === 'execute-scene-script' && arg?.method === 'isComponentTypeSubclassOf') {
+                return Promise.resolve({ success: true, data: { isSubclass: false } });
+            }
+            return Promise.resolve(undefined);
+        });
+
+        await expect(
+            applyPropertyToEditor(
+                { ...baseArgs, value: TARGET_COMPONENT_UUID, processedValue: TARGET_COMPONENT_UUID },
+                getComponentInfo
+            )
+        ).rejects.toThrow(/is a 'cc\.Sprite', but property 'heroDrag'.*requires a 'HeroDragController'/);
+    });
+
+    // Issue #75: clearing a component reference must write `{ uuid: '' }` DIRECTLY and
+    // never call resolveComponentReference — there is no target to resolve, and that
+    // path would only report '' as neither a node uuid nor a component uuid.
+    describe('clearing a component reference (issue #75)', () => {
+        it('writes { uuid: "" } without querying for a target node/component', async () => {
+            requestMock.mockImplementation(() => Promise.resolve(undefined));
+
+            const result = await applyPropertyToEditor(
+                { ...baseArgs, value: null, processedValue: { uuid: '' } },
+                getComponentInfo
+            );
+
+            expect(setPropertyPayload().dump).toEqual({ value: { uuid: '' }, type: EXPECTED_TYPE });
+            expect(result).toEqual({ uuid: '' });
+            expect(requestMock.mock.calls.some((c: any[]) => c[1] === 'query-node' || c[1] === 'query-component')).toBe(false);
+        });
+    });
 });

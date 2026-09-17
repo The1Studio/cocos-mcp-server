@@ -266,6 +266,24 @@ export const SUPPORTED_PROPERTY_TYPES = [
  * Throws if the value format is invalid for the given type.
  */
 export function convertPropertyValue(propertyType: string, value: any): any {
+    // Issue #75: neither `null` nor `""` could clear a node/component/asset reference.
+    // `node` and every asset-reference type already forwarded `""` unrejected (it happens
+    // to satisfy the `typeof value === 'string'` check below and become `{ uuid: '' }`),
+    // but rejected `null` outright. `component`/`componentArray` additionally forwarded a
+    // `""` value UNRESOLVED instead of treating it as "clear this reference", which then
+    // failed downstream with a confusing "neither a node uuid nor a component uuid" error.
+    // A cleared single reference always serializes as `{ uuid: '' }` — the same shape a
+    // set reference uses — so it needs no special handling anywhere set-property already
+    // handles a reference dump.
+    const isClearRequest = value === null || value === '';
+    if (isClearRequest && (propertyType === 'node' || propertyType === 'component' ||
+        (ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType))) {
+        return { uuid: '' };
+    }
+    if (isClearRequest && propertyType === 'componentArray') {
+        return [];
+    }
+
     if ((ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType)) {
         if (typeof value === 'string') return { uuid: value };
         throw new Error(`${propertyType} value must be a string UUID (received typeof ${typeof value})`);
@@ -509,9 +527,15 @@ export async function verifyComponentPropertyChange(
                         return expUuid !== '' && expUuid === extractUuid(actualArr[idx]);
                     });
             } else if (typeof expectedValue === 'object' && expectedValue !== null && 'uuid' in expectedValue) {
+                // Issue #73 (secondary finding): the trailing `&& expectedUuid !== ''` made
+                // `verified` ALWAYS false when clearing a reference to an empty uuid — even
+                // when actualUuid === expectedUuid === '' and the clear genuinely succeeded
+                // (issue #75). Dropping it does not weaken the non-empty case: a missing/
+                // undefined actualValue already computes actualUuid === '', which can never
+                // equal a non-empty expectedUuid, so that comparison alone still fails it.
                 const actualUuid = actualValue && typeof actualValue === 'object' && 'uuid' in actualValue ? actualValue.uuid : '';
                 const expectedUuid = expectedValue.uuid || '';
-                verified = actualUuid === expectedUuid && expectedUuid !== '';
+                verified = actualUuid === expectedUuid;
             } else if (typeof actualValue === typeof expectedValue) {
                 if (typeof actualValue === 'object' && actualValue !== null && expectedValue !== null) {
                     verified = JSON.stringify(actualValue) === JSON.stringify(expectedValue);

@@ -153,6 +153,34 @@ export const methods: { [key: string]: (...any: any) => any } = {
     },
 
     /**
+     * Determine whether a concrete component type extends a declared base class — the
+     * same polymorphic question `findComponentByBaseClass` answers via a live node, but
+     * for the DIRECT component-uuid resolve path (issue #81), which already has the
+     * component's own concrete type name and no node to search from. Purely a class-
+     * registry lookup on the two type names via `js.isChildClassOf`; no live instance
+     * needed.
+     */
+    isComponentTypeSubclassOf(concreteType: string, baseClassName: string) {
+        try {
+            const { js } = require('cc');
+
+            const SubClass = js.getClassByName(concreteType);
+            if (!SubClass) {
+                return { success: false, error: `Component type ${concreteType} not found` };
+            }
+
+            const BaseClass = js.getClassByName(baseClassName);
+            if (!BaseClass) {
+                return { success: false, error: `Component type ${baseClassName} not found` };
+            }
+
+            return { success: true, data: { isSubclass: js.isChildClassOf(SubClass, BaseClass) } };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
      * Remove component from a node
      */
     removeComponentFromNode(nodeUuid: string, componentType: string) {

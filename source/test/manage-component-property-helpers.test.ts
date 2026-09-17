@@ -1,4 +1,4 @@
-import { convertPropertyValue, ASSET_REFERENCE_PROPERTY_TYPES, SUPPORTED_PROPERTY_TYPES } from '../tools/manage-component-property-helpers';
+import { convertPropertyValue, ASSET_REFERENCE_PROPERTY_TYPES, SUPPORTED_PROPERTY_TYPES, verifyComponentPropertyChange } from '../tools/manage-component-property-helpers';
 
 /**
  * Tests for convertPropertyValue's asset-reference coercion (issue #26).
@@ -128,5 +128,73 @@ describe('convertPropertyValue — JSON-string values for object/array propertyT
             .toThrow(/NumberArray value must be an array \(received typeof string\)/);
         expect(() => convertPropertyValue('numberArray', { not: 'an array' }))
             .toThrow(/NumberArray value must be an array \(received typeof object\)/);
+    });
+});
+
+// Regression: issue #75 — neither `null` nor `""` could clear a node/component/asset
+// reference. `node` and the asset-reference types already forwarded `""` unrejected
+// (it happens to satisfy `typeof value === 'string'`), but rejected `null` outright;
+// `component`/`componentArray` forwarded `""` UNRESOLVED instead of treating it as "no
+// reference", which then failed downstream in applyPropertyToEditor with a confusing
+// "neither a node uuid nor a component uuid" error. A cleared single reference always
+// serializes as `{ uuid: '' }` — the same shape a set reference uses.
+describe('convertPropertyValue — clearing a reference (issue #75)', () => {
+    it('clears a node reference on both null and ""', () => {
+        expect(convertPropertyValue('node', null)).toEqual({ uuid: '' });
+        expect(convertPropertyValue('node', '')).toEqual({ uuid: '' });
+    });
+
+    it('clears a component reference on both null and ""', () => {
+        expect(convertPropertyValue('component', null)).toEqual({ uuid: '' });
+        expect(convertPropertyValue('component', '')).toEqual({ uuid: '' });
+    });
+
+    it('clears every asset-reference propertyType on both null and ""', () => {
+        for (const propertyType of ASSET_REFERENCE_PROPERTY_TYPES) {
+            expect(convertPropertyValue(propertyType, null)).toEqual({ uuid: '' });
+            expect(convertPropertyValue(propertyType, '')).toEqual({ uuid: '' });
+        }
+    });
+
+    it('clears a componentArray to an empty array on both null and ""', () => {
+        expect(convertPropertyValue('componentArray', null)).toEqual([]);
+        expect(convertPropertyValue('componentArray', '')).toEqual([]);
+    });
+});
+
+// Regression: issue #73 (secondary finding) — verifyComponentPropertyChange's
+// reference-comparison branch had `verified = actualUuid === expectedUuid && expectedUuid
+// !== ''`, which made `verified` ALWAYS false when the EXPECTED uuid was empty — even
+// when the clear genuinely succeeded and actualUuid === expectedUuid === ''. This directly
+// blocks issue #75: clearing a reference would always report as an unverified failure.
+describe('verifyComponentPropertyChange — clearing a reference verifies correctly (issue #73/#75)', () => {
+    const NODE_UUID = 'node-1';
+    const COMP_TYPE = 'GameBootstrap';
+    const PROPERTY = 'heroDrag';
+
+    function getComponentInfoReturning(actualValue: any) {
+        return jest.fn().mockResolvedValue({
+            success: true,
+            data: { properties: { [PROPERTY]: { name: PROPERTY, value: actualValue, type: 'HeroDragController' } } }
+        });
+    }
+
+    it('reports verified=true when a cleared reference reads back with an empty uuid', async () => {
+        const result = await verifyComponentPropertyChange(
+            NODE_UUID, COMP_TYPE, PROPERTY, { uuid: 'old-uuid' }, { uuid: '' },
+            getComponentInfoReturning({ uuid: '' })
+        );
+        expect(result.verified).toBe(true);
+    });
+
+    // The guard's original intent must survive: a missing/undefined actual value against
+    // a NON-EMPTY expected uuid must still fail verification — dropping the trailing
+    // clause must not turn every reference comparison into a pass.
+    it('still reports verified=false when the actual value is missing and expected uuid is non-empty', async () => {
+        const result = await verifyComponentPropertyChange(
+            NODE_UUID, COMP_TYPE, PROPERTY, { uuid: '' }, { uuid: 'new-uuid' },
+            getComponentInfoReturning(undefined)
+        );
+        expect(result.verified).toBe(false);
     });
 });
