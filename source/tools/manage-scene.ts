@@ -298,7 +298,40 @@ export class ManageScene extends BaseActionTool {
         });
     }
 
+    /**
+     * `query-node-tree`'s resolved nodes never carry `__comps__`, so `buildHierarchy`'s
+     * component branch below can never populate real data from it. `source/scene.ts`'s own
+     * `getSceneHierarchy` walks the LIVE `cc.Node` tree instead and always has real
+     * component data — go straight there when components are actually requested.
+     */
+    private queryHierarchyViaScript(includeComponents: boolean): Promise<ActionToolResult> {
+        const options = {
+            name: 'cocos-mcp-server',
+            method: 'getSceneHierarchy',
+            args: [includeComponents]
+        };
+        return Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+            if (result && result.success) {
+                return successResult(result.data, result.message);
+            }
+            return errorResult(result?.error || 'Unknown error');
+        });
+    }
+
     private async getSceneHierarchy(includeComponents: boolean = false): Promise<ActionToolResult> {
+        // Issue #85: `includeComponents: true` was left as an error-only fallback that
+        // only ran when `query-node-tree` REJECTED — never when it resolved successfully
+        // without `__comps__`, which is the common case. Route straight to the
+        // scene-script path whenever components are requested; the `includeComponents:
+        // false` path below is UNCHANGED.
+        if (includeComponents) {
+            try {
+                return await this.queryHierarchyViaScript(includeComponents);
+            } catch (err: any) {
+                return errorResult(`Scene script failed: ${err.message}`);
+            }
+        }
+
         return new Promise((resolve) => {
             Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
                 if (tree) {
@@ -308,18 +341,7 @@ export class ManageScene extends BaseActionTool {
                     resolve(errorResult('No scene hierarchy available'));
                 }
             }).catch((err: Error) => {
-                const options = {
-                    name: 'cocos-mcp-server',
-                    method: 'getSceneHierarchy',
-                    args: [includeComponents]
-                };
-                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
-                    if (result && result.success) {
-                        resolve(successResult(result.data, result.message));
-                    } else {
-                        resolve(errorResult(result?.error || 'Unknown error'));
-                    }
-                }).catch((err2: Error) => {
+                this.queryHierarchyViaScript(includeComponents).then(resolve).catch((err2: Error) => {
                     resolve(errorResult(`Direct API failed: ${err.message}, Scene script failed: ${err2.message}`));
                 });
             });
