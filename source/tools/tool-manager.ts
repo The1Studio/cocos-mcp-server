@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getAllToolDescriptors } from './tool-registry';
 
 /** v2 flat tool config — no more category field */
 export interface ToolConfig {
@@ -23,30 +24,6 @@ export interface ToolManagerSettings {
     currentConfigId: string;
     maxConfigSlots: number;
 }
-
-/** All v2 manage_* tool names */
-const V2_TOOL_NAMES: { name: string; description: string }[] = [
-    { name: 'manage_scene', description: 'Manage scenes in the project' },
-    { name: 'manage_node', description: 'Manage nodes in the current scene' },
-    { name: 'manage_component', description: 'Manage components on scene nodes' },
-    { name: 'manage_prefab', description: 'Manage prefab assets' },
-    { name: 'manage_asset', description: 'Manage project assets' },
-    { name: 'manage_project', description: 'Manage project build, run, and settings' },
-    { name: 'manage_debug', description: 'Debug tools: console, logs, scripts, validation' },
-    { name: 'manage_preferences', description: 'Manage editor preferences' },
-    { name: 'manage_server', description: 'Server network and connectivity info' },
-    { name: 'manage_broadcast', description: 'Editor broadcast event listeners' },
-    { name: 'manage_scene_view', description: 'Scene view gizmos, camera, grid settings' },
-    { name: 'manage_node_hierarchy', description: 'Advanced node operations: copy, paste, cut, reset' },
-    { name: 'manage_scene_query', description: 'Scene introspection and class queries' },
-    { name: 'manage_undo', description: 'Undo/redo recording and execution' },
-    { name: 'manage_reference_image', description: 'Reference image overlay management' },
-    { name: 'manage_validation', description: 'JSON validation utilities' },
-    { name: 'manage_selection', description: 'Editor selection state management' },
-    { name: 'manage_script', description: 'TypeScript script file management' },
-    { name: 'manage_material', description: 'Material and shader property management' },
-    { name: 'manage_animation', description: 'Animation clip management' },
-];
 
 export class ToolManager {
     private settings: ToolManagerSettings;
@@ -107,7 +84,7 @@ export class ToolManager {
     }
 
     private initializeAvailableTools(): void {
-        this.availableTools = V2_TOOL_NAMES.map(t => ({
+        this.availableTools = getAllToolDescriptors().map(t => ({
             name: t.name,
             enabled: true,
             description: t.description
@@ -117,7 +94,8 @@ export class ToolManager {
 
     /** Sync persisted configs with current tool list (add new tools, remove stale) */
     private syncToolList(): void {
-        const currentNames = new Set(V2_TOOL_NAMES.map(t => t.name));
+        const allTools = getAllToolDescriptors();
+        const currentNames = new Set(allTools.map(t => t.name));
         let changed = false;
 
         for (const config of this.settings.configurations) {
@@ -128,7 +106,7 @@ export class ToolManager {
 
             // Add new tools that don't exist in config
             const existingNames = new Set(config.tools.map(t => t.name));
-            for (const tool of V2_TOOL_NAMES) {
+            for (const tool of allTools) {
                 if (!existingNames.has(tool.name)) {
                     config.tools.push({ name: tool.name, enabled: true, description: tool.description });
                     changed = true;
@@ -136,7 +114,7 @@ export class ToolManager {
             }
 
             // Sync descriptions
-            const descMap = new Map(V2_TOOL_NAMES.map(t => [t.name, t.description]));
+            const descMap = new Map(allTools.map(t => [t.name, t.description]));
             for (const tool of config.tools) {
                 const desc = descMap.get(tool.name);
                 if (desc && tool.description !== desc) {
