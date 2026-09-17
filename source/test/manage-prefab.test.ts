@@ -220,7 +220,7 @@ describe('ManagePrefab', () => {
             fs.unlinkSync(tmpFile);
         });
 
-        it('reports failure when apply-prefab resolves false', async () => {
+        it('reports failure when apply-prefab resolves false and the file was not rewritten', async () => {
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
                 .mockResolvedValueOnce(nodeDump)
@@ -231,6 +231,28 @@ describe('ManagePrefab', () => {
             const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
             expect(result.success).toBe(false);
             expect(result.error).toMatch(/rejected apply-prefab/i);
+        });
+
+        it('#63 — reports success when apply-prefab resolves false but the file WAS rewritten', async () => {
+            const tmpFile = writePrefabFile();
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest
+                .mockResolvedValueOnce(nodeDump)                                         // query-node
+                .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab', file: tmpFile }) // query-asset-info
+                .mockImplementationOnce(async () => {                                    // apply-prefab
+                    fs.writeFileSync(tmpFile, JSON.stringify([{ __type__: 'cc.Prefab', v: 2 }]), 'utf-8');
+                    const future = Date.now() + 5000;
+                    fs.utimesSync(tmpFile, new Date(future), new Date(future));
+                    return false; // editor reports rejection despite writing the file
+                });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(result.success).toBe(true);
+            expect(result.data.persisted).toBe(true);
+            expect(result.data.appliedRejected).toBe(true);
+
+            fs.unlinkSync(tmpFile);
         });
 
         it('reports failure when the prefab file was never rewritten', async () => {
