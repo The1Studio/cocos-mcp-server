@@ -65,12 +65,19 @@ export class ManageProject extends BaseActionTool {
     private async buildProject(args: any): Promise<ActionToolResult> {
         try {
             // Note: Builder module only supports 'open' and 'query-worker-ready'.
-            // Building requires manual interaction through the build panel.
+            // No build config is ever sent — this cannot start, run, or report on a build.
             await Editor.Message.request('builder', 'open');
-            return successResult(
-                { platform: args.platform, instruction: 'Use the build panel to configure and start the build process' },
-                `Build panel opened for ${args.platform}. Please configure and start build manually.`
-            );
+            return {
+                success: false,
+                error: 'build does not run a build — it only opens the Cocos Creator build panel. No build config was sent and no build task was started.',
+                isError: true,
+                data: {
+                    started: false,
+                    status: 'panel-opened',
+                    platform: args.platform,
+                    instruction: 'Configure and start the build manually through the opened build panel'
+                }
+            };
         } catch (err: any) {
             return errorResult(err.message || String(err));
         }
@@ -134,11 +141,15 @@ export class ManageProject extends BaseActionTool {
 
     private async checkBuilderStatus(): Promise<ActionToolResult> {
         try {
-            const ready: boolean = await Editor.Message.request('builder', 'query-worker-ready') as boolean;
+            // Note: 'query-worker-ready' reports only whether the build WORKER process is idle —
+            // it never reports whether a build is running, finished, succeeded, or where its
+            // output went. Do not read `workerReady` as build-task status.
+            const workerReady: boolean = await Editor.Message.request('builder', 'query-worker-ready') as boolean;
             return successResult({
-                ready,
-                status: ready ? 'Builder worker is ready' : 'Builder worker is not ready'
-            }, 'Builder status checked successfully');
+                workerReady,
+                taskStatus: 'not-tracked',
+                status: workerReady ? 'Builder worker is idle/ready' : 'Builder worker is busy/not ready'
+            }, 'Reports build WORKER readiness only — no build task state (running/finished/output path) is observable through this action');
         } catch (err: any) {
             return errorResult(err.message || String(err));
         }
