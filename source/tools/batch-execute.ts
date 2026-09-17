@@ -121,39 +121,40 @@ export class BatchExecute extends BaseActionTool {
                 completedCount++;
 
                 if (!success && stopOnError) {
-                    return successResult(
+                    return errorResult(
+                        `Batch stopped at call ${i} (${tool}.${action}) due to error`,
                         {
                             results,
                             completedCount,
                             totalCount: calls.length,
                             stoppedAt: i,
                             stoppedDueToError: true
-                        },
-                        `Batch stopped at call ${i} (${tool}.${action}) due to error`
+                        }
                     );
                 }
 
             } catch (err: any) {
+                const message = err instanceof Error ? err.message : String(err);
                 const entry: BatchResultEntry = {
                     index: i,
                     tool,
                     action,
                     success: false,
                     result: null,
-                    error: err.message
+                    error: message
                 };
                 results.push(entry);
 
                 if (stopOnError) {
-                    return successResult(
+                    return errorResult(
+                        `Batch stopped at call ${i} (${tool}.${action}) due to exception: ${message}`,
                         {
                             results,
                             completedCount,
                             totalCount: calls.length,
                             stoppedAt: i,
                             stoppedDueToError: true
-                        },
-                        `Batch stopped at call ${i} (${tool}.${action}) due to exception: ${err.message}`
+                        }
                     );
                 }
             }

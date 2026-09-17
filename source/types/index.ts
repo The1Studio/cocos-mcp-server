@@ -154,8 +154,8 @@ export function successResult(data: any, message?: string): ActionToolResult {
 }
 
 /** Helper to create error responses */
-export function errorResult(error: string): ActionToolResult {
-    return { success: false, error, isError: true };
+export function errorResult(error: string, data?: any): ActionToolResult {
+    return { success: false, error, data, isError: true };
 }
 
 // Tool configuration management interfaces

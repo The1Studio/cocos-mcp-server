@@ -104,10 +104,43 @@ describe('BatchExecute', () => {
 
         const result = await tool.execute('execute', { calls, stopOnError: true });
 
-        expect(result.success).toBe(true); // Overall success even though a call failed
+        expect(result.success).toBe(false); // Top-level success must reflect the batch stopping on a real failure
         expect((result.data as any).results).toHaveLength(2); // Only 2 results (stopped after failure)
         expect((result.data as any).results[1].success).toBe(false);
+        expect((result.data as any).stoppedDueToError).toBe(true);
         expect(mockExecutor.executeToolCall).toHaveBeenCalledTimes(2); // Stopped after first failure
+    });
+
+    it('stops with top-level failure when a call throws and stopOnError=true', async () => {
+        const calls: BatchCall[] = [
+            { tool: 'manage_node', action: 'create', args: { parentUuid: 'root' } },
+            { tool: 'manage_node', action: 'delete', args: { uuid: 'nonexistent' } }
+        ];
+        mockExecutor.executeToolCall
+            .mockResolvedValueOnce({ success: true, data: { nodeUuid: 'node-1' } })
+            .mockRejectedValueOnce(new Error('Executor crashed'));
+
+        const result = await tool.execute('execute', { calls, stopOnError: true });
+
+        expect(result.success).toBe(false); // Top-level success must reflect the thrown exception
+        expect((result.data as any).results).toHaveLength(2);
+        expect((result.data as any).results[1].success).toBe(false);
+        expect((result.data as any).stoppedDueToError).toBe(true);
+        expect(mockExecutor.executeToolCall).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports a defined error message when a non-Error value is thrown', async () => {
+        const calls: BatchCall[] = [
+            { tool: 'manage_node', action: 'create', args: { parentUuid: 'root' } }
+        ];
+        mockExecutor.executeToolCall.mockRejectedValueOnce('plain string rejection');
+
+        const result = await tool.execute('execute', { calls, stopOnError: false });
+
+        const results = (result.data as any).results;
+        expect(results[0].error).toBeDefined();
+        expect(results[0].error).not.toMatch(/undefined/);
+        expect(results[0].error).toBe('plain string rejection');
     });
 
     it('continues past errors when stopOnError=false', async () => {
@@ -188,7 +221,7 @@ describe('BatchExecute', () => {
         const result = await tool.execute('execute', { calls }); // No stopOnError specified
 
         expect(mockExecutor.executeToolCall).toHaveBeenCalledTimes(2); // Should stop at first error (default true)
-        expect(result.success).toBe(true);
+        expect(result.success).toBe(false); // Batch stopped due to a real failure — top-level success must say so
     });
 
     it('passes tool and action names correctly to executor', async () => {
