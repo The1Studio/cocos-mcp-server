@@ -411,21 +411,28 @@ export class ManagePrefab extends BaseActionTool {
             // without throwing but never wrote the asset — a silent no-op reported as
             // success (#12).
             const applied = await (Editor.Message.request as any)('scene', 'apply-prefab', rootUuid);
-            if (applied === false) {
-                return {
-                    success: false,
-                    error: `Editor rejected apply-prefab for node ${rootUuid}. Confirm it is a prefab-instance root with a valid asset link.`,
-                    data: { nodeUuid, rootUuid, assetUuid, prefabPath }
-                };
-            }
 
-            // Verify the asset was actually written rather than trusting a non-throwing
-            // message. `unverified` means the path could not be resolved, not that the
-            // write failed.
+            // Verify the asset was actually written rather than trusting the boolean the
+            // message resolves to either way. `unverified` means the path could not be
+            // resolved, not that the write failed. This runs even when `applied === false`:
+            // the editor has been observed resolving `false` on saves that DID rewrite the
+            // file (#63) — trusting that signal alone turns a successful update into a
+            // reported failure. The mtime check is the source of truth; `applied` is only
+            // consulted when the mtime cannot confirm one way or the other.
             let persisted: boolean | 'unverified' = 'unverified';
             if (prefabPath !== null && mtimeBefore !== null) {
                 const mtimeAfter = await this.waitForPrefabWrite(prefabPath, mtimeBefore);
                 if (mtimeAfter !== null) persisted = mtimeAfter > mtimeBefore;
+            }
+
+            const appliedRejected = applied === false;
+
+            if (appliedRejected && persisted !== true) {
+                return {
+                    success: false,
+                    error: `Editor rejected apply-prefab for node ${rootUuid}. Confirm it is a prefab-instance root with a valid asset link.`,
+                    data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted }
+                };
             }
 
             if (persisted === false) {
@@ -465,10 +472,14 @@ export class ManagePrefab extends BaseActionTool {
 
             return {
                 success: true,
-                message: removedFileIds.length > 0
-                    ? `Prefab updated successfully; removed ${removedFileIds.length} child node(s) apply-prefab left behind`
-                    : 'Prefab updated successfully',
-                data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted, removedFileIds }
+                message: appliedRejected
+                    ? (removedFileIds.length > 0
+                        ? `Prefab updated successfully despite apply-prefab reporting rejection; removed ${removedFileIds.length} child node(s) apply-prefab left behind`
+                        : `Prefab updated successfully; apply-prefab reported rejection but ${prefabPath} was rewritten`)
+                    : (removedFileIds.length > 0
+                        ? `Prefab updated successfully; removed ${removedFileIds.length} child node(s) apply-prefab left behind`
+                        : 'Prefab updated successfully'),
+                data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted, appliedRejected, removedFileIds }
             };
         } catch (err: any) {
             return { success: false, error: err.message };
