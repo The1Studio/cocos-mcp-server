@@ -290,6 +290,20 @@ export function convertPropertyValue(propertyType: string, value: any): any {
     }
     switch (propertyType) {
         case 'string':
+            // Issue #116: `String(value)` turns any object into the literal text
+            // "[object Object]" (and any array into a comma-joined list), which was then
+            // written to the scene with success:true — silent data loss on a plain string
+            // field. Reject anything non-primitive, naming the received type, instead of
+            // writing a lossy placeholder. Mirrors the asset-reference branch above.
+            if (typeof value === 'object' && value !== null) {
+                throw new Error(
+                    `string value must be a primitive (received ${Array.isArray(value) ? 'array' : 'object'}); ` +
+                    'pass JSON-encoded text if a structured payload was intended'
+                );
+            }
+            if (typeof value === 'function' || typeof value === 'symbol') {
+                throw new Error(`string value must be a primitive (received ${typeof value})`);
+            }
             return String(value);
         case 'number': case 'integer': case 'float':
             return Number(value);
