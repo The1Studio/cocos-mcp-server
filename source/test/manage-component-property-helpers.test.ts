@@ -198,3 +198,44 @@ describe('verifyComponentPropertyChange — clearing a reference verifies correc
         expect(result.verified).toBe(false);
     });
 });
+
+// ============================================================================
+// Issue #116 — a JSON-shaped object reaching propertyType "string" was coerced by
+// `String(value)` to the literal "[object Object]" (and an array to a comma-joined
+// list) and written to the scene with success:true — silent data loss on a plain
+// string field. The case must fail loudly instead of writing a lossy placeholder.
+// ============================================================================
+describe('convertPropertyValue — string propertyType rejects non-primitive values (issue #116)', () => {
+    it('throws for an object value instead of returning "[object Object]"', () => {
+        expect(() => convertPropertyValue('string', { level: 1, enemies: [] }))
+            .toThrow(/string value must be a primitive \(received object\)/);
+    });
+
+    it('throws for an array value instead of returning a comma-joined list', () => {
+        expect(() => convertPropertyValue('string', ['a', 'b']))
+            .toThrow(/string value must be a primitive \(received array\)/);
+    });
+
+    it('throws for function and symbol values', () => {
+        expect(() => convertPropertyValue('string', () => 'x'))
+            .toThrow(/string value must be a primitive \(received function\)/);
+        expect(() => convertPropertyValue('string', Symbol('x')))
+            .toThrow(/string value must be a primitive \(received symbol\)/);
+    });
+
+    it('still returns the text for a genuine string', () => {
+        expect(convertPropertyValue('string', 'level-1')).toBe('level-1');
+    });
+
+    it('still returns text for primitives that were previously stringified', () => {
+        expect(convertPropertyValue('string', 42)).toBe('42');
+        expect(convertPropertyValue('string', false)).toBe('false');
+        expect(convertPropertyValue('string', null)).toBe('null');
+        expect(convertPropertyValue('string', undefined)).toBe('undefined');
+    });
+
+    it('hints that a JSON-encoded string is the supported shape for structured payloads', () => {
+        const payload = { level: 1 };
+        expect(convertPropertyValue('string', JSON.stringify(payload))).toBe('{"level":1}');
+    });
+});
