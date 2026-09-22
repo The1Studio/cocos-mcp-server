@@ -229,7 +229,13 @@ export class PrefabCreationService {
                     // defaults for every component type (#28).
                     node.components = nodeData.__comps__.map((comp: any) => ({
                         type: comp.__type__ || comp.cid || comp.type || 'Unknown',
-                        uuid: comp.uuid?.value || comp.uuid || null,
+                        // The dump nests the component's own uuid under value.uuid.value; the
+                        // top-level comp.uuid does not exist (same shape ManageComponent.getComponents
+                        // already accounts for). Reading only comp.uuid left componentUuidToIndex
+                        // permanently empty, so every cross-component reference on a created prefab
+                        // (e.g. a script's @property(MeshRenderer)/@property(Label) field pointing at
+                        // a descendant node's component) silently serialized as null.
+                        uuid: comp.value?.uuid?.value || comp.uuid?.value || comp.uuid || null,
                         enabled: comp.enabled !== undefined ? comp.enabled : true,
                         properties: extractComponentPropertyDump(comp)
                     }));
@@ -570,16 +576,26 @@ export class PrefabCreationService {
             if (type === 'cc.Quat') return { "__type__": "cc.Quat", "x": Number(value.x) || 0, "y": Number(value.y) || 0, "z": Number(value.z) || 0, "w": value.w !== undefined ? Number(value.w) : 1 };
         }
 
-        // Array properties
+        // Array properties.
+        // Each element of an array-typed dump (e.g. cc.MeshRenderer's sharedMaterials/
+        // _materials) is itself a nested property descriptor — { value: { uuid }, type, ... }
+        // — not a flat { uuid }. Reading item.uuid directly matched nothing for every element,
+        // so a MeshRenderer's assigned material silently serialized as an empty array while
+        // reporting success (verified live against a smart-imported FBX material).
         if (Array.isArray(value)) {
+            const itemUuid = (item: any): string | undefined => item?.uuid || item?.value?.uuid;
             if (propData.elementTypeData?.type === 'cc.Node') {
                 return value.map((item: any) => {
-                    if (item?.uuid && context?.nodeUuidToIndex?.has(item.uuid)) return { "__id__": context.nodeUuidToIndex.get(item.uuid) };
+                    const uuid = itemUuid(item);
+                    if (uuid && context?.nodeUuidToIndex?.has(uuid)) return { "__id__": context.nodeUuidToIndex.get(uuid) };
                     return null;
                 }).filter(Boolean);
             }
             if (propData.elementTypeData?.type?.startsWith('cc.')) {
-                return value.map((item: any) => item?.uuid ? { "__uuid__": item.uuid, "__expectedType__": propData.elementTypeData.type } : null).filter(Boolean);
+                return value.map((item: any) => {
+                    const uuid = itemUuid(item);
+                    return uuid ? { "__uuid__": uuid, "__expectedType__": propData.elementTypeData.type } : null;
+                }).filter(Boolean);
             }
             return value.map((item: any) => item?.value !== undefined ? item.value : item);
         }
