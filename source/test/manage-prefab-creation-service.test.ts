@@ -301,4 +301,126 @@ describe('PrefabCreationService — font and other concrete asset types', () => 
             'dd255c32-1d56-4ed6-9d1e-8396d22210a3',
         ]);
     });
+
+    /**
+     * `cc.MeshRenderer.sharedMaterials`/`_materials` array items are NESTED property
+     * descriptors — `{ value: { uuid }, type: 'cc.Material', ... }` — verified live against
+     * Cocos Creator 3.8.7 (`manage_component action=get_info` on a smart-imported FBX's
+     * MeshRenderer). The old code read `item.uuid` (flat), which matches nothing on this
+     * shape, so a MeshRenderer with an assigned material serialized `_materials: []` /
+     * `sharedMaterials: []` on every created prefab while `manage_prefab create` reported
+     * `success: true`.
+     */
+    it('unwraps a nested-descriptor material array item instead of dropping it', () => {
+        const out = (service as any).processComponentProperty({
+            type: 'cc.Material[]',
+            elementTypeData: { type: 'cc.Material' },
+            value: [{ value: { uuid: 'f25bd87e-18d7-4acb-a941-0f0ff6d766f4' }, type: 'cc.Material' }],
+        }, { nodeUuidToIndex: new Map(), componentUuidToIndex: new Map() });
+
+        expect(out).toEqual([{ __uuid__: 'f25bd87e-18d7-4acb-a941-0f0ff6d766f4', __expectedType__: 'cc.Material' }]);
+    });
+
+    it('unwraps a nested-descriptor node array item the same way', () => {
+        const nodeUuidToIndex = new Map([['node-uuid-1', 5]]);
+        const out = (service as any).processComponentProperty({
+            type: 'cc.Node[]',
+            elementTypeData: { type: 'cc.Node' },
+            value: [{ value: { uuid: 'node-uuid-1' }, type: 'cc.Node' }],
+        }, { nodeUuidToIndex, componentUuidToIndex: new Map() });
+
+        expect(out).toEqual([{ __id__: 5 }]);
+    });
+});
+
+/**
+ * A script component on the ROOT node referencing a component (MeshRenderer, Label)
+ * that lives on a DESCENDANT node — e.g. `@property(MeshRenderer) bodyRenderer` dragged
+ * to a child mesh three levels down. Reproduces the live symptom: `manage_prefab
+ * action=create` wrote `bodyRenderer: null` / `ammoLabel: null` while reporting
+ * `success: true`, even though the referenced components exist inside the very same
+ * prefab and their scene node references (bedAnchor/labelMount) serialize correctly.
+ *
+ * `getNodeWithChildren` builds its working tree from `query-node-tree` — a uuid/name/
+ * children skeleton with NO `__comps__` — then `enhanceTreeWithMCPComponents` re-queries
+ * each node individually via `query-node` to attach real component data. Every prior
+ * test in this file mocks `query-node` with `mockResolvedValueOnce`/a single dump that
+ * ignores the requested uuid, so it never exercised more than one real node. Routing
+ * `query-node` per-uuid (as this suite is the first to do) is what actually reproduces
+ * the defect a flat single-node mock cannot.
+ */
+describe('PrefabCreationService — cross-node component reference (bodyRenderer/ammoLabel null)', () => {
+    let service: PrefabCreationService;
+    let mockRequest: jest.Mock;
+
+    beforeEach(() => {
+        service = new PrefabCreationService();
+        mockRequest = (global as any).Editor.Message.request as jest.Mock;
+    });
+
+    it('resolves a root script property that references a descendant node\'s component', async () => {
+        const nodeTree = {
+            uuid: 'root-uuid', name: 'bus-4',
+            children: [
+                { uuid: 'body-uuid', name: 'FourSeater_Body', children: [] },
+                { uuid: 'label-uuid', name: 'label', children: [] },
+            ],
+        };
+
+        const dumps: Record<string, any> = {
+            'root-uuid': {
+                uuid: 'root-uuid', name: { value: 'bus-4' },
+                __comps__: [{
+                    __type__: 'TruckView', type: 'TruckView', enabled: true,
+                    value: {
+                        uuid: { value: 'truckview-comp-uuid' },
+                        bodyRenderer: { name: 'bodyRenderer', type: 'cc.MeshRenderer', value: { uuid: 'meshrenderer-comp-uuid' } },
+                        ammoLabel: { name: 'ammoLabel', type: 'cc.Label', value: { uuid: 'label-comp-uuid' } },
+                    },
+                }],
+            },
+            // Per `manage-prefab-creation-service-transform.test.ts` (issue #50), the raw
+            // `scene:query-node` dump carries the component's own uuid as a TOP-LEVEL
+            // `uuid: { value }` field — this is what `enhanceTreeWithMCPComponents` reads
+            // (`comp.uuid?.value`) into `nodeData.components[i].uuid`, and what
+            // `createCompleteNodeTree` indexes into `componentUuidToIndex`. `value` holds
+            // the separate property-dump map `extractComponentPropertyDump` reads.
+            'body-uuid': {
+                uuid: 'body-uuid', name: { value: 'FourSeater_Body' },
+                __comps__: [{ __type__: 'cc.MeshRenderer', type: 'cc.MeshRenderer', enabled: true, uuid: { value: 'meshrenderer-comp-uuid' }, value: {} }],
+            },
+            'label-uuid': {
+                uuid: 'label-uuid', name: { value: 'label' },
+                __comps__: [{ __type__: 'cc.Label', type: 'cc.Label', enabled: true, uuid: { value: 'label-comp-uuid' }, value: {} }],
+            },
+        };
+
+        let written: any[] = [];
+        mockRequest.mockReset();
+        mockRequest.mockImplementation(async (_pkg: string, message: string, ...args: any[]) => {
+            if (message === 'query-node-tree') return nodeTree;
+            if (message === 'query-node') return dumps[args[0]] || { uuid: args[0] };
+            if (message === 'create-asset') return { uuid: 'prefab-uuid-1' };
+            if (message === 'save-asset') { written = JSON.parse(args[1]); return {}; }
+            if (message === 'save-asset-meta') return {};
+            if (message === 'reimport-asset') return true;
+            if (message === 'query-asset-info') return { url: 'db://assets/Truck.prefab' };
+            if (message === 'connect-prefab-instance') return true;
+            throw new Error(`unexpected message: ${message}`);
+        });
+
+        const result = await service.createPrefabWithAssetDB('root-uuid', 'db://assets/Truck.prefab', 'Truck', true, true);
+
+        expect(result.success).toBe(true);
+        const truckView = written.find((e: any) => e && e.__type__ === 'TruckView');
+        expect(truckView).toBeDefined();
+        expect(truckView.bodyRenderer).not.toBeNull();
+        expect(truckView.ammoLabel).not.toBeNull();
+        const meshRenderer = written.find((e: any) => e && e.__type__ === 'cc.MeshRenderer');
+        const label = written.find((e: any) => e && e.__type__ === 'cc.Label');
+        const meshRendererIndex = written.indexOf(meshRenderer);
+        const labelIndex = written.indexOf(label);
+        expect(truckView.bodyRenderer).toEqual({ __id__: meshRendererIndex });
+        expect(truckView.ammoLabel).toEqual({ __id__: labelIndex });
+    });
 });
