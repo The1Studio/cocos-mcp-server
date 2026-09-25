@@ -372,6 +372,57 @@ describe('ManagePrefab', () => {
             return JSON.parse(fs.readFileSync(tmpFile, 'utf-8'));
         }
 
+        /**
+         * Live finding (ArrowBlox D-editor-2): Cocos 3.8.7 `query-node` returns `children`
+         * as property DUMPS (`{ value: { uuid }, type: 'cc.Node' }`), not uuid strings.
+         * The walker passed the dump object to `query-node`, never reached a child, so every
+         * LIVE child looked orphaned and was deleted from the asset on each `update`.
+         */
+        it('reads child uuids out of query-node dump entries and keeps live children', async () => {
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            routeMessages({
+                'query-node': (uuid: any) => {
+                    if (typeof uuid !== 'string') throw new Error('query-node expects a uuid string');
+                    if (uuid === ROOT_UUID) {
+                        return { ...nodeDump, __prefab__: { ...nodeDump.__prefab__, fileId: 'root' },
+                            children: [{ value: { uuid: 'keep-uuid' }, type: 'cc.Node' }] };
+                    }
+                    if (uuid === 'keep-uuid') return { __prefab__: { fileId: 'child-A' }, children: [] };
+                    return null;
+                },
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, assetWithOrphanedChild()),
+                'reimport-asset': () => true,
+            });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(result.success).toBe(true);
+            expect(result.data.removedFileIds).toEqual(['child-B']);
+            expect(readAsset(tmpFile).some(entry => entry.fileId === 'child-A')).toBe(true);
+            fs.unlinkSync(tmpFile);
+        });
+
+        it('removes nothing when a live child cannot be resolved (never guess an orphan)', async () => {
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            routeMessages({
+                'query-node': (uuid: string) => {
+                    if (uuid === ROOT_UUID) return { ...nodeDump, __prefab__: { ...nodeDump.__prefab__, fileId: 'root' }, children: ['keep-uuid'] };
+                    throw new Error('query failed');
+                },
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': applyPrefabWriting(tmpFile, assetWithOrphanedChild()),
+                'reimport-asset': () => true,
+            });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            expect(result.success).toBe(true);
+            expect(result.data.removedFileIds).toEqual([]);
+            expect(readAsset(tmpFile).some(entry => entry.fileId === 'child-A')).toBe(true);
+            fs.unlinkSync(tmpFile);
+        });
+
         it('removes the deleted child subtree from the asset instead of only reporting it', async () => {
             const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
             routeMessages({

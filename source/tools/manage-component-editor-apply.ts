@@ -152,6 +152,21 @@ export async function applyPropertyToEditor(
             dump: { value: processedValue, type: 'cc.Node', isArray: true, elementTypeData: { value: null, type: 'cc.Node' } }
         });
 
+    } else if (propertyType === 'assetArray' && Array.isArray(processedValue)) {
+        // Explicit array dump typed with the property's DECLARED element class. Each element
+        // must itself be a full dump `{ value: { uuid }, type }` (the shape query-node returns):
+        // a bare `{ uuid }` element makes the editor throw "Cannot read properties of
+        // undefined (reading 'hasOwnProperty')" while decoding the array.
+        const elementType = await resolveDeclaredAssetElementType(nodeUuid, componentType, property, getComponentInfo);
+        await Editor.Message.request('scene', 'set-property', {
+            uuid: nodeUuid, path: propertyPath,
+            dump: {
+                value: processedValue.map((ref: any) => ({ value: ref, type: elementType })),
+                type: elementType, isArray: true,
+                elementTypeData: { value: { uuid: '' }, type: elementType }
+            }
+        });
+
     } else if (propertyType === 'componentArray' && Array.isArray(processedValue)) {
         actualExpectedValue = await applyComponentReferenceArray(
             nodeUuid, propertyPath, componentType, property, processedValue, getComponentInfo
@@ -189,6 +204,35 @@ export async function applyPropertyToEditor(
  */
 function isUsableType(t: any): boolean {
     return typeof t === 'string' && t.length > 0 && t !== 'Unknown';
+}
+
+/**
+ * Resolve the DECLARED element class of an asset-array @property (e.g. `cc.AudioClip` for
+ * `@property({ type: [AudioClip] })`) from the holder component's dump. Prefers
+ * `elementTypeData.type`, then the array dump's own `type`; falls back to `cc.Asset` when
+ * neither is readable.
+ */
+async function resolveDeclaredAssetElementType(
+    nodeUuid: string,
+    componentType: string,
+    property: string,
+    getComponentInfo: (nodeUuid: string, componentType: string) => Promise<ActionToolResult>
+): Promise<string> {
+    const info = await getComponentInfo(nodeUuid, componentType);
+    let meta: any = info.success ? info.data?.properties : undefined;
+    const segments = property.split('.');
+    for (let i = 0; i < segments.length && meta; i++) {
+        meta = meta[segments[i]];
+        const isLeaf = i === segments.length - 1;
+        if (!isLeaf && meta && typeof meta === 'object' && 'value' in meta && typeof meta.value === 'object') {
+            meta = meta.value;
+        }
+    }
+    if (meta && typeof meta === 'object') {
+        if (isUsableType(meta.elementTypeData?.type)) return meta.elementTypeData.type;
+        if (isUsableType(meta.type)) return meta.type;
+    }
+    return 'cc.Asset';
 }
 
 /**

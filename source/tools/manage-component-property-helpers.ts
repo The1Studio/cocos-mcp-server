@@ -258,7 +258,7 @@ export const SUPPORTED_PROPERTY_TYPES = [
     'color', 'vec2', 'vec3', 'size',
     'node', 'component',
     ...ASSET_REFERENCE_PROPERTY_TYPES,
-    'nodeArray', 'colorArray', 'numberArray', 'stringArray', 'componentArray'
+    'nodeArray', 'colorArray', 'numberArray', 'stringArray', 'componentArray', 'assetArray'
 ] as const;
 
 /**
@@ -280,7 +280,7 @@ export function convertPropertyValue(propertyType: string, value: any): any {
         (ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType))) {
         return { uuid: '' };
     }
-    if (isClearRequest && propertyType === 'componentArray') {
+    if (isClearRequest && (propertyType === 'componentArray' || propertyType === 'assetArray')) {
         return [];
     }
 
@@ -361,6 +361,18 @@ export function convertPropertyValue(propertyType: string, value: any): any {
                 });
             }
             throw new Error(`ComponentArray value must be an array (received typeof ${typeof value})`);
+        case 'assetArray':
+            {
+                // An array of asset references (e.g. `@property({ type: [AudioClip] })`).
+                // Every single-asset propertyType rejects an array, so without this case such a
+                // field was unwritable. Elements serialize as `{ uuid }`, like a single asset.
+                const coerced = parseJsonPayload(value);
+                if (Array.isArray(coerced)) return coerced.map((item: any) => {
+                    if (typeof item === 'string') return { uuid: item };
+                    throw new Error(`assetArray items must be string asset UUIDs (received item typeof ${typeof item})`);
+                });
+            }
+            throw new Error(`assetArray value must be an array of asset UUID strings (received typeof ${typeof value})`);
         case 'nodeArray':
             {
                 const coerced = parseJsonPayload(value);
@@ -520,6 +532,11 @@ export async function verifyComponentPropertyChange(
             // ({ uuid: { value: 'x' } }) — the same ambiguity the single-reference branch
             // below already tolerates.
             const extractUuid = (ref: any): string => {
+                // An asset-array element reads back as a full element dump
+                // ({ value: { uuid }, type, ... }), not a bare { uuid } ref — unwrap it.
+                if (ref && typeof ref === 'object' && !('uuid' in ref) && ref.value && typeof ref.value === 'object') {
+                    ref = ref.value;
+                }
                 if (!ref || typeof ref !== 'object' || !('uuid' in ref)) return '';
                 const raw = ref.uuid;
                 if (raw && typeof raw === 'object' && 'value' in raw) return raw.value || '';
