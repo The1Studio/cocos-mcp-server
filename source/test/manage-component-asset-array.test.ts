@@ -9,7 +9,7 @@
  */
 
 import { applyPropertyToEditor } from '../tools/manage-component-editor-apply';
-import { convertPropertyValue, SUPPORTED_PROPERTY_TYPES } from '../tools/manage-component-property-helpers';
+import { convertPropertyValue, SUPPORTED_PROPERTY_TYPES, verifyComponentPropertyChange } from '../tools/manage-component-property-helpers';
 import { ActionToolResult, successResult, errorResult } from '../types';
 
 declare const global: any;
@@ -108,5 +108,35 @@ describe('applyPropertyToEditor — assetArray', () => {
         expect(requestMock.mock.calls[0][2].dump).toEqual({
             value: [], type: 'cc.Asset', isArray: true, elementTypeData: { value: { uuid: '' }, type: 'cc.Asset' }
         });
+    });
+});
+
+describe('verifyComponentPropertyChange — asset array read-back', () => {
+    // Live finding: the editor reads an asset array back as element DUMPS
+    // (`{ value: { uuid }, type, ... }`), not bare `{ uuid }` refs. Comparing only the
+    // top-level `uuid` key reported a write that landed as "did not verify".
+    it('verifies when each read-back element wraps its ref in a dump', async () => {
+        mockDeclaredMeta({
+            name: 'audioList', type: 'cc.AudioClip', isArray: true,
+            value: [
+                { value: { uuid: 'clip-1' }, default: null, type: 'cc.AudioClip' },
+                { value: { uuid: 'clip-2' }, default: null, type: 'cc.AudioClip' }
+            ]
+        });
+        const result = await verifyComponentPropertyChange(
+            baseArgs.nodeUuid, baseArgs.componentType, 'audioList', [], [{ uuid: 'clip-1' }, { uuid: 'clip-2' }], getComponentInfo
+        );
+        expect(result.verified).toBe(true);
+    });
+
+    it('still fails when a read-back element holds a different uuid', async () => {
+        mockDeclaredMeta({
+            name: 'audioList', type: 'cc.AudioClip', isArray: true,
+            value: [{ value: { uuid: 'clip-1' }, type: 'cc.AudioClip' }, { value: { uuid: 'other' }, type: 'cc.AudioClip' }]
+        });
+        const result = await verifyComponentPropertyChange(
+            baseArgs.nodeUuid, baseArgs.componentType, 'audioList', [], [{ uuid: 'clip-1' }, { uuid: 'clip-2' }], getComponentInfo
+        );
+        expect(result.verified).toBe(false);
     });
 });

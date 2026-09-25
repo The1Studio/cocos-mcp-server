@@ -532,6 +532,11 @@ export async function verifyComponentPropertyChange(
             // ({ uuid: { value: 'x' } }) — the same ambiguity the single-reference branch
             // below already tolerates.
             const extractUuid = (ref: any): string => {
+                // An asset-array element reads back as a full element dump
+                // ({ value: { uuid }, type, ... }), not a bare { uuid } ref — unwrap it.
+                if (ref && typeof ref === 'object' && !('uuid' in ref) && ref.value && typeof ref.value === 'object') {
+                    ref = ref.value;
+                }
                 if (!ref || typeof ref !== 'object' || !('uuid' in ref)) return '';
                 const raw = ref.uuid;
                 if (raw && typeof raw === 'object' && 'value' in raw) return raw.value || '';
