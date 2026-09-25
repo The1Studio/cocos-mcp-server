@@ -505,24 +505,44 @@ export class ManagePrefab extends BaseActionTool {
         }
     }
 
-    /** Walk a live prefab-instance subtree and collect the `__prefab__.fileId` of every node. */
+    /**
+     * Walk a live prefab-instance subtree and collect the `__prefab__.fileId` of every node.
+     *
+     * `query-node` returns `children` as property dumps (`{ value: { uuid }, type }`), not
+     * uuid strings; passing the dump on as a uuid reached no child, so every live child
+     * looked orphaned and was deleted from the asset. Any node that cannot be resolved or
+     * carries no fileId makes the walk incomplete, and an incomplete walk returns an EMPTY
+     * set — the caller then removes nothing rather than deleting a child it failed to see.
+     */
     private async collectInstanceFileIds(rootUuid: string): Promise<Set<string>> {
         const fileIds = new Set<string>();
+        let complete = true;
+        const childUuidOf = (entry: any): string => {
+            if (typeof entry === 'string') return entry;
+            if (entry && typeof entry === 'object') {
+                if (typeof entry.uuid === 'string') return entry.uuid;
+                if (entry.value && typeof entry.value.uuid === 'string') return entry.value.uuid;
+            }
+            return '';
+        };
         const visit = async (uuid: string): Promise<void> => {
+            if (!complete) return;
+            if (!uuid) { complete = false; return; }
             let nodeData: any;
             try {
                 nodeData = await Editor.Message.request('scene', 'query-node', uuid);
             } catch {
+                complete = false;
                 return;
             }
-            if (!nodeData) return;
-            const fileId = nodeData.__prefab__?.fileId;
-            if (typeof fileId === 'string' && fileId) fileIds.add(fileId);
-            const children: string[] = Array.isArray(nodeData.children) ? nodeData.children : [];
-            for (const childUuid of children) await visit(childUuid);
+            const fileId = nodeData?.__prefab__?.fileId;
+            if (typeof fileId !== 'string' || !fileId) { complete = false; return; }
+            fileIds.add(fileId);
+            const children: any[] = Array.isArray(nodeData.children) ? nodeData.children : [];
+            for (const child of children) await visit(childUuidOf(child));
         };
         await visit(rootUuid);
-        return fileIds;
+        return complete ? fileIds : new Set<string>();
     }
 
     /** Extract every `cc.Node` entry's fileId from a written `.prefab` asset's JSON array. */
