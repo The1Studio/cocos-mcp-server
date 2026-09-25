@@ -153,12 +153,18 @@ export async function applyPropertyToEditor(
         });
 
     } else if (propertyType === 'assetArray' && Array.isArray(processedValue)) {
-        // Same explicit array dump as nodeArray (issue #18), typed with the property's
-        // DECLARED element class — the editor needs it to deserialize each `{ uuid }`.
+        // Explicit array dump typed with the property's DECLARED element class. Each element
+        // must itself be a full dump `{ value: { uuid }, type }` (the shape query-node returns):
+        // a bare `{ uuid }` element makes the editor throw "Cannot read properties of
+        // undefined (reading 'hasOwnProperty')" while decoding the array.
         const elementType = await resolveDeclaredAssetElementType(nodeUuid, componentType, property, getComponentInfo);
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid, path: propertyPath,
-            dump: { value: processedValue, type: elementType, isArray: true, elementTypeData: { value: null, type: elementType } }
+            dump: {
+                value: processedValue.map((ref: any) => ({ value: ref, type: elementType })),
+                type: elementType, isArray: true,
+                elementTypeData: { value: { uuid: '' }, type: elementType }
+            }
         });
 
     } else if (propertyType === 'componentArray' && Array.isArray(processedValue)) {

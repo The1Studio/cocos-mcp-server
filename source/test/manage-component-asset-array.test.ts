@@ -70,7 +70,10 @@ describe('convertPropertyValue — assetArray', () => {
 });
 
 describe('applyPropertyToEditor — assetArray', () => {
-    it('writes ONE array dump typed with the declared element type (elementTypeData)', async () => {
+    // Live finding: a bare `{ uuid }` element makes the editor throw
+    // "Cannot read properties of undefined (reading 'hasOwnProperty')" — each element must
+    // be a full dump `{ value: { uuid }, type }`, the shape query-node itself returns.
+    it('writes ONE array dump whose elements are typed element dumps', async () => {
         mockDeclaredMeta({ name: 'audioList', type: 'cc.AudioClip', isArray: true, elementTypeData: { type: 'cc.AudioClip' }, value: [] });
         const processedValue = [{ uuid: 'clip-1' }, { uuid: 'clip-2' }];
 
@@ -82,7 +85,14 @@ describe('applyPropertyToEditor — assetArray', () => {
         expect(payload).toEqual({
             uuid: 'node-uuid-1',
             path: '__comps__.0.audioList',
-            dump: { value: processedValue, type: 'cc.AudioClip', isArray: true, elementTypeData: { value: null, type: 'cc.AudioClip' } }
+            dump: {
+                value: [
+                    { value: { uuid: 'clip-1' }, type: 'cc.AudioClip' },
+                    { value: { uuid: 'clip-2' }, type: 'cc.AudioClip' }
+                ],
+                type: 'cc.AudioClip', isArray: true,
+                elementTypeData: { value: { uuid: '' }, type: 'cc.AudioClip' }
+            }
         });
     });
 
@@ -96,7 +106,7 @@ describe('applyPropertyToEditor — assetArray', () => {
         getComponentInfo.mockResolvedValue(errorResult('not found'));
         await applyPropertyToEditor({ ...baseArgs, value: [], processedValue: [] }, getComponentInfo);
         expect(requestMock.mock.calls[0][2].dump).toEqual({
-            value: [], type: 'cc.Asset', isArray: true, elementTypeData: { value: null, type: 'cc.Asset' }
+            value: [], type: 'cc.Asset', isArray: true, elementTypeData: { value: { uuid: '' }, type: 'cc.Asset' }
         });
     });
 });
