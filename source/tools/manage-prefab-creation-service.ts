@@ -35,16 +35,58 @@ const BASE_COMPONENT_KEYS = new Set([
     '__type__', '_name', '_objFlags', '__editorExtras__', 'node', '_enabled', '__prefab', '_id'
 ]);
 
+/** True when a serialized component key is an engine accessor with a `_`-prefixed twin. */
+function isEngineType(componentType: string): boolean {
+    return /^(cc|sp|dragonBones)\./.test(componentType);
+}
+
 /**
- * Dump keys whose serialized field name differs (accessor-backed engine properties).
+ * Find the accessor keys a dump carries alongside their `_`-prefixed serialized twin.
+ *
+ * Issue #114 defect 2. A `scene:query-node` dump carries BOTH spellings of an
+ * accessor-backed engine field — the inspector accessor (`clips`, `defaultClip`,
+ * `sharedMaterials`) and the true serialized field (`_clips`, `_defaultClip`,
+ * `_materials`). `createComponentObject` emitted every dump key verbatim unless the type
+ * was in `DUMP_KEY_RENAMES`, so a `cc.Animation` component (absent from the table) wrote
+ * `clips` AND `_clips` as separate top-level keys with diverging values, and the asset
+ * importer rejected the prefab outright:
+ *
+ *     [Assets] Cannot read properties of undefined (reading '_name')  TypeError
+ *
+ * The originating report pinned the repair empirically: stripping every non-underscore key
+ * that has an underscore twin reproduced the key set of a hand-authored prefab, which
+ * imported cleanly.
+ *
+ * This is type-AGNOSTIC on purpose. A table that must be extended per confirmed mismatch
+ * always lags the engine; the twin invariant cannot, and it is statically detectable —
+ * which the table's own docstring previously denied.
+ *
+ * Scoped to ENGINE types. A script may legitimately declare both `foo` and `_foo` as
+ * distinct `@property` fields, and dropping one there would be data loss rather than a
+ * repair, so script components are never touched.
+ */
+export function findAccessorTwinKeys(componentType: string, properties: Record<string, any>): string[] {
+    if (!isEngineType(componentType)) return [];
+    return Object.keys(properties).filter(
+        key => !key.startsWith('_') && Object.prototype.hasOwnProperty.call(properties, `_${key}`)
+    );
+}
+
+/**
+ * Keys whose serialized field name differs (accessor-backed engine properties).
  *
  * Verified only for these four types — every other engine `cc.*`/`sp.*`/`dragonBones.*`
  * component falls through to the generic branch below, which emits the dump key
  * VERBATIM. For most engine types the dump key already matches the serialized key
  * (e.g. `cc.ParticleSystem2D`'s `emissionRate`), but an accessor-backed field on a type
- * not listed here would serialize under the WRONG key rather than being dropped — a
- * known, undetectable-without-a-live-editor limitation of this fix. Extend this table
- * as specific mismatches are confirmed against a running Cocos Creator 3.8.7 instance.
+ * not listed here would serialize under the WRONG key rather than being dropped.
+ *
+ * Extend this table as specific mismatches are confirmed against a running Cocos Creator
+ * 3.8.7 instance — but note that `findAccessorTwinKeys` below is the type-agnostic net
+ * underneath it: where the dump carries BOTH spellings, the twin is dropped rather than
+ * requiring a table entry, so a type this table has never heard of still serializes
+ * importable. The table remains necessary for the case the net cannot see — an
+ * accessor-only key with no serialized twin present in the same dump.
  */
 const DUMP_KEY_RENAMES: Record<string, Record<string, string>> = {
     'cc.UITransform': { contentSize: '_contentSize', anchorPoint: '_anchorPoint' },
@@ -102,6 +144,30 @@ export class PrefabCreationService {
             if (!actualPrefabUuid) return { success: false, error: 'Cannot get engine-assigned prefab UUID' };
 
             const prefabContent = await this.createStandardPrefabContent(nodeData, prefabName, actualPrefabUuid, includeChildren, includeComponents);
+            // Defense-in-depth for #114 defect 2. `validatePrefabFormat(prefabContent)` alone
+            // would be a shape check that can never fail: it runs `findAccessorTwinKeys` over
+            // output that `createComponentObject` already ran the SAME predicate over, so a
+            // duplicate reaching here is impossible by construction (verified — neutering this
+            // branch left every test green). The genuine invariant is a DIFFERENCE one: every
+            // accessor twin the CAPTURED scene dump carries must be absent from what we are
+            // about to write. That fires even if the emission filter is removed, mis-typed, or
+            // the dump shape changes under it, because it does not re-ask the filter's question.
+            const capturedTwins = this.findCapturedAccessorTwins(nodeData, prefabContent);
+            if (capturedTwins.length > 0) {
+                const named = capturedTwins
+                    .map(d => `${d.type} (${d.keys.map(k => `'${k}'/'_${k}'`).join(', ')})`)
+                    .join('; ');
+                return {
+                    success: false,
+                    fatal: true,
+                    error: `Refusing to write ${savePath}: the scene carried an accessor key alongside its ` +
+                        `underscore twin and it survived into the prefab — ${named}. Cocos Creator's asset ` +
+                        `importer rejects this shape ("Cannot read properties of undefined (reading '_name')"), ` +
+                        `so the prefab would be unloadable, yet the caller would have been told it was created ` +
+                        `(issue #114 defect 2).`,
+                    data: { prefabUuid: actualPrefabUuid, prefabPath: savePath, nodeUuid, prefabName, duplicateAccessorKeys: capturedTwins }
+                };
+            }
             const referenceLoss = this.describeReferenceLosses(this.lastReferenceLosses);
             if (referenceLoss) {
                 return {
@@ -461,8 +527,15 @@ export class PrefabCreationService {
         const properties = componentData.properties || {};
         const renames = DUMP_KEY_RENAMES[componentType] || {};
 
+        // Drop every accessor key that has its serialized twin right there in the same dump
+        // (#114 defect 2). The underscore spelling is the one the engine reads back; keeping
+        // both is what made the importer reject the file. Computed once, up front, so the
+        // rename-table branches below cannot reintroduce a key this removed.
+        const accessorTwins = new Set(findAccessorTwinKeys(componentType, properties));
+
         for (const [key, value] of Object.entries(properties)) {
             if (DUMP_KEYS_NOT_SERIALIZED.has(key)) continue;
+            if (accessorTwins.has(key)) continue;
             const propValue = this.processComponentProperty(value, context, `${renames[key] || key}`);
             if (propValue !== undefined) component[renames[key] || key] = propValue;
         }
@@ -518,6 +591,71 @@ export class PrefabCreationService {
             if (Object.keys(entry).some(key => !BASE_COMPONENT_KEYS.has(key))) populated.add(entry.__type__);
         }
         return [...expected].filter(type => !populated.has(type));
+    }
+
+    /**
+     * Accessor twins the CAPTURED scene dump carried that survived into the emitted prefab.
+     *
+     * This is the real #114-defect-2 invariant, and it is deliberately a DIFFERENCE check
+     * rather than a re-run of the emission filter's own predicate. Asking
+     * `findAccessorTwinKeys` about `prefabContent` would re-ask the question the filter just
+     * answered and so could never fail (see the call site — neutering that branch leaves
+     * every test green); comparing capture against output fails whenever the filter is
+     * removed, mis-scoped, or the dump shape changes under it.
+     *
+     * Per-node component counts are compared positionally instead of by uuid, because a node
+     * can hold several components of the same type with no uuid distinguishable at this
+     * level. The counts come from the same walks the serializer uses (`components` and
+     * `properties`), so they always agree with what `createComponentObject` saw; only the
+     * shape-dependent details differ, and those are ignored rather than guessed at.
+     *
+     * Pure and exported so both directions are unit-testable: it must fire when an accessor
+     * key is written beside its twin, and stay silent on the repaired shape.
+     */
+    findCapturedAccessorTwins(nodeData: any, prefabData: any[]): Array<{ type: string; keys: string[] }> {
+        const captured: Array<{ type: string; keys: string[] }> = [];
+        const walk = (node: any) => {
+            if (!node) return;
+            for (const comp of (node.components || [])) {
+                const componentType = comp?.type || comp?.__type__ || 'Unknown';
+                const properties = comp?.properties || {};
+                const keys = findAccessorTwinKeys(componentType, properties);
+                if (keys.length > 0) captured.push({ type: componentType, keys });
+            }
+            for (const child of (node.children || [])) walk(child);
+        };
+        walk(nodeData);
+        if (captured.length === 0) return [];
+
+        // The prefab entries for node 0 onward, skipping the leading cc.Prefab asset record
+        // (and any leading null slots), are the serialized nodes in walk order.
+        const nodeEntries = prefabData.filter(
+            entry => entry && typeof entry === 'object' && entry.__type__ !== 'cc.Prefab' && Array.isArray(entry._components)
+        );
+
+        const survived: Array<{ type: string; keys: string[] }> = [];
+        let cursor = 0;
+        const check = (node: any) => {
+            if (!node) return;
+            const componentCount = Array.isArray(node.components) ? node.components.length : 0;
+            const entry: any = nodeEntries[cursor++];
+            const emitted: any[] = (entry && Array.isArray(entry._components))
+                ? entry._components.map((ref: any) => prefabData[ref?.__id__]).filter(Boolean)
+                : [];
+            for (let i = 0; i < componentCount; i++) {
+                const componentType = node.components[i]?.type || node.components[i]?.__type__ || 'Unknown';
+                const keys = findAccessorTwinKeys(componentType, emitted[i] && typeof emitted[i] === 'object' ? emitted[i] : {});
+                if (keys.length > 0) survived.push({ type: componentType, keys });
+            }
+            for (const child of (node.children || [])) check(child);
+        };
+        check(nodeData);
+
+        // Report the captured set, narrowed to the twin names actually observed surviving so
+        // the message names the real leak rather than restating what the dump held.
+        return captured.filter(cap =>
+            survived.some(surv => surv.type === cap.type && surv.keys.some(k => cap.keys.includes(k)))
+        );
     }
 
     /** Re-read the written prefab; falls back to the in-memory content when the path is unresolvable. */
@@ -820,18 +958,19 @@ export class PrefabCreationService {
      * issue #73's own repro. `hollowComponents` reports the components that hold nothing
      * beyond `BASE_COMPONENT_KEYS`, so "valid" and "empty" are distinguishable.
      */
-    validatePrefabFormat(prefabData: any): { isValid: boolean; issues: string[]; nodeCount: number; componentCount: number; hollowComponents: string[] } {
+    validatePrefabFormat(prefabData: any): { isValid: boolean; issues: string[]; nodeCount: number; componentCount: number; hollowComponents: string[]; duplicateAccessorKeys: Array<{ type: string; keys: string[] }> } {
         const issues: string[] = [];
         const hollowComponents: string[] = [];
+        const duplicateAccessorKeys: Array<{ type: string; keys: string[] }> = [];
         let nodeCount = 0;
         let componentCount = 0;
         if (!Array.isArray(prefabData)) {
             issues.push('Prefab data must be an array');
-            return { isValid: false, issues, nodeCount, componentCount, hollowComponents };
+            return { isValid: false, issues, nodeCount, componentCount, hollowComponents, duplicateAccessorKeys };
         }
         if (prefabData.length === 0) {
             issues.push('Prefab data is empty');
-            return { isValid: false, issues, nodeCount, componentCount, hollowComponents };
+            return { isValid: false, issues, nodeCount, componentCount, hollowComponents, duplicateAccessorKeys };
         }
         if (!prefabData[0] || prefabData[0].__type__ !== 'cc.Prefab') {
             issues.push('First element must be cc.Prefab type');
@@ -853,13 +992,28 @@ export class PrefabCreationService {
                 if (holdsNothingButEnvelope && typeof item.node?.__id__ === 'number') {
                     hollowComponents.push(String(item.__type__));
                 }
+                // An accessor key sitting beside its serialized `_`-twin is a prefab the
+                // importer rejects (#114 defect 2). Checked here because `action=validate`
+                // reported `isValid: true` on the broken file both before AND after the
+                // report's manual repair, so it caught nothing about this class.
+                const twins = findAccessorTwinKeys(String(item.__type__), item);
+                if (twins.length > 0) {
+                    duplicateAccessorKeys.push({ type: String(item.__type__), keys: twins });
+                }
             }
         });
         if (nodeCount === 0) issues.push('Prefab must contain at least one node');
         for (const hollow of [...new Set(hollowComponents)]) {
             issues.push(`Component '${hollow}' serialized with no properties — it carries none of the scene values it had (issues #28/#73)`);
         }
-        return { isValid: issues.length === 0, issues, nodeCount, componentCount, hollowComponents };
+        for (const dup of duplicateAccessorKeys) {
+            issues.push(
+                `Component '${dup.type}' serializes both an accessor key and its underscore twin ` +
+                `(${dup.keys.map(k => `'${k}'/'_${k}'`).join(', ')}) — the asset importer rejects this ` +
+                `shape with "Cannot read properties of undefined (reading '_name')" (issue #114).`
+            );
+        }
+        return { isValid: issues.length === 0, issues, nodeCount, componentCount, hollowComponents, duplicateAccessorKeys };
     }
 
     createStandardMetaContent(prefabName: string, prefabUuid: string): any {
