@@ -7,6 +7,25 @@ import { ActionToolResult, successResult } from '../types';
 import { parseJsonPayload } from '../utils/normalize';
 
 /**
+ * Reject a non-primitive element in a primitive array, naming what arrived (issue #66).
+ *
+ * `numberArray` and `stringArray` are the only two propertyTypes whose conversion coerces
+ * silently, so a caller reaching for one of them with OBJECT elements — cc.RealCurve
+ * keyframes, cc.Gradient alpha keys, or any other array-of-plain-object field — had every
+ * element turned into `NaN` / `"[object Object]"` and written to the scene on a `success`
+ * response. Neither is a value anyone meant to write, so refusing beats coercing.
+ */
+function assertArrayItemIsPrimitive(propertyType: string, item: any): void {
+    if (item !== null && typeof item === 'object') {
+        throw new Error(
+            `${propertyType} items must be primitives (received ${Array.isArray(item) ? 'array' : 'object'}). ` +
+            `Array-of-OBJECT fields (e.g. a cc.RealCurve spline's keyFrames, a cc.Gradient's alphaKeys) ` +
+            `have no supported propertyType yet — no value was written (issue #66).`
+        );
+    }
+}
+
+/**
  * Return a component dump's property map.
  *
  * `scene:query-node` shapes each `__comps__` entry as
@@ -393,13 +412,25 @@ export function convertPropertyValue(propertyType: string, value: any): any {
         case 'numberArray':
             {
                 const coerced = parseJsonPayload(value);
-                if (Array.isArray(coerced)) return coerced.map((item: any) => Number(item));
+                if (Array.isArray(coerced)) return coerced.map((item: any) => {
+                    // Issue #66: `Number(item)` on an object yields NaN, which the editor
+                    // accepts as a written value — a caller passing keyframe/alpha-key OBJECTS
+                    // here (the shape the array-of-object fields actually hold) got a success
+                    // response over a NaN-filled field. Name the received item instead.
+                    assertArrayItemIsPrimitive('numberArray', item);
+                    return Number(item);
+                });
             }
             throw new Error(`NumberArray value must be an array (received typeof ${typeof value})`);
         case 'stringArray':
             {
                 const coerced = parseJsonPayload(value);
-                if (Array.isArray(coerced)) return coerced.map((item: any) => String(item));
+                if (Array.isArray(coerced)) return coerced.map((item: any) => {
+                    // Same as numberArray above: `String(item)` renders any object as the
+                    // literal text "[object Object]" (issue #116's failure shape, per element).
+                    assertArrayItemIsPrimitive('stringArray', item);
+                    return String(item);
+                });
             }
             throw new Error(`StringArray value must be an array (received typeof ${typeof value})`);
         default:
