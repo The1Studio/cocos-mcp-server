@@ -233,7 +233,7 @@ describe('ManagePrefab', () => {
             expect(result.error).toMatch(/rejected apply-prefab/i);
         });
 
-        it('#63 — reports success when apply-prefab resolves false but the file WAS rewritten', async () => {
+        it('#63 — a rejected apply that DID rewrite the file stops there, naming the rejected write (#128)', async () => {
             const tmpFile = writePrefabFile();
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
@@ -248,9 +248,14 @@ describe('ManagePrefab', () => {
 
             const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
 
-            expect(result.success).toBe(true);
-            expect(result.data.persisted).toBe(true);
-            expect(result.data.appliedRejected).toBe(true);
+            // #63's point still holds — the write really did land. Proved from the FILE, not
+            // from a response field: `update`'s failure envelope drops its `data` payload
+            // (`manage-prefab.ts:146`), so `persisted` is not observable on this path. What
+            // changed is that a rejection no longer lets the tool ACT on that write (#128).
+            expect(JSON.parse(fs.readFileSync(tmpFile, 'utf-8'))[0].v).toBe(2);
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/rejected apply-prefab/i);
+            expect(result.error).toMatch(/not trustworthy/i);
 
             fs.unlinkSync(tmpFile);
         });
@@ -611,6 +616,67 @@ describe('ManagePrefab', () => {
             const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
 
             expect(result.success).toBe(true);
+
+            fs.unlinkSync(tmpFile);
+        });
+
+        /**
+         * #128 / #127 — a REJECTED apply is a hard stop, however the mtime guard reads.
+         *
+         * #63 taught this function not to trust `false` as a failure signal on its own, because
+         * a rejected apply can still rewrite the file. That is right about the WRITE and wrong
+         * about everything after it: the orphan pass treats a live `query-node` walk as ground
+         * truth for what may legitimately be deleted, and a rejected apply is exactly the signal
+         * that its view of the instance cannot be trusted. Running the pass anyway let `update`
+         * delete a prefab's ENTIRE child set while reporting `success: true` — 8 children to 0
+         * on disk in #128, a nested instance's whole local node mirror in #127.
+         *
+         * The shape below is that failure precisely: the rejected apply still rewrites the file
+         * (`persisted === true`), the live walk cannot see any child, so every child looks
+         * orphaned and the removal path has everything it needs to delete the lot.
+         */
+        it('never removes children when apply-prefab was rejected — a rejected write is not trustworthy (#128, #127)', async () => {
+            const asWrittenByRejectedApply = assetWithOrphanedChild();
+            const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
+            const bytesOnReject = JSON.stringify(asWrittenByRejectedApply);
+
+            routeMessages({
+                // The live walk sees the root but NO children — the state under which every
+                // asset-side child used to be classified as an orphan.
+                'query-node': (uuid: string) => {
+                    if (uuid === ROOT_UUID) {
+                        return { ...nodeDump, __prefab__: { ...nodeDump.__prefab__, fileId: 'root' }, children: [] };
+                    }
+                    return null;
+                },
+                'query-asset-info': () => ({ url: 'db://assets/Foo.prefab', file: tmpFile }),
+                'apply-prefab': () => {
+                    fs.writeFileSync(tmpFile, bytesOnReject, 'utf-8');
+                    const future = Date.now() + 5000;
+                    fs.utimesSync(tmpFile, new Date(future), new Date(future));
+                    return false; // rejected — yet the file WAS rewritten
+                },
+                // Registered so that, were the fix to regress, the removal path could actually
+                // COMPLETE: a green here must mean "the pass never ran", never "it ran and
+                // tripped over an unhandled message".
+                'reimport-asset': () => true,
+            });
+
+            const result = await tool.execute('update', { nodeUuid: ROOT_UUID });
+
+            // Asserted FIRST, deliberately: this is the data-safety invariant, so a regression
+            // fails here reporting "the prefab was mutated" rather than a merely-wrong success
+            // flag further down. Compared byte-for-byte against exactly what the rejected apply
+            // left, so any mutation at all — even a removal that then rolled back to something
+            // merely equivalent — fails.
+            expect(readAsset(tmpFile)).toEqual(asWrittenByRejectedApply);
+            expect(readAsset(tmpFile).some(entry => entry.fileId === 'child-A')).toBe(true);
+            expect(readAsset(tmpFile).some(entry => entry.fileId === 'child-B')).toBe(true);
+
+            // Reports the rejection, names it, and never claims success.
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/rejected apply-prefab/i);
+            expect(result.error).toMatch(/not trustworthy/i);
 
             fs.unlinkSync(tmpFile);
         });
