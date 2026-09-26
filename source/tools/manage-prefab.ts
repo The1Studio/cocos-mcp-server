@@ -897,6 +897,9 @@ export class ManagePrefab extends BaseActionTool {
             data: {
                 isValid: validationResult.isValid, issues: validationResult.issues,
                 nodeCount: validationResult.nodeCount, componentCount: validationResult.componentCount,
+                // Named explicitly so a caller can tell "nothing wrong" from "nothing there":
+                // issue #73's hollow prefab passed this action with `isValid: true`.
+                hollowComponents: validationResult.hollowComponents,
                 url: resolved.url, file: resolved.filePath,
                 message: validationResult.isValid ? 'Prefab format is valid' : 'Prefab format has issues'
             }

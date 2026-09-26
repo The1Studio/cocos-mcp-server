@@ -1,6 +1,19 @@
 import { BaseActionTool } from './base-action-tool';
 import { ActionToolResult, SceneInfo, successResult, errorResult } from '../types';
 import { coerceBool } from '../utils/normalize';
+import { resolveAsset } from '../utils/asset-path';
+import {
+    readOverrideSnapshot, describeOverrideLoss, statMtimeMs, waitForFileRewrite
+} from '../utils/save-artifact-guard';
+
+/** Longest `saveScene` waits for the scene file to be rewritten before calling the save unconfirmed. */
+const SAVE_WRITE_TIMEOUT_MS = 2000;
+
+/**
+ * What the artifact says about a reported-successful save. `unverified` is a first-class
+ * outcome, not a soft failure — "we could not check" must never render as "it worked".
+ */
+type ArtifactVerdict = 'verified' | 'dropped' | 'unverified';
 
 export class ManageScene extends BaseActionTool {
     readonly name = 'manage_scene';
@@ -123,46 +136,173 @@ export class ManageScene extends BaseActionTool {
      * `node_modules/@cocos/creator-types/editor/packages/scene/@types/message.d.ts`),
      * not `void` — the old code discarded that result and reported success unconditionally
      * once the promise settled, with no verification and no `.catch` for a rejected save.
-     * A `false` result is now treated as a failed save (#6).
+     * A `false` result is treated as a failed save (#6).
      *
-     * A resolved `true` still does not guarantee every pending edit was captured — two
-     * mutating calls issued concurrently/batched (rather than awaited sequentially) could
-     * race with the save, per #6's own reproduction. That race is now prevented upstream:
-     * every tool call is serialized on one chain (`tools/mutation-queue.ts`), so this save
-     * cannot begin until the mutations ahead of it have settled. `scene:query-dirty`
-     * (already used by `manage_scene_query`) is still checked immediately after as the
-     * backstop: a scene reporting dirty right after a "successful" save is direct evidence
-     * something did not make it into that save, and is surfaced as an actionable failure
-     * instead of silent success.
+     * A resolved `true`, and a `query-dirty` reading of `false` immediately after it, are
+     * both statements about the EDITOR's in-memory view — neither is a statement about the
+     * file. #6's regression report (2026-09-21) is exactly that gap: strictly sequential
+     * calls, `save` returning `true` three times, `query_dirty` reading `false`, and the
+     * `.scene` file's mtime frozen at its pre-edit timestamp with the edit absent from the
+     * JSON. The editor believed it had saved; it had not.
+     *
+     * So the artifact itself is the arbiter, on two reads of it:
+     *
+     *  - **mtime did not advance** → nothing was serialised. Hard failure (#6).
+     *  - **`cc.TargetOverrideInfo` records dropped** → the file was rewritten, but lossily.
+     *    Reported as a loud non-success with the lost `propertyPath`s named (#78). A
+     *    no-edit round-trip losing these records is the reported repro: 25 before, 23 after,
+     *    and the old response was byte-identical to a lossless save's.
+     *
+     * Both checks are best-effort in the sense that an unreadable artifact yields
+     * "unverifiable" rather than a pass — the result says which it was, so a caller is never
+     * told "verified" on the strength of a read that did not happen. The mutating calls
+     * ahead of this save are serialised on one chain (`tools/mutation-queue.ts`), and
+     * `manage_scene_query` reconciles the raw dirty flag against that queue.
      */
     private async saveScene(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            (Editor.Message.request as any)('scene', 'save-scene').then((saved: boolean) => {
-                if (saved === false) {
-                    resolve(errorResult('scene:save-scene returned false — the editor rejected the save. Nothing was written.'));
-                    return;
-                }
-                Editor.Message.request('scene', 'query-dirty').then((dirty: boolean) => {
-                    if (dirty === true) {
-                        resolve(errorResult(
-                            'save-scene reported success, but the scene is still dirty immediately afterward — ' +
-                            'a pending edit was not captured in this save. This typically means a mutating call ' +
-                            '(manage_node/manage_component/etc.) was issued concurrently or batched with this save ' +
-                            'instead of awaited first; issue calls sequentially and retry save.'
-                        ));
-                        return;
-                    }
-                    resolve(successResult({ dirty }, 'Scene saved successfully (verified not dirty)'));
-                }).catch(() => {
-                    // Dirty-state verification is best-effort — save-scene itself already
-                    // reported true, so an unreadable dirty check must not turn that into
-                    // a failure.
-                    resolve(successResult(null, 'Scene saved successfully (dirty state unverifiable)'));
-                });
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        const scenePath = await this.resolveCurrentSceneFilePath();
+        const mtimeBefore = statMtimeMs(scenePath);
+        const overridesBefore = readOverrideSnapshot(scenePath);
+
+        try {
+            const saved: boolean = await (Editor.Message.request as any)('scene', 'save-scene');
+            if (saved === false) {
+                return errorResult('scene:save-scene returned false — the editor rejected the save. Nothing was written.');
+            }
+        } catch (err: any) {
+            return errorResult(err.message);
+        }
+
+        // 1. Dirty-flag backstop — the editor still holds uncommitted edits.
+        let editorDirty: boolean | null = null;
+        try {
+            editorDirty = (await Editor.Message.request('scene', 'query-dirty')) === true;
+        } catch {
+            // Best-effort: unreadable dirty state must not turn a real save into a failure.
+        }
+        if (editorDirty === true) {
+            return errorResult(
+                'save-scene reported success, but the scene is still dirty immediately afterward — ' +
+                'a pending edit was not captured in this save. This typically means a mutating call ' +
+                '(manage_node/manage_component/etc.) was issued concurrently or batched with this save ' +
+                'instead of awaited first; issue calls sequentially and retry save.'
+            );
+        }
+
+        // 2. Artifact checks. `scenePath === null` means the on-disk file could not be
+        // resolved (unsaved scene, unknown asset); that is reported as unverified, never
+        // folded into either a pass or a failure.
+        const artifact: { verified: boolean; verdict: ArtifactVerdict; reason: string | null; mtimeMs: number | null; lostOverrides: string | null } =
+            scenePath === null
+                ? { verified: false, verdict: 'unverified', reason: null, mtimeMs: null, lostOverrides: null }
+                : await this.verifySavedArtifact(scenePath, mtimeBefore, overridesBefore);
+
+        if (artifact.lostOverrides) {
+            return {
+                success: false,
+                error: `Scene saved to ${scenePath}, but the save WAS LOSSY: ${artifact.lostOverrides}`,
+                data: {
+                    file: scenePath, dirty: false, editorDirty, persistenceVerified: true,
+                    ...(artifact.mtimeMs !== null ? { mtimeMs: artifact.mtimeMs } : {})
+                },
+                isError: true
+            };
+        }
+
+        if (artifact.verdict === 'dropped') {
+            return errorResult(
+                `save-scene reported success but the write did not reach disk: ${artifact.reason}. ` +
+                'This is the #6 false-success shape — verify the file yourself, and if the edit is absent, ' +
+                'press Ctrl+S in the Cocos Creator editor and report the occurrence on #6.'
+            );
+        }
+
+        return successResult(
+            {
+                dirty: false, editorDirty, file: scenePath,
+                persistenceVerified: artifact.verdict === 'verified',
+                ...(artifact.mtimeMs !== null ? { mtimeMs: artifact.mtimeMs } : {})
+            },
+            artifact.verdict === 'verified'
+                ? 'Scene saved successfully (file rewritten and override records preserved)'
+                : 'Scene saved successfully (dirty state unverifiable)'
+        );
+    }
+
+    /**
+     * Confirm the save actually reached the artifact, and that it did not lose override
+     * records on the way.
+     *
+     * Three outcomes, deliberately not two — "we could not check" must stay distinguishable
+     * from both "we checked and it landed" and "we checked and it did not":
+     *
+     *  - `verified`  — the write is confirmed, and no override record was lost.
+     *  - `dropped`   — the write is confirmed ABSENT (an existing file whose mtime did not
+     *                  advance). Evidence of the #6 false success; reported as a failure.
+     *  - `unverified`— no artifact evidence either way (no file at the resolved path, file
+     *                  unreadable). Reported as explicitly unverified, never as a pass.
+     */
+    private async verifySavedArtifact(
+        scenePath: string,
+        mtimeBefore: number | null,
+        overridesBefore: { total: number; propertyPaths: string[] } | null
+    ): Promise<{ verified: boolean; verdict: ArtifactVerdict; reason: string | null; mtimeMs: number | null; lostOverrides: string | null }> {
+        const mtimeAfter = mtimeBefore === null
+            ? null
+            : await waitForFileRewrite(scenePath, mtimeBefore, SAVE_WRITE_TIMEOUT_MS);
+
+        let lostOverrides: string | null = null;
+        if (overridesBefore && overridesBefore.total > 0) {
+            lostOverrides = describeOverrideLoss(overridesBefore, readOverrideSnapshot(scenePath));
+        }
+
+        const rewritten = mtimeBefore !== null && mtimeAfter !== null && mtimeAfter > mtimeBefore;
+        // An override loss proves the file was rewritten; do not also demand a moved mtime,
+        // which a coarse filesystem timestamp could fail to show.
+        if (rewritten || lostOverrides) {
+            return { verified: true, verdict: 'verified', reason: null, mtimeMs: mtimeAfter, lostOverrides };
+        }
+
+        // No file at the resolved path — before AND after. There is nothing to compare, so
+        // this is "unverifiable", not a dropped write: a scene that has never been written
+        // to disk legitimately has no artifact, and a mis-resolved path must not be reported
+        // as a data loss.
+        if (mtimeBefore === null) {
+            return { verified: false, verdict: 'unverified', reason: null, mtimeMs: null, lostOverrides: null };
+        }
+
+        // A file existed and the save did not touch it. That is the #6 defect: the editor
+        // reported success over a write that never happened.
+        return {
+            verified: false, verdict: 'dropped', mtimeMs: mtimeAfter, lostOverrides: null,
+            reason: `${scenePath} existed before the save and was not rewritten by it (mtime unchanged), so the reported-successful save did not serialise anything`
+        };
+    }
+
+    /**
+     * Resolve the on-disk path of the scene currently open in the editor.
+     *
+     * `scene:query-node-tree` yields the open scene's ROOT node, whose uuid is the scene
+     * asset's uuid for a saved scene — enough to resolve the file through `asset-db`. A
+     * never-saved scene has no asset file, so this returns null and the caller reports the
+     * artifact as unverifiable rather than guessing a path.
+     */
+    private async resolveCurrentSceneFilePath(): Promise<string | null> {
+        let sceneUuid: string | null = null;
+        try {
+            const tree: any = await Editor.Message.request('scene', 'query-node-tree');
+            if (Array.isArray(tree)) sceneUuid = tree[0]?.uuid || null;
+            else if (tree && typeof tree === 'object') sceneUuid = tree.uuid || null;
+        } catch {
+            sceneUuid = null;
+        }
+        if (!sceneUuid) return null;
+
+        try {
+            return (await resolveAsset(sceneUuid)).filePath;
+        } catch {
+            return null;
+        }
     }
 
     private async createScene(sceneName: string, savePath: string): Promise<ActionToolResult> {

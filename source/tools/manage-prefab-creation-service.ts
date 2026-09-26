@@ -102,6 +102,15 @@ export class PrefabCreationService {
             if (!actualPrefabUuid) return { success: false, error: 'Cannot get engine-assigned prefab UUID' };
 
             const prefabContent = await this.createStandardPrefabContent(nodeData, prefabName, actualPrefabUuid, includeChildren, includeComponents);
+            const referenceLoss = this.describeReferenceLosses(this.lastReferenceLosses);
+            if (referenceLoss) {
+                return {
+                    success: false,
+                    fatal: true,
+                    error: `Refusing to write ${savePath}: ${referenceLoss} The written prefab would not be equivalent to the scene subtree — this is issue #73's asset-reference loss.`,
+                    data: { prefabUuid: actualPrefabUuid, prefabPath: savePath, nodeUuid, prefabName, referenceLosses: this.lastReferenceLosses }
+                };
+            }
             await this.updateAssetWithAssetDB(savePath, JSON.stringify(prefabContent, null, 2));
             await this.createMetaWithAssetDB(savePath, this.createStandardMetaContent(prefabName, actualPrefabUuid));
             await this.reimportAssetWithAssetDB(savePath);
@@ -151,6 +160,15 @@ export class PrefabCreationService {
 
             const prefabUuid = this.generateUUID();
             const prefabJsonData = await this.createStandardPrefabContent(nodeData, prefabName, prefabUuid, true, true);
+            const referenceLoss = this.describeReferenceLosses(this.lastReferenceLosses);
+            if (referenceLoss) {
+                return {
+                    success: false,
+                    fatal: true,
+                    error: `Refusing to write ${prefabPath}: ${referenceLoss} The written prefab would not be equivalent to the scene subtree — this is issue #73's asset-reference loss.`,
+                    data: { prefabUuid, prefabPath, nodeUuid, prefabName, referenceLosses: this.lastReferenceLosses }
+                };
+            }
             const saveResult = await this.savePrefabWithMeta(prefabPath, prefabJsonData, this.createStandardMetaContent(prefabName, prefabUuid));
 
             if (saveResult.success) {
@@ -301,16 +319,28 @@ export class PrefabCreationService {
             prefabData, currentId: 2, prefabAssetIndex: 0,
             nodeFileIds: new Map<string, string>(),
             nodeUuidToIndex: new Map<string, number>(),
-            componentUuidToIndex: new Map<string, number>()
+            componentUuidToIndex: new Map<string, number>(),
+            losses: [] as Array<{ property: string; uuid: string; reason: string }>
         };
 
         await this.createCompleteNodeTree(nodeData, null, 1, context, includeChildren, includeComponents, prefabName);
+        this.lastReferenceLosses = context.losses;
         return prefabData;
     }
 
+    /**
+     * References the most recent `createStandardPrefabContent` call could not serialize.
+     *
+     * The create paths are plain functions returning the prefab JSON, so a loss cannot be
+     * thrown from where it is detected without abandoning a valid `fatal` failure report.
+     * Both create paths read this immediately after serializing and fail on a non-empty
+     * list — the same contract as the existing `findComponentsThatLostProperties` check.
+     */
+    private lastReferenceLosses: Array<{ property: string; uuid: string; reason: string }> = [];
+
     private async createCompleteNodeTree(
         nodeData: any, parentNodeIndex: number | null, nodeIndex: number,
-        context: { prefabData: any[]; currentId: number; prefabAssetIndex: number; nodeFileIds: Map<string, string>; nodeUuidToIndex: Map<string, number>; componentUuidToIndex: Map<string, number> },
+        context: { prefabData: any[]; currentId: number; prefabAssetIndex: number; nodeFileIds: Map<string, string>; nodeUuidToIndex: Map<string, number>; componentUuidToIndex: Map<string, number>; losses: Array<{ property: string; uuid: string; reason: string }> },
         includeChildren: boolean, includeComponents: boolean, nodeName?: string
     ): Promise<void> {
         const { prefabData } = context;
@@ -433,7 +463,7 @@ export class PrefabCreationService {
 
         for (const [key, value] of Object.entries(properties)) {
             if (DUMP_KEYS_NOT_SERIALIZED.has(key)) continue;
-            const propValue = this.processComponentProperty(value, context);
+            const propValue = this.processComponentProperty(value, context, `${renames[key] || key}`);
             if (propValue !== undefined) component[renames[key] || key] = propValue;
         }
 
@@ -526,44 +556,83 @@ export class PrefabCreationService {
     /**
      * Process component property values, ensuring format matches manually-created prefabs.
      * Handles node refs, asset refs, component refs, typed math/color objects, and arrays.
+     *
+     * Throws on a reference it cannot serialize faithfully. Every branch below used to
+     * answer an unresolvable reference with `null` (or drop it from an array), which is how
+     * a created prefab came out hollow while `action=create` reported success — issue #73's
+     * `_mesh: null`, `_materials: []` and `labelPercent: null`, each of which had been
+     * written to the live scene moments earlier. A reference that cannot be serialized is a
+     * failure of this call, not a value of `null`: see
+     * `~/.claude/rules/development-principles.md` § "Errors Over Silent Fallbacks".
      */
     private processComponentProperty(propData: any, context?: {
         nodeUuidToIndex?: Map<string, number>;
         componentUuidToIndex?: Map<string, number>;
-    }): any {
+        losses?: Array<{ property: string; uuid: string; reason: string }>;
+    }, propertyPath = ''): any {
         if (!propData || typeof propData !== 'object') return propData;
         const value = propData.value;
         const type = propData.type;
         if (value === null || value === undefined) return null;
+        // An explicit empty-uuid reference is a genuine CLEAR (issue #75), not a loss.
         if (value && typeof value === 'object' && value.uuid === '') return null;
 
         // Node references
         if (type === 'cc.Node' && value?.uuid) {
             if (context?.nodeUuidToIndex?.has(value.uuid)) return { "__id__": context.nodeUuidToIndex.get(value.uuid) };
-            console.warn(`Node ref UUID ${value.uuid} not in prefab context (external), setting null`);
+            // A node outside the subtree being serialized cannot be encoded in a prefab —
+            // the format has no cross-file node reference. This one genuinely must be
+            // dropped, but it is still a data loss and is recorded as such.
+            this.recordLoss(context, propertyPath, value.uuid, 'node is outside the prefab subtree being serialized');
             return null;
         }
 
         // Asset references.
-        // The list must name CONCRETE types, not just base classes: a cc.Label's font dump reports
-        // `cc.TTFFont`, never `cc.Font`. Missing here, it fell through to the component-reference
-        // branch below, whose `type.startsWith('cc.')` catch-all matched it, found no entry in the
-        // component index, and returned null — so every label in a created prefab lost its font.
-        // The uuid is written verbatim. The editor's own serializer never compresses an asset
-        // `__uuid__` in a .prefab/.scene; compressing one produced a reference that resolved to
-        // nothing. This went unseen because a sprite-frame sub-asset uuid ('<uuid>@f9941') is 37
-        // chars and failed the old compressor's 32-char guard, so sprites passed through intact
-        // while every plain-uuid asset — fonts first — was mangled.
-        if (value?.uuid && PrefabCreationService.isAssetType(type)) {
-            return { "__uuid__": value.uuid, "__expectedType__": type };
-        }
-
-        // Component references
-        if (value?.uuid && (type === 'cc.Component' || type === 'cc.Label' || type === 'cc.Button' || type === 'cc.Sprite' ||
-            type === 'cc.UITransform' || type === 'cc.RigidBody2D' || type === 'cc.BoxCollider2D' ||
-            type === 'cc.Animation' || type === 'cc.AudioSource' || (type?.startsWith('cc.') && !type.includes('@')))) {
-            if (context?.componentUuidToIndex?.has(value.uuid)) return { "__id__": context.componentUuidToIndex.get(value.uuid) };
-            console.warn(`Component ref ${type} UUID ${value.uuid} not in prefab context (external), setting null`);
+        //
+        // This branch is the DEFAULT for any reference carrying a uuid, because the tests
+        // below cannot both be satisfied: `cc.Label`'s `font` is a `cc.TTFFont` ASSET
+        // (this test file's own font regression), while `cc.Label` is also a legitimate
+        // @property COMPONENT type. Reading the value's uuid as an asset is what makes the
+        // font case correct; every concrete asset class is caught below by name or suffix.
+        //
+        // Asset-first was previously bypassed by dispatching on `isAssetType(type)` FIRST,
+        // letting the component branch's `type.startsWith('cc.')` catch-all claim any type
+        // the allowlist had not been taught — the exact mechanism by which `cc.Mesh` and
+        // `cc.Skeleton` became null entries in a created prefab (issues #64, #70, #73).
+        if (value?.uuid) {
+            if (PrefabCreationService.isAssetType(type)) {
+                return { "__uuid__": value.uuid, "__expectedType__": type };
+            }
+            // In-tree component reference: the uuid names a component in the subtree being
+            // serialized, so it encodes as an object index.
+            if (context?.componentUuidToIndex?.has(value.uuid)) {
+                return { "__id__": context.componentUuidToIndex.get(value.uuid) };
+            }
+            // Unresolved. A prefab asset has no way to express a reference to something
+            // outside the subtree, so null is the only encodable answer — but the null is
+            // now RECORDED, and the create paths refuse to write when anything was recorded.
+            // `null` in silence is issue #73's primary symptom (`_mesh: null`,
+            // `_materials: []`, `labelPercent: null` on a created prefab, with
+            // `success: true` and `validate` green); a reported loss that fails the call is
+            // not.
+            //
+            // Two causes reach here, and the message names both because the remedies differ:
+            // a reference genuinely outside the subtree (legitimate — a button pointing at
+            // another prefab), and an ASSET class missing from ASSET_TYPES, which is the
+            // mechanism behind issues #64/#70/#73 and wants the allowlist extended.
+            //
+            // Deliberately NOT a throw: `processComponentProperty` runs inside
+            // `createStandardPrefabContent`, whose contract is to RETURN the prefab JSON, and
+            // throwing here would also catch script component references (`BucketScript` is
+            // not a `cc.` class), which are a legitimate external reference — turning a
+            // supported null into a failure. The loss list is the channel that distinguishes
+            // them by call site rather than by guessing from the type name.
+            console.warn(`Reference ${type} UUID ${value.uuid} has no encodable form in a prefab (property '${propertyPath || '(unknown)'}')`);
+            this.recordLoss(
+                context, propertyPath, value.uuid,
+                `type '${type}' has no encodable form — either it is outside the prefab subtree (legitimate for a component reference) ` +
+                `or it is an asset class missing from PrefabCreationService.ASSET_TYPES (issues #64/#70/#73)`
+            );
             return null;
         }
 
@@ -582,22 +651,36 @@ export class PrefabCreationService {
         // — not a flat { uuid }. Reading item.uuid directly matched nothing for every element,
         // so a MeshRenderer's assigned material silently serialized as an empty array while
         // reporting success (verified live against a smart-imported FBX material).
+        //
+        // Elements are serialized through this same function rather than a local
+        // `{ __uuid__ }` shape, so a concrete-class asset type reaches the asset branch
+        // instead of a hardcoded consequence of `elementTypeData`. The old shape declared
+        // `elementTypeData.type` for every element regardless of what the element actually
+        // referenced — and `.filter(Boolean)` turned each unresolved element into a silently
+        // shorter array, which is issue #73's `_materials: []` exactly: an array property
+        // that had contents on the live node and came out of the created prefab empty, with
+        // `success: true` and `validate` reporting `isValid: true` over the result.
         if (Array.isArray(value)) {
-            const itemUuid = (item: any): string | undefined => item?.uuid || item?.value?.uuid;
-            if (propData.elementTypeData?.type === 'cc.Node') {
-                return value.map((item: any) => {
-                    const uuid = itemUuid(item);
-                    if (uuid && context?.nodeUuidToIndex?.has(uuid)) return { "__id__": context.nodeUuidToIndex.get(uuid) };
-                    return null;
-                }).filter(Boolean);
-            }
-            if (propData.elementTypeData?.type?.startsWith('cc.')) {
-                return value.map((item: any) => {
-                    const uuid = itemUuid(item);
-                    return uuid ? { "__uuid__": uuid, "__expectedType__": propData.elementTypeData.type } : null;
-                }).filter(Boolean);
-            }
-            return value.map((item: any) => item?.value !== undefined ? item.value : item);
+            const elementType = propData.elementTypeData?.type;
+            const serialized = value.map((item: any, index: number) => {
+                const itemUuid = item?.uuid || item?.value?.uuid;
+                if (!itemUuid && elementType && !elementType.startsWith('cc.')) {
+                    // Not a reference array at all — an array of plain values.
+                    return item?.value !== undefined ? item.value : item;
+                }
+                // An element's own `type` is authoritative; `elementTypeData` is only the
+                // declared array element class, and for a subclass element (`cc.TTFFont`
+                // under a `cc.Font[]`, a nested-descriptor material) the declared class is
+                // the wrong thing to write.
+                return this.processComponentProperty(
+                    { value: item?.value !== undefined ? item.value : item, type: item?.type || elementType },
+                    context,
+                    `${propertyPath}[${index}]`
+                );
+            });
+            // A dropped element is a loss, not a shorter array. `map` never produces
+            // undefined here, so this only fires if a future branch starts returning it.
+            return serialized.filter((entry: any) => entry !== undefined && entry !== null);
         }
 
         // Nested CCClass group: the dump nests another descriptor map under `value`.
@@ -607,7 +690,9 @@ export class PrefabCreationService {
             const nested: any = type ? { "__type__": type } : {};
             for (const [key, entry] of Object.entries(value)) {
                 if (DUMP_KEYS_NOT_SERIALIZED.has(key)) continue;
-                const nestedValue = this.processComponentProperty(entry, context);
+                const nestedValue = this.processComponentProperty(
+                    entry, context, propertyPath ? `${propertyPath}.${key}` : key
+                );
                 if (nestedValue !== undefined) nested[key] = nestedValue;
             }
             return nested;
@@ -616,6 +701,32 @@ export class PrefabCreationService {
         // Other complex typed objects
         if (value && typeof value === 'object' && type?.startsWith('cc.')) return { "__type__": type, ...value };
         return value;
+    }
+
+    /**
+     * Record a reference that could not be serialized faithfully.
+     *
+     * Kept as a list rather than a throw for the two cases where the prefab format itself
+     * cannot express the value (a node/component outside the subtree). The create paths turn
+     * a non-empty list into a `fatal` failure, so the loss is never merely a warning in a
+     * log nobody reads — which is how #73's dropped references went unnoticed through
+     * `create` AND `validate`.
+     */
+    private recordLoss(
+        context: { losses?: Array<{ property: string; uuid: string; reason: string }> } | undefined,
+        property: string,
+        uuid: string,
+        reason: string
+    ): void {
+        if (!context?.losses) return;
+        context.losses.push({ property: property || '(unknown)', uuid, reason });
+    }
+
+    /** Render recorded losses as the fatal failure message, or null when there are none. */
+    private describeReferenceLosses(losses: Array<{ property: string; uuid: string; reason: string }>): string | null {
+        if (losses.length === 0) return null;
+        const named = losses.map(l => `'${l.property}' -> ${l.uuid} (${l.reason})`);
+        return `${losses.length} reference(s) could not be serialized: ${named.join('; ')}.`;
     }
 
     /** True when every entry is an object and at least one is a Cocos property descriptor. */
@@ -700,27 +811,55 @@ export class PrefabCreationService {
 
     // ===== Format validation =====
 
-    validatePrefabFormat(prefabData: any): { isValid: boolean; issues: string[]; nodeCount: number; componentCount: number } {
+    /**
+     * Structural validation of a serialized prefab.
+     *
+     * Structural alone is not "valid": a prefab whose components serialized to their bare
+     * envelope passes every check here while carrying none of the scene values, which is why
+     * `manage_prefab action=validate` returned `isValid: true` over the hollow output of
+     * issue #73's own repro. `hollowComponents` reports the components that hold nothing
+     * beyond `BASE_COMPONENT_KEYS`, so "valid" and "empty" are distinguishable.
+     */
+    validatePrefabFormat(prefabData: any): { isValid: boolean; issues: string[]; nodeCount: number; componentCount: number; hollowComponents: string[] } {
         const issues: string[] = [];
+        const hollowComponents: string[] = [];
         let nodeCount = 0;
         let componentCount = 0;
         if (!Array.isArray(prefabData)) {
             issues.push('Prefab data must be an array');
-            return { isValid: false, issues, nodeCount, componentCount };
+            return { isValid: false, issues, nodeCount, componentCount, hollowComponents };
         }
         if (prefabData.length === 0) {
             issues.push('Prefab data is empty');
-            return { isValid: false, issues, nodeCount, componentCount };
+            return { isValid: false, issues, nodeCount, componentCount, hollowComponents };
         }
         if (!prefabData[0] || prefabData[0].__type__ !== 'cc.Prefab') {
             issues.push('First element must be cc.Prefab type');
         }
+        const nodesWithComponents = new Set<number>();
         prefabData.forEach((item: any) => {
-            if (item.__type__ === 'cc.Node') nodeCount++;
-            else if (item.__type__ && item.__type__.includes('cc.')) componentCount++;
+            if (item.__type__ === 'cc.Node') {
+                nodeCount++;
+                for (const ref of (item._components || [])) {
+                    if (ref && typeof ref.__id__ === 'number') nodesWithComponents.add(ref.__id__);
+                }
+            } else if (item.__type__ === 'cc.CompPrefabInfo' || !item.__type__) {
+                // Serialization bookkeeping, never a component instance.
+            } else if (String(item.__type__).startsWith('cc.') || item.__type__) {
+                componentCount++;
+                // A component that is referenced from a node but carries nothing but the
+                // envelope has lost every property it held in the scene (#28/#73).
+                const holdsNothingButEnvelope = Object.keys(item).every(key => BASE_COMPONENT_KEYS.has(key));
+                if (holdsNothingButEnvelope && typeof item.node?.__id__ === 'number') {
+                    hollowComponents.push(String(item.__type__));
+                }
+            }
         });
         if (nodeCount === 0) issues.push('Prefab must contain at least one node');
-        return { isValid: issues.length === 0, issues, nodeCount, componentCount };
+        for (const hollow of [...new Set(hollowComponents)]) {
+            issues.push(`Component '${hollow}' serialized with no properties — it carries none of the scene values it had (issues #28/#73)`);
+        }
+        return { isValid: issues.length === 0, issues, nodeCount, componentCount, hollowComponents };
     }
 
     createStandardMetaContent(prefabName: string, prefabUuid: string): any {

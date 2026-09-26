@@ -41,6 +41,68 @@ export interface ApplyPropertyArgs {
 }
 
 /**
+ * Every propertyType the branches below actually handle, in one place.
+ *
+ * Built by composition so a new asset-reference propertyType (added to
+ * `ASSET_REFERENCE_PROPERTY_TYPES`) is covered automatically rather than having to be
+ * remembered here — the duplication this list would otherwise introduce is exactly how
+ * an accepted-but-unhandled type slips through unnoticed (issue #66).
+ */
+const HANDLED_SCALAR_TYPES = new Set<string>([
+    // The asset-reference branch is gated on ASSET_REFERENCE_PROPERTY_TYPES plus the
+    // generic `asset` spelling; `string` is deliberately included because it is the
+    // branch's explicit escape for a plain-string property (issue #46).
+    ...ASSET_REFERENCE_PROPERTY_TYPES, 'asset', 'string',
+    // The typed math/shape branches, plus the reference types that own a branch of their own.
+    'color', 'vec3', 'vec2', 'size', 'node', 'component',
+    // The terminal `else` is the correct home for a plain scalar dump — it writes
+    // `{ value }` with no `type`, which is exactly what a number/boolean needs. `integer`
+    // and `float` are spelled as `number` aliases by `convertPropertyValue` and take the
+    // same path, so they belong here too; refusing them would break working calls.
+    'number', 'integer', 'float', 'boolean'
+]);
+
+const HANDLED_ARRAY_TYPES = new Set<string>([
+    'nodeArray', 'assetArray', 'componentArray', 'colorArray',
+    // These two ARE advertised and DO work: their conversion rejects a non-array and
+    // flattens primitives, and the terminal `else` writes the resulting plain array
+    // correctly. They are named here so the guard below cannot refuse a supported
+    // propertyType — a regression this guard narrowly avoided, since refusing them would
+    // have broken calls that succeed today (issue #66's own report lists scalar and array
+    // writes on the same components as working).
+    'numberArray', 'stringArray'
+]);
+
+/**
+ * Explain why this propertyType cannot be applied, or return `null` when a branch owns it.
+ *
+ * The message is split by CAUSE, because the remedy differs: an array shape has a supported
+ * propertyType the caller should be using instead, while a gap in the scalar list is a bug
+ * in this file's branch set. A single "unsupported" message for both would send the caller
+ * hunting for the wrong fix.
+ */
+export function describeUnhandledPropertyType(propertyType: string, processedValue: any): string | null {
+    if (HANDLED_SCALAR_TYPES.has(propertyType) || HANDLED_ARRAY_TYPES.has(propertyType)) return null;
+
+    if (Array.isArray(processedValue)) {
+        return (
+            `propertyType '${propertyType}' is an ARRAY value, but no array branch handles it — so the ` +
+            `set-property dump would carry no 'type' field, the editor would decode nothing, and this ` +
+            `call would report a write it did not perform (issue #66). An array of assets/uuids/colors ` +
+            `wants propertyType 'assetArray', 'nodeArray', 'componentArray' or 'colorArray'; an array of ` +
+            `plain value objects with NO uuid semantics (cc.RealCurve keyFrames, cc.Gradient alphaKeys) ` +
+            `has no supported propertyType yet. Nothing was written.`
+        );
+    }
+
+    return (
+        `propertyType '${propertyType}' is not handled by applyPropertyToEditor, so the set-property ` +
+        `dump would carry no 'type' field and the write would silently not apply (issue #66). ` +
+        `Nothing was written.`
+    );
+}
+
+/**
  * Apply a processed property value to the Cocos Creator editor scene.
  * Returns the actual expected value (may differ from processedValue for component refs).
  * Throws on unrecoverable Editor API error.
@@ -51,6 +113,11 @@ export async function applyPropertyToEditor(
 ): Promise<any> {
     const { nodeUuid, propertyPath, rawComponentIndex, componentType, property, propertyType, value, processedValue } = args;
     let actualExpectedValue = processedValue;
+
+    // A propertyType `convertPropertyValue` accepted but no branch below applies must not
+    // fall through to the terminal `else`: there it produces a dump with no `type`, the
+    // editor decodes nothing, and the caller is told the write succeeded (issue #66).
+    const unhandledWarning = describeUnhandledPropertyType(propertyType, processedValue);
 
     // EVERY asset-reference propertyType must land here. Falling through to the terminal `else`
     // sends a dump with no `type` field — the same shape that makes the nodeArray path fail
@@ -187,6 +254,16 @@ export async function applyPropertyToEditor(
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid, path: propertyPath, dump: { value: colorArrayValue, type: 'cc.Color' }
         });
+
+    } else if (unhandledWarning) {
+        // Issue #66: the propertyType is in SUPPORTED_PROPERTY_TYPES, so `convertPropertyValue`
+        // accepted it, but NO branch above handles it — so the dump would go out with no `type`,
+        // the editor decodes nothing, and the write is a silent no-op. `changeVerified` reading
+        // false is not a rescue: a caller that trusts a `success:true` response ships an
+        // unauthored value, which is exactly how a `cc.RealCurve` spline came back as the
+        // untouched 2-point default (issue #66). Refuse the write instead of performing one
+        // that cannot work, and name where the array-of-object cases belong.
+        throw new Error(unhandledWarning);
 
     } else {
         await Editor.Message.request('scene', 'set-property', {
