@@ -425,13 +425,30 @@ export class ManagePrefab extends BaseActionTool {
                 if (mtimeAfter !== null) persisted = mtimeAfter > mtimeBefore;
             }
 
+            // A rejected apply is a HARD STOP, whatever the mtime guard says (#128, #127).
+            //
+            // #63 established that `false` alone does not mean the write failed — the file can
+            // be rewritten anyway — so rejection was demoted from "failure" to "unconfirmed"
+            // and the mtime check was made the source of truth. That is right about the WRITE
+            // and wrong about everything downstream of it: the orphan pass below treats the
+            // live `query-node` walk as ground truth for what may legitimately be deleted, and
+            // a rejected apply is precisely the signal that its view of the instance cannot be
+            // trusted. Running the pass anyway let `update` delete a prefab's ENTIRE child set
+            // while reporting `success: true` — 8 children to 0 on disk in #128, a nested
+            // instance's whole local node mirror in #127.
+            //
+            // Never touch the asset again on a write we were told not to trust: no orphan
+            // detection, no removal, no success envelope.
             const appliedRejected = applied === false;
 
-            if (appliedRejected && persisted !== true) {
+            if (appliedRejected) {
                 return {
                     success: false,
-                    error: `Editor rejected apply-prefab for node ${rootUuid}. Confirm it is a prefab-instance root with a valid asset link.`,
-                    data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted }
+                    error: `Editor rejected apply-prefab for node ${rootUuid}, so its result is not trustworthy and no child nodes were removed. Confirm it is a prefab-instance root with a valid asset link.` +
+                        (persisted === true
+                            ? ` The rejected apply did rewrite ${prefabPath} — diff it against git before retrying.`
+                            : ''),
+                    data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted, appliedRejected }
                 };
             }
 
@@ -470,15 +487,14 @@ export class ManagePrefab extends BaseActionTool {
                 removedFileIds = orphanedFileIds;
             }
 
+            // Only ever reached on a NON-rejected apply: a rejection returns above. Keeping
+            // `appliedRejected` in the payload (now always false) rather than dropping it, so
+            // existing callers that branch on the field keep working unchanged.
             return {
                 success: true,
-                message: appliedRejected
-                    ? (removedFileIds.length > 0
-                        ? `Prefab updated successfully despite apply-prefab reporting rejection; removed ${removedFileIds.length} child node(s) apply-prefab left behind`
-                        : `Prefab updated successfully; apply-prefab reported rejection but ${prefabPath} was rewritten`)
-                    : (removedFileIds.length > 0
-                        ? `Prefab updated successfully; removed ${removedFileIds.length} child node(s) apply-prefab left behind`
-                        : 'Prefab updated successfully'),
+                message: removedFileIds.length > 0
+                    ? `Prefab updated successfully; removed ${removedFileIds.length} child node(s) apply-prefab left behind`
+                    : 'Prefab updated successfully',
                 data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted, appliedRejected, removedFileIds }
             };
         } catch (err: any) {
