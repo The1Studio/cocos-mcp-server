@@ -41,6 +41,26 @@ export interface ApplyPropertyArgs {
 }
 
 /**
+ * Resolve one numeric component of a compound value (vec2/size) for the editor dump.
+ *
+ * `Number(v) || fallback` treats an explicit, entirely legal `0` exactly like
+ * `undefined`/`NaN` and substitutes the type default instead of the caller's value —
+ * issue #114's defect 1, where `anchorPoint {x: 0, y: 0.5094}` came back
+ * `{x: 0.5, y: 0.5094}`. The originating report pinned it with a `{x: 0.0001}`
+ * control that verified fine, which rules out an editor-side clamp.
+ *
+ * Only genuinely ABSENT input falls back: `undefined`, `null`, an empty string, and a
+ * non-numeric value. A number is always returned as-is, `0` included. The fallback is a
+ * parameter because the callers below disagree on it (0.5 for an anchor, 100 for a
+ * content size), so a helper assuming one would be wrong for the other.
+ */
+function numberComponent(value: any, fallback: number): number {
+    if (value === undefined || value === null || value === '') return fallback;
+    const num = Number(value);
+    return Number.isNaN(num) ? fallback : num;
+}
+
+/**
  * Every propertyType the branches below actually handle, in one place.
  *
  * Built by composition so a new asset-reference propertyType (added to
@@ -138,8 +158,8 @@ export async function applyPropertyToEditor(
         });
 
     } else if (componentType === 'cc.UITransform' && (property === '_contentSize' || property === 'contentSize')) {
-        const width = Number(value.width) || 100;
-        const height = Number(value.height) || 100;
+        const width = numberComponent(value.width, 100);
+        const height = numberComponent(value.height, 100);
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid, path: `__comps__.${rawComponentIndex}.width`, dump: { value: width }
         });
@@ -148,8 +168,8 @@ export async function applyPropertyToEditor(
         });
 
     } else if (componentType === 'cc.UITransform' && (property === '_anchorPoint' || property === 'anchorPoint')) {
-        const anchorX = Number(value.x) || 0.5;
-        const anchorY = Number(value.y) || 0.5;
+        const anchorX = numberComponent(value.x, 0.5);
+        const anchorY = numberComponent(value.y, 0.5);
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid, path: `__comps__.${rawComponentIndex}.anchorX`, dump: { value: anchorX }
         });

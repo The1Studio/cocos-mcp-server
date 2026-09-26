@@ -745,6 +745,25 @@ describe('ManagePrefab', () => {
     describe('instantiate action (#15 — false-success envelope with no nodeUuid)', () => {
         const PREFAB_UUID = 'a20d75f5-d599-4f64-8792-b99253e0c91e';
         const assetInfo = { name: 'meteor', url: 'db://assets/meteor.prefab', type: 'cc.Prefab' };
+        const SCENE_ROOT = { uuid: 'scene-root-uuid', name: 'Scene', children: [] };
+
+        /**
+         * Routes by message name, not by call order — same discipline as the `validate`
+         * block above. `instantiate` now resolves the scene root via `query-node-tree`
+         * before calling `create-node` whenever no `parentUuid` is given (#120 item 1),
+         * so a positional `mockResolvedValueOnce` chain would have the second value
+         * consumed by `query-node-tree` and the assertions would pass by accident.
+         */
+        function routeInstantiate(handlers: Record<string, (...args: any[]) => any>) {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockReset();
+            mockRequest.mockImplementation(async (_pkg: string, message: string, ...args: any[]) => {
+                const handler = handlers[message];
+                if (!handler) throw new Error(`${_pkg} - ${message} does not exist`);
+                return handler(...args);
+            });
+            return mockRequest;
+        }
 
         it('returns error when prefabUuid is missing', async () => {
             const result = await tool.execute('instantiate', {});
@@ -776,32 +795,39 @@ describe('ManagePrefab', () => {
         });
 
         it('fails when create-node returns no node uuid', async () => {
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce(assetInfo)  // query-asset-info
-                .mockResolvedValueOnce(undefined); // create-node
+            const mockRequest = routeInstantiate({
+                'query-asset-info': () => assetInfo,
+                'query-node-tree': () => SCENE_ROOT,
+                'create-node': () => undefined,
+            });
 
             const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
 
             expect(result.success).toBe(false);
             expect(result.error).toMatch(/returned no node uuid/i);
+            // The guard must be reached by actually calling create-node, not by the
+            // resolution failing earlier for an unrelated reason.
+            expect(mockRequest.mock.calls.map((c: any[]) => c[1])).toContain('create-node');
         });
 
         it('fails when create-node returns an empty array', async () => {
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce(assetInfo) // query-asset-info
-                .mockResolvedValueOnce([]);       // create-node
+            routeInstantiate({
+                'query-asset-info': () => assetInfo,
+                'query-node-tree': () => SCENE_ROOT,
+                'create-node': () => [],
+            });
 
             const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
             expect(result.success).toBe(false);
+            expect(result.error).toMatch(/returned no node uuid/i);
         });
 
         it('succeeds with a non-empty nodeUuid when the prefab resolves', async () => {
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce(assetInfo)      // query-asset-info
-                .mockResolvedValueOnce('new-node-777'); // create-node
+            const mockRequest = routeInstantiate({
+                'query-asset-info': () => assetInfo,
+                'query-node-tree': () => SCENE_ROOT,
+                'create-node': () => 'new-node-777',
+            });
 
             const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
 
@@ -818,10 +844,11 @@ describe('ManagePrefab', () => {
             // linked-instance branch based on options.type. Omitting it (as the old
             // code did) falls back to a plain-dump node with no cc.PrefabInfo — the
             // "instantiate reports success but produces an unlinked copy" bug.
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce(assetInfo)      // query-asset-info
-                .mockResolvedValueOnce('new-node-999'); // create-node
+            const mockRequest = routeInstantiate({
+                'query-asset-info': () => assetInfo,
+                'query-node-tree': () => SCENE_ROOT,
+                'create-node': () => 'new-node-999',
+            });
 
             const result = await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
 
@@ -833,10 +860,11 @@ describe('ManagePrefab', () => {
         });
 
         it('passes position as a top-level CreateNodeOptions field, never as an unused dump wrapper', async () => {
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce(assetInfo)
-                .mockResolvedValueOnce('new-node-555');
+            const mockRequest = routeInstantiate({
+                'query-asset-info': () => assetInfo,
+                'query-node-tree': () => SCENE_ROOT,
+                'create-node': () => 'new-node-555',
+            });
 
             const result = await tool.execute('instantiate', {
                 prefabUuid: PREFAB_UUID,
@@ -852,10 +880,12 @@ describe('ManagePrefab', () => {
         });
 
         it('applies rotation and scale after a successful create-node', async () => {
-            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-            mockRequest
-                .mockResolvedValueOnce(assetInfo)
-                .mockResolvedValueOnce(['new-node-888']);
+            const mockRequest = routeInstantiate({
+                'query-asset-info': () => assetInfo,
+                'query-node-tree': () => SCENE_ROOT,
+                'create-node': () => ['new-node-888'],
+                'set-property': () => ({}),
+            });
 
             const result = await tool.execute('instantiate', {
                 prefabUuid: PREFAB_UUID,
@@ -873,6 +903,24 @@ describe('ManagePrefab', () => {
                 uuid: 'new-node-888',
                 path: 'scale'
             }));
+        });
+
+        it('pins the instance to the scene root when no parentUuid is given (#120 item 1)', async () => {
+            // Same root cause as the four above: this block is where the placement fix
+            // shows up. Three back-to-back calls must each land on the scene root rather
+            // than nesting under the previous instance.
+            const parents: any[] = [];
+            routeInstantiate({
+                'query-asset-info': () => assetInfo,
+                'query-node-tree': () => SCENE_ROOT,
+                'create-node': (opts: any) => { parents.push(opts.parent); return `node-${parents.length}`; },
+            });
+
+            await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+            await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+            await tool.execute('instantiate', { prefabUuid: PREFAB_UUID });
+
+            expect(parents).toEqual(['scene-root-uuid', 'scene-root-uuid', 'scene-root-uuid']);
         });
     });
 });

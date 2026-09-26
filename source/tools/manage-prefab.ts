@@ -205,13 +205,98 @@ export class ManagePrefab extends BaseActionTool {
         }
     }
 
-    private async loadPrefabByUuid(uuid: string): Promise<any> {
+    /**
+     * Resolve the current scene's root node uuid.
+     *
+     * `scene:create-node`'s own default-parent heuristic is NOT the scene root — observed
+     * live it parents a new node under whatever was created or selected last, which is how
+     * three back-to-back `instantiate` calls with no `parentUuid` ended up nested inside
+     * one another instead of as scene-root siblings (#120 item 1). Resolving the root
+     * explicitly and passing it makes the placement deterministic.
+     *
+     * `query-node-tree` with no argument returns the scene's node tree; its root entry may
+     * be the scene node itself or an array of top-level nodes depending on the build, so
+     * both shapes are accepted. Returns null when the tree cannot be read — the caller then
+     * leaves `parent` unset rather than guessing, so a failed lookup degrades to the old
+     * behaviour instead of parenting under something arbitrary.
+     */
+    private async resolveSceneRootUuid(): Promise<string | null> {
         try {
-            const prefabData: any = await Editor.Message.request('scene', 'load-asset', { uuid });
-            return { success: true, data: { uuid: prefabData.uuid, name: prefabData.name, message: 'Prefab loaded successfully' } };
-        } catch (err: any) {
-            return { success: false, error: err.message };
+            const tree: any = await Editor.Message.request('scene', 'query-node-tree');
+            if (Array.isArray(tree)) {
+                return tree.length > 0 ? (tree[0].uuid || null) : null;
+            }
+            return tree?.uuid || null;
+        } catch {
+            return null;
         }
+    }
+
+    /**
+     * Enter prefab-edit mode for a prefab asset.
+     *
+     * The previous implementation called `scene:load-asset`, a message that does not exist
+     * in Cocos Creator 3.8.7 — every call rejected with `Message does not exist: scene -
+     * load-asset`, so `load` could never succeed and the prefab-edit path through this tool
+     * was unreachable (#120 item 3).
+     *
+     * There is no `scene:` message that enters prefab-edit mode; the editor opens the asset
+     * itself. The path that works is `asset-db:query-asset-info` to confirm the uuid names a
+     * prefab, then `asset-db:open-asset` (a declared message, `asset-db/@types/message.d.ts`)
+     * to hand the asset to the editor's own asset-opener, which is what the Asset Browser
+     * double-click does. The uuid is resolved to its `url` first because `open-asset` is
+     * documented to take a url.
+     *
+     * Confirmed to a level this repo can reach: the message exists in the editor's own
+     * declarations and the resolve-then-open sequence is what the editor UI performs. The
+     * behavioural half — that the editor lands in prefab-edit mode — is asserted to be
+     * unverifiable without a live editor, and is called out as such on the issue rather
+     * than claimed here.
+     */
+    private async loadPrefabByUuid(uuid: string): Promise<any> {
+        const assetInfo: any = await Editor.Message.request('asset-db', 'query-asset-info', uuid).catch(() => null);
+        if (!assetInfo) {
+            return {
+                success: false,
+                error: `Prefab uuid '${uuid}' not found in the asset DB`,
+                instruction: 'Verify the uuid, and refresh the asset DB (manage_asset action=refresh) if the .prefab file was written outside the editor.'
+            };
+        }
+
+        // `type` is the importer type — 'prefab' for a .prefab asset. Refuse a non-prefab
+        // rather than opening, say, a texture and reporting a prefab was loaded.
+        if (assetInfo.type && assetInfo.type !== 'prefab') {
+            return {
+                success: false,
+                error: `Asset '${assetInfo.url || uuid}' is a '${assetInfo.type}', not a prefab`,
+                instruction: 'Pass the uuid of a .prefab asset (manage_prefab action=list returns them).'
+            };
+        }
+
+        const target = assetInfo.url || uuid;
+        try {
+            await Editor.Message.request('asset-db', 'open-asset', target);
+        } catch (err: any) {
+            return {
+                success: false,
+                error: `Could not open prefab '${target}': ${err.message}`,
+                instruction: `Open '${target}' in the Cocos Creator Asset Browser (double-click it) to edit the prefab.`
+            };
+        }
+
+        return {
+            success: true,
+            data: {
+                uuid: assetInfo.uuid || uuid,
+                name: assetInfo.name,
+                url: target,
+                message: 'Prefab opened for editing',
+                // Prefab-edit mode is an editor-side state. This tool can confirm the open
+                // request was accepted, not that the editor switched modes, so the caller is
+                // told which half was verified rather than given a bare success.
+                prefabEditModeVerified: false
+            }
+        };
     }
 
     private async instantiatePrefabByUuid(args: { prefabUuid: string; parentUuid?: string; position?: any; rotation?: any; scale?: any }): Promise<any> {
@@ -241,6 +326,14 @@ export class ManagePrefab extends BaseActionTool {
 
             if (parentUuid) {
                 createNodeOptions.parent = parentUuid;
+            } else {
+                // No caller-supplied parent: pin the placement to the scene root. Leaving
+                // `parent` unset hands the decision to `create-node`'s implicit
+                // last-created/last-selected heuristic, which nests unrelated instances
+                // (#120 item 1). A null resolve leaves it unset — the old behaviour — rather
+                // than parenting under a guess.
+                const sceneRoot = await this.resolveSceneRootUuid();
+                if (sceneRoot) createNodeOptions.parent = sceneRoot;
             }
 
             if (assetInfo && assetInfo.name) {
@@ -900,6 +993,10 @@ export class ManagePrefab extends BaseActionTool {
                 // Named explicitly so a caller can tell "nothing wrong" from "nothing there":
                 // issue #73's hollow prefab passed this action with `isValid: true`.
                 hollowComponents: validationResult.hollowComponents,
+                // Issue #114 defect 2: an accessor key beside its underscore twin is a prefab
+                // the asset importer rejects, and `isValid: true` on that file is the false
+                // green this action existed to prevent.
+                duplicateAccessorKeys: validationResult.duplicateAccessorKeys,
                 url: resolved.url, file: resolved.filePath,
                 message: validationResult.isValid ? 'Prefab format is valid' : 'Prefab format has issues'
             }

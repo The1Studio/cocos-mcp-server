@@ -62,13 +62,13 @@ function isBinaryAsset(assetInfo: any, urlOrPath: string): boolean {
  */
 export class ManageAsset extends BaseActionTool {
     readonly name = 'manage_asset';
-    readonly description = 'Manage assets in the project (files, textures, scripts, etc). Actions: import, get_info, list, refresh, create, copy, move, delete, save, reimport, query_path, query_uuid, query_url, find_by_name, get_details, save_meta, generate_url, query_db_ready, open_external, batch_import, batch_delete, validate_references, get_dependencies, get_unused, compress_textures, export_manifest. NOT for scene nodes — use manage_node. Use query_db_ready to check asset DB before batch ops.';
+    readonly description = 'Manage assets in the project (files, textures, scripts, etc). Actions: import, get_info, list, refresh, create, copy, move, delete, save, reimport, query_path, query_uuid, query_url, find_by_name, get_details, save_meta, generate_url, query_db_ready, open_external, batch_import, batch_delete, validate_references, get_dependencies, export_manifest. NOT for scene nodes — use manage_node. Use query_db_ready to check asset DB before batch ops.';
     readonly actions = [
         'import', 'get_info', 'list', 'refresh', 'create', 'copy', 'move', 'delete',
         'save', 'reimport', 'query_path', 'query_uuid', 'query_url', 'find_by_name',
         'get_details', 'save_meta', 'generate_url', 'query_db_ready', 'open_external',
         'batch_import', 'batch_delete', 'validate_references', 'get_dependencies',
-        'get_unused', 'compress_textures', 'export_manifest'
+        'export_manifest'
     ];
 
     readonly inputSchema = {
@@ -115,17 +115,16 @@ export class ManageAsset extends BaseActionTool {
             excludeDirectories: { type: 'array', items: { type: 'string' }, description: 'Directories to exclude', default: [] },
             direction: {
                 type: 'string',
-                description: 'Dependency direction',
+                description: 'Dependency direction for get_dependencies',
                 enum: ['dependents', 'dependencies', 'both'],
                 default: 'dependencies'
             },
             format: {
                 type: 'string',
-                description: 'Format for compress_textures or export_manifest',
+                description: 'Format for export_manifest',
                 enum: ['auto', 'jpg', 'png', 'webp', 'json', 'csv', 'xml'],
                 default: 'auto'
             },
-            quality: { type: 'number', description: 'Compression quality (0.1-1.0)', minimum: 0.1, maximum: 1.0, default: 0.8 },
             includeMetadata: { type: 'boolean', description: 'Include asset metadata in manifest', default: true },
             isFolder: {
                 type: 'boolean',
@@ -179,9 +178,10 @@ export class ManageAsset extends BaseActionTool {
         batch_import: (args) => this.batchImportAssets(args),
         batch_delete: (args) => this.batchDeleteAssets(args.urls),
         validate_references: (args) => this.validateAssetReferences(args.directory),
-        get_dependencies: (args) => this.getAssetDependencies(args.urlOrUUID, args.direction),
-        get_unused: (args) => this.getUnusedAssets(args.directory, args.excludeDirectories),
-        compress_textures: (args) => this.compressTextures(args.directory, args.format, args.quality),
+        // Routes through `resolveAssetArg` like every other asset-ref action. It used to
+        // read `args.urlOrUUID` alone, so a caller using the schema-documented `url` or
+        // `assetPath` spelling reached the handler with `undefined` (#124).
+        get_dependencies: (args) => this.getAssetDependencies(this.resolveAssetArg(args), args.direction),
         export_manifest: (args) => this.exportAssetManifest(args.directory, args.format, args.includeMetadata !== false)
     };
 
@@ -648,16 +648,152 @@ export class ManageAsset extends BaseActionTool {
         }
     }
 
-    private async getAssetDependencies(_urlOrUUID: string, _direction: string = 'dependencies'): Promise<ActionToolResult> {
-        return errorResult('Asset dependency analysis requires additional APIs not available in current Cocos Creator MCP implementation. Consider using the Editor UI for dependency analysis.');
+    /**
+     * Resolve an asset's dependency graph.
+     *
+     * Was an unconditional stub returning "requires additional APIs not available in
+     * current Cocos Creator MCP implementation" for every input (#124). The triage's
+     * resolution was explicit — implement it, or stop advertising it — and the
+     * delete-safety argument decided the choice: because Cocos resolves references by
+     * the uuid in the sibling `.meta`, a reference left dangling by a premature delete
+     * resolves to `None` silently and surfaces at runtime or build time, far from the
+     * delete that caused it. `direction: dependents` is the only advertised pre-flight
+     * for that, so removing the action would remove the safety check.
+     *
+     * Three sources across two packages, because no single message answers both halves:
+     *
+     * 1. `asset-db query-asset-dependencies` — the DB's forward index, giving the
+     *    `dependencies` direction directly.
+     * 2. `asset-db query-asset-users` — the DB's reverse lookup, the same index read from
+     *    the other end. Both are declared in the editor's own typings; both take an
+     *    optional `type` selecting `asset` / `script` / `all`, so `all` is passed.
+     * 3. `scene query-nodes-by-asset-uuid` — the live scene's reverse lookup, which the
+     *    Asset Browser uses to answer "who references this". Kept in addition to (2)
+     *    because a node in the open scene is the population a delete breaks immediately,
+     *    and is not itself an asset in the DB.
+     *
+     * Each is attempted independently and its reachability is reported: a message that
+     * throws contributes nothing to `sources`, and a caller seeing an empty list is told
+     * which sources answered. An empty result is stated as a COUNT plus those sources,
+     * never as a bare empty array: "no dependents found" and "the query could not run"
+     * must not read the same to a caller deciding whether a delete is safe.
+     */
+    private async getAssetDependencies(urlOrUUID?: string, direction: string = 'dependencies'): Promise<ActionToolResult> {
+        if (!urlOrUUID || typeof urlOrUUID !== 'string' || urlOrUUID.trim() === '') {
+            return errorResult('get_dependencies requires one of: url, urlOrUUID, assetPath — naming the asset to analyze');
+        }
+
+        const info: any = await Editor.Message.request('asset-db', 'query-asset-info', urlOrUUID).catch(() => null);
+        if (!info || !info.uuid) {
+            return errorResult(
+                `Asset '${urlOrUUID}' not found in the asset DB — nothing to analyze. ` +
+                'If the file was written outside the editor, run manage_asset action=refresh first.'
+            );
+        }
+
+        const wantsDependents = direction === 'dependents' || direction === 'both';
+        const wantsDependencies = direction === 'dependencies' || direction === 'both';
+        const data: Record<string, any> = {
+            url: info.url || urlOrUUID,
+            uuid: info.uuid,
+            name: info.name,
+            direction
+        };
+
+        if (wantsDependencies) {
+            const dependencies = await this.queryAssetDependencies(info.uuid);
+            data.dependencies = dependencies.assets;
+            data.dependencyCount = dependencies.assets.length;
+            data.dependenciesSource = dependencies.source;
+        }
+
+        if (wantsDependents) {
+            const dependents = await this.queryAssetDependents(info.uuid, urlOrUUID);
+            data.dependents = dependents.assets;
+            data.dependentCount = dependents.assets.length;
+            data.dependentsSource = dependents.source;
+            // Named separately from `dependents`: a scene node is a live consumer an
+            // asset cleanup must not break, and it is not an asset in the DB.
+            data.referencingNodes = dependents.nodes;
+        }
+
+        const summary = [
+            wantsDependents ? `${data.dependentCount ?? 0} dependent asset(s) via ${data.dependentsSource}` : null,
+            wantsDependencies ? `${data.dependencyCount ?? 0} dependency/dependencies via ${data.dependenciesSource}` : null,
+        ].filter(Boolean).join(', ');
+
+        return successResult(data, `Resolved ${info.name || info.url}: ${summary}`);
     }
 
-    private async getUnusedAssets(_directory: string = 'db://assets', _excludeDirectories: string[] = []): Promise<ActionToolResult> {
-        return errorResult('Unused asset detection requires comprehensive project analysis not available in current Cocos Creator MCP implementation. Consider using the Editor UI or third-party tools for unused asset detection.');
+    /**
+     * Forward graph. Uses the asset DB's own index; returns `[]` with a named empty source.
+     *
+     * `query-asset-dependencies` is declared in
+     * `@cocos/creator-types/editor/packages/asset-db/@types/protected/message.d.ts` as
+     * `(uuid: string, type?: QueryAssetType) => string[]`. The `type` argument selects the
+     * population — `asset` (resources), `script`, or `all` — and omitting it omits script
+     * references, so `all` is passed to match the "what would a delete break" question the
+     * caller is asking.
+     */
+    private async queryAssetDependencies(uuid: string): Promise<{ assets: any[]; source: string }> {
+        try {
+            const result: any = await Editor.Message.request('asset-db', 'query-asset-dependencies', uuid, 'all');
+            const list = Array.isArray(result) ? result : [];
+            return { assets: list.map((dep: any) => (typeof dep === 'string' ? { uuid: dep } : dep)), source: 'asset-db query-asset-dependencies' };
+        } catch {
+            // No such message in this build — an empty list with a named source, so the
+            // caller can tell "none" from "not answerable here".
+            return { assets: [], source: 'unavailable (no asset-db query-asset-dependencies in this editor build)' };
+        }
     }
 
-    private async compressTextures(_directory: string = 'db://assets', _format: string = 'auto', _quality: number = 0.8): Promise<ActionToolResult> {
-        return errorResult("Texture compression requires image processing capabilities not available in current Cocos Creator MCP implementation. Use the Editor's built-in texture compression settings or external tools.");
+    /**
+     * Reverse graph. Scans the asset DB's own serialized references where the build
+     * exposes them, and always adds the live scene's reverse lookup, which is the
+     * population a delete actually risks breaking.
+     */
+    /**
+     * Reverse graph. Both directions are asked of the editor, because each sees a
+     * population the other can miss: the asset DB's reverse index sees serialized
+     * references anywhere in the project, while the live scene scan is what a delete
+     * actually breaks right now.
+     *
+     * `query-asset-users` is the DB's declared reverse message
+     * (`@cocos/creator-types/.../asset-db/@types/protected/message.d.ts`), declared as
+     * `(uuid: string, type?: QueryAssetType) => string[] | null`. It is the same
+     * population `query-asset-dependencies` indexes from the other end, so it needs the
+     * same `all` to include script references.
+     *
+     * Nothing is inferred from a failed call: an unreachable message leaves `sources`
+     * short, and the caller reports that as "not answerable here" rather than as zero.
+     */
+    private async queryAssetDependents(uuid: string, urlOrUUID: string): Promise<{ assets: any[]; nodes: string[]; source: string }> {
+        const assets: any[] = [];
+        const sources: string[] = [];
+
+        try {
+            const result: any = await Editor.Message.request('asset-db', 'query-asset-users', uuid, 'all');
+            const list = Array.isArray(result) ? result : [];
+            for (const dep of list) assets.push(typeof dep === 'string' ? { uuid: dep } : dep);
+            sources.push('asset-db query-asset-users');
+        } catch {
+            // Not available in this build — the scene scan below is the whole answer.
+        }
+
+        let nodes: string[] = [];
+        try {
+            const nodeUuids: any = await Editor.Message.request('scene', 'query-nodes-by-asset-uuid', uuid);
+            nodes = Array.isArray(nodeUuids) ? nodeUuids : [];
+            if (nodes.length > 0) sources.push('scene query-nodes-by-asset-uuid');
+        } catch {
+            // No reverse scene lookup either; `sources` stays empty and is reported as such.
+        }
+
+        return {
+            assets,
+            nodes,
+            source: sources.length > 0 ? sources.join(' + ') : `no reverse-reference query available for '${urlOrUUID}' in this editor build`
+        };
     }
 
     private async exportAssetManifest(directory: string = 'db://assets', format: string = 'json', includeMetadata: boolean = true): Promise<ActionToolResult> {
