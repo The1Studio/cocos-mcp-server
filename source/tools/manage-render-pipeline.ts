@@ -55,7 +55,7 @@ export class ManageRenderPipeline extends BaseActionTool {
                 name: 'cocos-mcp-server', method: 'setShadowSettings',
                 args: [args.enabled, args.type, args.shadowMapSize]
             });
-            return successResult(result, 'Shadow settings updated');
+            return this.wrapSceneResult(result, 'Shadow settings updated');
         } catch (err: any) { return errorResult(err.message); }
     }
 
@@ -65,8 +65,22 @@ export class ManageRenderPipeline extends BaseActionTool {
                 name: 'cocos-mcp-server', method: 'setFogSettings',
                 args: [args.enabled, args.fogColor, args.type, args.fogStart, args.fogEnd, args.fogDensity]
             });
-            return successResult(result, 'Fog settings updated');
+            return this.wrapSceneResult(result, 'Fog settings updated');
         } catch (err: any) { return errorResult(err.message); }
+    }
+
+    /**
+     * `setShadowSettings`/`setFogSettings` now reject an invalid enum with
+     * `{ success: false, error }` instead of writing it. Wrapping that in
+     * `successResult` would hide the rejection behind a top-level
+     * `success: true`, so unwrap a scene-reported failure into `errorResult`
+     * instead of blindly forwarding it as data.
+     */
+    private wrapSceneResult(result: any, successMessage: string): ActionToolResult {
+        if (result && result.success === false) {
+            return errorResult(result.error || 'Scene operation failed');
+        }
+        return successResult(result, successMessage);
     }
 
     private async setSkybox(args: any): Promise<ActionToolResult> {

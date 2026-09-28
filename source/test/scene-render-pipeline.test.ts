@@ -19,6 +19,17 @@
  * `getRenderPipelineInfo` already reads (and labels) `scene.globals
  * .environment.{skyColor, groundAlbedo}` as "ambient". `setAmbientSettings`
  * must write to that same `environment` global, not a separate `.ambient`.
+ *
+ * Below that: the render-pipeline null-arg regression. The editor IPC
+ * (`execute-scene-script`) serializes an omitted argument to `null`, not
+ * `undefined`. Every setter here used to guard with `x !== undefined`, so an
+ * omitted `type` was written as `fog.type = null` — which poisons the
+ * process-wide `CC_USE_FOG` macro and crashes every later scene open until
+ * the editor restarts. `setShadowSettings` had the same guard hole, plus a
+ * raw `shadows.type = type` (no enum resolution at all — unlike fog, which
+ * already got `resolveFogType`/`resolveEnumType` for issue #77) and a
+ * `mapSize` property that does not exist on `cc.ShadowsInfo` (the real
+ * property is `shadowMapSize`).
  */
 
 import * as os from 'os';
@@ -45,6 +56,7 @@ class FakeVec4 {
 }
 
 const FogType = { LINEAR: 0, EXP: 1, EXP_SQUARED: 2, LAYERED: 3 };
+const ShadowType = { Planar: 0, ShadowMap: 1 };
 
 let sceneGlobals: any;
 
@@ -53,6 +65,7 @@ jest.mock('cc', () => ({
     Color: FakeColor,
     Vec4: FakeVec4,
     FogInfo: { FogType },
+    ShadowType,
 }), { virtual: true });
 
 describe('scene.ts render pipeline methods', () => {
@@ -69,6 +82,7 @@ describe('scene.ts render pipeline methods', () => {
         sceneGlobals = {
             fog: { enabled: false, type: 0, fogStart: 0, fogEnd: 0, fogDensity: 0, fogColor: new FakeColor() },
             environment: { skyColor: new FakeVec4(), skyIllum: 0, groundAlbedo: new FakeVec4() },
+            shadows: { enabled: true, type: 1, shadowMapSize: 1024 },
         };
     });
 
@@ -146,6 +160,89 @@ describe('scene.ts render pipeline methods', () => {
             const result = methods.setAmbientSettings(undefined, undefined, 1);
             expect(result.success).toBe(false);
             expect(result.error).toMatch(/ambient|environment/i);
+        });
+    });
+
+    describe('setShadowSettings — enum resolution + shadowMapSize', () => {
+        it('maps a bare enum name ("ShadowMap") to its numeric value', () => {
+            const result = methods.setShadowSettings(undefined, 'ShadowMap', undefined);
+            expect(result.success).toBe(true);
+            expect(result.data.type).toBe(ShadowType.ShadowMap);
+            expect(typeof sceneGlobals.shadows.type).toBe('number');
+        });
+
+        it('accepts an already-numeric type unchanged', () => {
+            const result = methods.setShadowSettings(undefined, 0, undefined);
+            expect(result.success).toBe(true);
+            expect(result.data.type).toBe(ShadowType.Planar);
+        });
+
+        it('rejects an out-of-range shadow type instead of writing it through', () => {
+            const result = methods.setShadowSettings(undefined, 5, undefined);
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/shadow type/i);
+            // the bad value must never reach the engine field
+            expect(sceneGlobals.shadows.type).toBe(1);
+        });
+
+        it('writes shadowMapSize — not the stale mapSize property', () => {
+            const result = methods.setShadowSettings(undefined, undefined, 2048);
+            expect(result.success).toBe(true);
+            expect(sceneGlobals.shadows.shadowMapSize).toBe(2048);
+            expect(result.data.shadowMapSize).toBe(2048);
+            expect(sceneGlobals.shadows.mapSize).toBeUndefined();
+        });
+    });
+
+    describe('IPC null-arg regression — omitted args arrive as null, not undefined', () => {
+        // Reproduces the crash: the editor's execute-scene-script IPC
+        // serializes an omitted positional arg to `null`. A `!== undefined`
+        // guard treats that as "the caller explicitly set this", writing
+        // `null` onto a scene-global property whose macro derives from it
+        // (fog.type -> CC_USE_FOG) and crashing every later scene open.
+
+        it('setFogSettings: every arg as null leaves fog.type unchanged (does not poison CC_USE_FOG)', () => {
+            const result = methods.setFogSettings(null, null, null, null, null, null);
+            expect(result.success).toBe(true);
+            expect(sceneGlobals.fog.type).toBe(0);
+            expect(sceneGlobals.fog.type).not.toBeNull();
+            expect(sceneGlobals.fog.enabled).toBe(false);
+        });
+
+        it('setFogSettings: every arg as undefined leaves fog.type unchanged (equivalent case)', () => {
+            const result = methods.setFogSettings(undefined, undefined, undefined, undefined, undefined, undefined);
+            expect(result.success).toBe(true);
+            expect(sceneGlobals.fog.type).toBe(0);
+        });
+
+        it('setShadowSettings: every arg as null leaves shadows.type unchanged', () => {
+            const result = methods.setShadowSettings(null, null, null);
+            expect(result.success).toBe(true);
+            expect(sceneGlobals.shadows.type).toBe(1);
+            expect(sceneGlobals.shadows.type).not.toBeNull();
+            expect(sceneGlobals.shadows.shadowMapSize).toBe(1024);
+        });
+
+        it('setShadowSettings: every arg as undefined leaves shadows.type unchanged (equivalent case)', () => {
+            const result = methods.setShadowSettings(undefined, undefined, undefined);
+            expect(result.success).toBe(true);
+            expect(sceneGlobals.shadows.type).toBe(1);
+        });
+
+        it('setSkyboxSettings: null args do not overwrite existing values', () => {
+            sceneGlobals.skybox = { enabled: true, useHDR: true, rotationAngle: 45 };
+            const result = methods.setSkyboxSettings(null, null, null);
+            expect(result.success).toBe(true);
+            expect(sceneGlobals.skybox.enabled).toBe(true);
+            expect(sceneGlobals.skybox.useHDR).toBe(true);
+            expect(sceneGlobals.skybox.rotationAngle).toBe(45);
+        });
+
+        it('setAmbientSettings: null args do not overwrite existing values', () => {
+            const before = sceneGlobals.environment.skyIllum;
+            const result = methods.setAmbientSettings(null, null, null);
+            expect(result.success).toBe(true);
+            expect(sceneGlobals.environment.skyIllum).toBe(before);
         });
     });
 });
