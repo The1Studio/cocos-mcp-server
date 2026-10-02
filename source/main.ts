@@ -63,11 +63,14 @@ export const methods: { [key: string]: (...any: any) => any } = {
      * @zh 更新服务器设置
      */
     async updateSettings(settings: MCPServerSettings) {
-        saveSettings(settings);
+        // Panels send a partial payload — keep persisted values (authToken, allowedOrigins)
+        // for any field they do not cover.
+        const merged = { ...readSettings(), ...settings };
+        saveSettings(merged);
         if (mcpServer) {
             mcpServer.stop();
         }
-        mcpServer = new MCPServer(settings);
+        mcpServer = new MCPServer(merged);
         await mcpServer.start().catch(err => console.error('[MCP] Failed to start server after settings update:', err));
     },
 

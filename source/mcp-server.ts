@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as http from 'http';
 import * as url from 'url';
 import { MCPServerSettings, ServerStatus, ToolDefinition, ActionToolExecutor } from './types';
@@ -6,6 +7,7 @@ import { CocosResources } from './resources/cocos-resources';
 import { enqueueMutation } from './tools/mutation-queue';
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB request body limit
+const LOCAL_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
 export class MCPServer {
     private settings: MCPServerSettings;
@@ -17,7 +19,9 @@ export class MCPServer {
     private resourceProvider = new CocosResources();
 
     constructor(settings: MCPServerSettings) {
-        this.settings = settings;
+        // A server without a token would accept every local caller, so one is always
+        // generated rather than allowing unauthenticated operation.
+        this.settings = { ...settings, authToken: settings.authToken || crypto.randomBytes(32).toString('hex') };
         this.initializeTools();
     }
 
@@ -139,28 +143,45 @@ export class MCPServer {
     private async handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
         const parsedUrl = url.parse(req.url || '', true);
         const pathname = parsedUrl.pathname;
-        
-        // Set CORS headers — enforce allowedOrigins if configured
-        const origin = req.headers.origin;
-        const allowedOrigins = this.settings.allowedOrigins;
-        if (!allowedOrigins || allowedOrigins.length === 0 || allowedOrigins.includes('*')) {
-            res.setHeader('Access-Control-Allow-Origin', '*');
-        } else if (origin && allowedOrigins.includes(origin)) {
-            res.setHeader('Access-Control-Allow-Origin', origin);
-            res.setHeader('Vary', 'Origin');
-        } else if (origin && allowedOrigins.length > 0) {
-            // Origin not in allowedOrigins — reject with 403
+
+        // Reject DNS-rebinding and non-local callers: only localhost Host headers are served.
+        if (!this.isLocalHostHeader(req.headers.host)) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Origin not allowed' }));
+            res.end(JSON.stringify({ error: 'Forbidden host' }));
             return;
         }
-        // No origin header (non-browser clients like curl, MCP clients) — allow through
+
+        // CORS — an Origin is only ever reflected when it is explicitly listed in
+        // allowedOrigins; everything else is denied (empty list = no browser access).
+        const origin = req.headers.origin;
+        const allowedOrigins = this.settings.allowedOrigins || [];
+        if (origin) {
+            if (allowedOrigins.includes(origin)) {
+                res.setHeader('Access-Control-Allow-Origin', origin);
+                res.setHeader('Vary', 'Origin');
+            } else if (allowedOrigins.includes('*')) {
+                res.setHeader('Access-Control-Allow-Origin', '*');
+            } else {
+                res.writeHead(403, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Origin not allowed' }));
+                return;
+            }
+        }
+        // No Origin header (non-browser clients like curl, MCP clients) — still needs auth below
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
         res.setHeader('Content-Type', 'application/json');
-        
+
         if (req.method === 'OPTIONS') {
-            if (!res.writableEnded) { res.writeHead(200); res.end(); }
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+
+        // Every endpoint requires the bearer token persisted in settings/mcp-server.json.
+        if (!this.isAuthorized(req)) {
+            res.writeHead(401);
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
             return;
         }
 
@@ -194,6 +215,24 @@ export class MCPServer {
         }
     }
     
+    private isLocalHostHeader(hostHeader: string | undefined): boolean {
+        // HTTP/1.0 clients may omit Host; browsers always send it, so absence is not a web vector.
+        if (!hostHeader) return true;
+        const hostname = hostHeader.startsWith('[')
+            ? hostHeader.slice(0, hostHeader.indexOf(']') + 1)
+            : hostHeader.split(':')[0];
+        return LOCAL_HOSTNAMES.has(hostname.toLowerCase());
+    }
+
+    private isAuthorized(req: http.IncomingMessage): boolean {
+        const token = this.settings.authToken;
+        if (!token) return false;
+        const header = req.headers.authorization || '';
+        const expected = `Bearer ${token}`;
+        if (header.length !== expected.length) return false;
+        return crypto.timingSafeEqual(Buffer.from(header), Buffer.from(expected));
+    }
+
     private async handleMCPRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
         let body = '';
         let bodySize = 0;

@@ -3,6 +3,8 @@ export interface MCPServerSettings {
     autoStart: boolean;
     enableDebugLog: boolean;
     allowedOrigins: string[];
+    /** Bearer token required on every HTTP request; auto-generated and persisted when absent */
+    authToken?: string;
     /** Reserved for future use — not currently enforced (HTTP is stateless) */
     maxConnections: number;
 }

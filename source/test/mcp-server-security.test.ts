@@ -2,11 +2,14 @@ import * as http from 'http';
 import { MCPServer } from '../mcp-server';
 import { MCPServerSettings } from '../types';
 
+const AUTH_TOKEN = 'test-token';
+
 const BASE_SETTINGS: MCPServerSettings = {
     port: 0, // OS assigns free port
     autoStart: false,
     enableDebugLog: false,
     allowedOrigins: [],
+    authToken: AUTH_TOKEN,
     maxConnections: 10,
 };
 
@@ -14,10 +17,11 @@ function makeSettings(overrides: Partial<MCPServerSettings> = {}): MCPServerSett
     return { ...BASE_SETTINGS, ...overrides };
 }
 
-/** POST JSON to a running server, returns { statusCode, body } */
+/** POST JSON to a running server, returns { statusCode, body }. Sends the bearer token unless the caller supplies its own Authorization header. */
 async function post(port: number, path: string, body: any, headers: Record<string, string> = {}): Promise<{ statusCode: number; body: any }> {
     return new Promise((resolve, reject) => {
         const payload = JSON.stringify(body);
+        if (!('Authorization' in headers)) headers.Authorization = `Bearer ${AUTH_TOKEN}`;
         const req = http.request(
             { hostname: '127.0.0.1', port, path, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), ...headers } },
             (res) => {
@@ -100,7 +104,7 @@ describe('MCPServer security', () => {
         it('returns -32700 on malformed JSON', async () => {
             await new Promise<void>((resolve, reject) => {
                 const req = http.request(
-                    { hostname: '127.0.0.1', port, path: '/mcp', method: 'POST', headers: { 'Content-Type': 'application/json' } },
+                    { hostname: '127.0.0.1', port, path: '/mcp', method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` } },
                     (res) => {
                         let data = '';
                         res.on('data', (c) => (data += c));
@@ -119,9 +123,50 @@ describe('MCPServer security', () => {
         });
     });
 
+    describe('Authentication', () => {
+        it('rejects requests without an Authorization header', async () => {
+            const result = await post(port, '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' }, { Authorization: '' });
+            expect(result.statusCode).toBe(401);
+        });
+
+        it('rejects requests with a wrong token', async () => {
+            const result = await post(port, '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' }, { Authorization: 'Bearer wrong-token' });
+            expect(result.statusCode).toBe(401);
+        });
+
+        it('requires auth on every endpoint including /health', async () => {
+            await new Promise<void>((resolve, reject) => {
+                const req = http.request({ hostname: '127.0.0.1', port, path: '/health', method: 'GET' }, (res) => {
+                    res.resume();
+                    expect(res.statusCode).toBe(401);
+                    resolve();
+                });
+                req.on('error', reject);
+                req.end();
+            });
+        });
+    });
+
+    describe('Host header (DNS rebinding) enforcement', () => {
+        it('rejects requests with a non-localhost Host header', async () => {
+            const result = await post(port, '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' }, { Host: 'attacker.example' });
+            expect(result.statusCode).toBe(403);
+        });
+
+        it('accepts requests with a localhost Host header', async () => {
+            const result = await post(port, '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' }, { Host: `localhost:${port}` });
+            expect(result.statusCode).toBe(200);
+        });
+    });
+
     describe('CORS enforcement', () => {
-        it('allows all origins when allowedOrigins is empty', async () => {
+        it('denies cross-origin browser requests when allowedOrigins is empty', async () => {
             const result = await post(port, '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' }, { Origin: 'http://unknown.example' });
+            expect(result.statusCode).toBe(403);
+        });
+
+        it('allows requests with no Origin header (non-browser clients)', async () => {
+            const result = await post(port, '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' });
             expect(result.statusCode).toBe(200);
         });
     });
