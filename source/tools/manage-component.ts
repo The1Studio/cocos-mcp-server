@@ -1,6 +1,6 @@
 import { ActionToolResult, successResult, errorResult } from '../types';
 import { BaseActionTool } from './base-action-tool';
-import { analyzeProperty, extractComponentPropertyDump, generateComponentSuggestion, convertPropertyValue, getAvailableComponentsList, redirectNodePropertyAccess, verifyComponentPropertyChange, SUPPORTED_PROPERTY_TYPES } from './manage-component-property-helpers';
+import { analyzeProperty, extractComponentPropertyDump, generateComponentSuggestion, convertPropertyValue, getAvailableComponentsList, redirectNodePropertyAccess, verifyComponentPropertyChange, describeScalarWriteToArrayProperty, SUPPORTED_PROPERTY_TYPES } from './manage-component-property-helpers';
 import { applyPropertyToEditor } from './manage-component-editor-apply';
 import { attachScriptToNode } from './manage-component-script-attach';
 import { detectPrefabOverrideRisk } from './manage-component-prefab-guard';
@@ -531,6 +531,11 @@ export class ManageComponent extends BaseActionTool {
                     uuid: nodeUuid, path: `__comps__.${rawComponentIndex}.${arrayProperty}.length`,
                     dump: { value: currentLength + 1 }
                 });
+            }
+
+            const scalarOverArray = describeScalarWriteToArrayProperty(propertyType, propertyInfo.originalValue, property);
+            if (scalarOverArray) {
+                return { success: false, error: scalarOverArray };
             }
 
             // Convert value based on explicit propertyType.

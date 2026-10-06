@@ -424,3 +424,70 @@ describe('PrefabCreationService — cross-node component reference (bodyRenderer
         expect(truckView.ammoLabel).toEqual({ __id__: labelIndex });
     });
 });
+
+/**
+ * #73 — deleted children resurrected in a created prefab. `query-node-tree` still listed a
+ * child that had been deleted from the node (linked prefab instance); the node's own
+ * `query-node` dump did not. The live dump is authoritative.
+ */
+describe('PrefabCreationService — stale children are not serialized (#73)', () => {
+    let service: PrefabCreationService;
+    let mockRequest: jest.Mock;
+
+    const dumpOf = (uuid: string, name: string, children?: any[]) => ({
+        uuid, name, active: true, position: { value: { x: 0, y: 0, z: 0 } }, __comps__: [],
+        ...(children ? { children } : {}),
+    });
+
+    async function create(liveRoot: any) {
+        let written: any[] = [];
+        const nodes: Record<string, any> = {
+            root: liveRoot, keep: dumpOf('keep', 'Keep', []), gone: dumpOf('gone', 'Gone', []),
+        };
+        mockRequest.mockReset();
+        mockRequest.mockImplementation(async (_pkg: string, message: string, ...args: any[]) => {
+            switch (message) {
+                case 'query-node': return nodes[args[0]] ?? null;
+                case 'query-node-tree': return {
+                    uuid: 'root', name: 'Root',
+                    children: [{ uuid: 'keep', name: 'Keep', children: [] }, { uuid: 'gone', name: 'Gone', children: [] }],
+                };
+                case 'create-asset': return { uuid: 'prefab-uuid-1' };
+                case 'save-asset': written = JSON.parse(args[1]); return {};
+                case 'query-asset-info': return { url: 'db://assets/Root.prefab' };
+                case 'save-asset-meta': case 'reimport-asset': case 'connect-prefab-instance': return true;
+                default: throw new Error(`${message} does not exist`);
+            }
+        });
+        const result = await service.createPrefabWithAssetDB('root', 'db://assets/Root.prefab', 'Root', true, true);
+        return { result, written };
+    }
+
+    beforeEach(() => {
+        service = new PrefabCreationService();
+        mockRequest = (global as any).Editor.Message.request as jest.Mock;
+    });
+
+    afterAll(() => {
+        mockRequest.mockReset();
+        mockRequest.mockResolvedValue({});
+    });
+
+    it('drops a tree child the live node no longer lists, and says so', async () => {
+        const { result, written } = await create(dumpOf('root', 'Root', [{ value: { uuid: 'keep' }, type: 'cc.Node' }]));
+
+        const names = written.filter(o => o.__type__ === 'cc.Node').map(o => o._name);
+        expect(names).toContain('Keep');
+        expect(names).not.toContain('Gone');
+        expect(result.success).toBe(true);
+        expect(result.data.prunedStaleChildren).toEqual(['gone']);
+    });
+
+    it('keeps every tree child when the live dump carries no readable child list', async () => {
+        const { result, written } = await create(dumpOf('root', 'Root'));
+
+        const names = written.filter(o => o.__type__ === 'cc.Node').map(o => o._name);
+        expect(names).toEqual(expect.arrayContaining(['Keep', 'Gone']));
+        expect(result.data.prunedStaleChildren).toBeUndefined();
+    });
+});
