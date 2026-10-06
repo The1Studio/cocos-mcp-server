@@ -4,7 +4,7 @@
  */
 
 import { ActionToolResult, successResult } from '../types';
-import { parseJsonPayload } from '../utils/normalize';
+import { coerceBool, parseJsonPayload } from '../utils/normalize';
 
 /**
  * Reject a non-primitive element in a primitive array, naming what arrived (issue #66).
@@ -358,7 +358,22 @@ export function convertPropertyValue(propertyType: string, value: any): any {
         case 'number': case 'integer': case 'float':
             return Number(value);
         case 'boolean':
-            return Boolean(value);
+            {
+                // Issue #76: `Boolean("false")` is `true`. A transport that stringifies
+                // arguments delivers the text "false", which became a write of `true`; against
+                // a property already holding `true` the read-back matched and the tool reported
+                // `changeVerified: true` for a value the caller never asked for. Parse the
+                // spelled-out forms and refuse anything that is not one, rather than coercing
+                // by truthiness.
+                if (value === null) return false;
+                const coerced = coerceBool(value);
+                if (coerced === undefined) {
+                    throw new Error(
+                        `boolean value must be true/false (received ${typeof value}${typeof value === 'string' ? ` "${value}"` : ''})`
+                    );
+                }
+                return coerced;
+            }
         case 'color':
             {
                 // Issue #52: a JSON-string value (e.g. '{"r":255,"g":0,"b":0}') reaches
@@ -560,6 +575,28 @@ export function redirectNodePropertyAccess(args: {
     }
 
     return null;
+}
+
+/**
+ * Refuse a scalar propertyType aimed at a property that currently holds an ARRAY (issue #115).
+ *
+ * A single-value write (`asset`, `node`, `string`, ...) against an array-typed `@property`
+ * does not fail cleanly: the editor accepts the dump, the field stops decoding, and it vanishes
+ * from the component's own `get_info` until the component is removed and re-added. The caller
+ * has no way to recover, so the write is refused before it is sent, naming the supported
+ * whole-array propertyTypes and the element-wise dotted form.
+ *
+ * Returns the refusal message, or `null` when the write is not a scalar-over-array.
+ */
+export function describeScalarWriteToArrayProperty(propertyType: string, originalValue: any, property: string): string | null {
+    if (!Array.isArray(originalValue) || propertyType.endsWith('Array')) return null;
+    return (
+        `Property '${property}' is an ARRAY, but propertyType '${propertyType}' writes a single value; ` +
+        `the editor would drop the field from the component and it could not be restored by a later write (issue #115). ` +
+        `Set the whole array with 'assetArray', 'nodeArray', 'componentArray', 'colorArray', 'numberArray' or ` +
+        `'stringArray', or write one element with a dotted index ('${property}.0', '${property}.<length>' appends). ` +
+        `Nothing was written.`
+    );
 }
 
 /** Verify a property change was applied; uses getComponentInfo callback to avoid circular deps */

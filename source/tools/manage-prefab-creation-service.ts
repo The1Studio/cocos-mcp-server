@@ -10,6 +10,7 @@
  */
 import * as fs from 'fs';
 import { resolveAsset } from '../utils/asset-path';
+import { childUuidOf } from './manage-node-sibling-order';
 import { extractComponentPropertyDump } from './manage-component-property-helpers';
 
 /**
@@ -203,6 +204,7 @@ export class PrefabCreationService {
                     prefabUuid: actualPrefabUuid, prefabPath: savePath, nodeUuid, prefabName,
                     convertedToPrefabInstance: convertResult.success,
                     propertiesVerifiedFrom: readBack.source,
+                    ...(this.lastPrunedStaleChildren.length > 0 ? { prunedStaleChildren: [...this.lastPrunedStaleChildren] } : {}),
                     message: convertResult.success ? 'Prefab created and node converted' : 'Prefab created, node conversion failed'
                 }
             };
@@ -266,6 +268,7 @@ export class PrefabCreationService {
     // ===== Node data retrieval =====
 
     private async getNodeData(nodeUuid: string): Promise<any> {
+        this.lastPrunedStaleChildren = [];
         try {
             const nodeInfo = await Editor.Message.request('scene', 'query-node', nodeUuid);
             if (!nodeInfo) return null;
@@ -292,9 +295,11 @@ export class PrefabCreationService {
      */
     private async enhanceTreeWithMCPComponents(node: any): Promise<any> {
         if (!node || !node.uuid) return node;
+        let liveChildUuids: Set<string> | null = null;
         try {
             const nodeData = await Editor.Message.request('scene', 'query-node', node.uuid);
             if (nodeData) {
+                liveChildUuids = this.liveChildUuidSet(nodeData);
                 // Carry the transform dump through so createEngineStandardNode can read
                 // position/rotation/scale instead of falling back to identity (issue #50).
                 // The query-node dump shapes these as { value: { x, y, z } } (and w for quat),
@@ -330,11 +335,40 @@ export class PrefabCreationService {
             console.warn(`Failed to get component info for node ${node.uuid}:`, error);
         }
         if (node.children && Array.isArray(node.children)) {
+            if (liveChildUuids) {
+                // Issue #73: `query-node-tree` can still list a child that `manage_node delete`
+                // already removed (seen on a linked prefab instance), so the created prefab
+                // resurrected it. The node's own `query-node` dump is the live child set; a
+                // tree child absent from it is stale and is not serialized.
+                const kept: any[] = [];
+                for (const child of node.children) {
+                    const childUuid = this.extractNodeUuid(child);
+                    if (childUuid && !liveChildUuids.has(childUuid)) {
+                        this.lastPrunedStaleChildren.push(childUuid);
+                        console.warn(`Dropping child ${childUuid} of ${node.uuid}: listed by query-node-tree but absent from the node's live children`);
+                        continue;
+                    }
+                    kept.push(child);
+                }
+                node.children = kept;
+            }
             for (let i = 0; i < node.children.length; i++) {
                 node.children[i] = await this.enhanceTreeWithMCPComponents(node.children[i]);
             }
         }
         return node;
+    }
+
+    /**
+     * The uuids of a node's live children as its own `query-node` dump reports them, or null
+     * when the dump does not carry a readable child list — an unreadable list proves nothing,
+     * so the caller keeps every tree child rather than pruning on a guess.
+     */
+    private liveChildUuidSet(nodeData: any): Set<string> | null {
+        if (!Array.isArray(nodeData?.children)) return null;
+        const uuids = nodeData.children.map((c: any) => childUuidOf(c));
+        if (uuids.some((u: string) => !u)) return null;
+        return new Set<string>(uuids);
     }
 
     private findNodeInTree(node: any, targetUuid: string): any {
@@ -403,6 +437,9 @@ export class PrefabCreationService {
      * list — the same contract as the existing `findComponentsThatLostProperties` check.
      */
     private lastReferenceLosses: Array<{ property: string; uuid: string; reason: string }> = [];
+
+    /** Children `query-node-tree` listed that the node's live `query-node` dump did not (issue #73). Reset per capture. */
+    private lastPrunedStaleChildren: string[] = [];
 
     private async createCompleteNodeTree(
         nodeData: any, parentNodeIndex: number | null, nodeIndex: number,
