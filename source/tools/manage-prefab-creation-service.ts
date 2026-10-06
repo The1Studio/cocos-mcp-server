@@ -203,6 +203,7 @@ export class PrefabCreationService {
                 data: {
                     prefabUuid: actualPrefabUuid, prefabPath: savePath, nodeUuid, prefabName,
                     convertedToPrefabInstance: convertResult.success,
+                    ...this.conversionFailureFields(convertResult),
                     propertiesVerifiedFrom: readBack.source,
                     ...(this.lastPrunedStaleChildren.length > 0 ? { prunedStaleChildren: [...this.lastPrunedStaleChildren] } : {}),
                     message: convertResult.success ? 'Prefab created and node converted' : 'Prefab created, node conversion failed'
@@ -249,12 +250,13 @@ export class PrefabCreationService {
                         data: { prefabUuid, prefabPath, nodeUuid, prefabName, componentsWithoutProperties: lost }
                     };
                 }
-                const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, prefabPath, prefabUuid);
+                const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, prefabUuid, prefabPath);
                 return {
                     success: true,
                     data: {
                         prefabUuid, prefabPath, nodeUuid, prefabName,
                         convertedToPrefabInstance: convertResult.success,
+                        ...this.conversionFailureFields(convertResult),
                         message: convertResult.success ? 'Custom prefab created and node converted' : 'Prefab created, node conversion failed'
                     }
                 };
@@ -914,16 +916,44 @@ export class PrefabCreationService {
 
     // ===== Asset DB operations =====
 
-    private async convertNodeToPrefabInstance(nodeUuid: string, prefabRef: string, prefabUuid: string): Promise<any> {
-        const methods = [
-            () => Editor.Message.request('scene', 'connect-prefab-instance', { node: nodeUuid, prefab: prefabRef }),
-            () => Editor.Message.request('scene', 'set-prefab-connection', { node: nodeUuid, prefab: prefabRef }),
-            () => Editor.Message.request('scene', 'apply-prefab-link', { node: nodeUuid, prefab: prefabRef })
+    /**
+     * Link the scene node to the freshly written prefab asset.
+     *
+     * `scene:link-prefab` (nodeUuid, assetUuid — positional, the editor's own
+     * `linkPrefab(nodeUuid, assetUuid)` facade call) is tried first. The three legacy
+     * object-form messages never existed in 3.8.7 and are kept only as fallbacks. Every
+     * rejection is collected so a failed conversion names its causes instead of the bare
+     * "all methods failed" that left #130's callers guessing.
+     */
+    private async convertNodeToPrefabInstance(nodeUuid: string, prefabUuid: string, _prefabPath: string): Promise<any> {
+        const methods: Array<[string, () => Promise<any>]> = [
+            ['link-prefab', () => (Editor.Message.request as any)('scene', 'link-prefab', nodeUuid, prefabUuid)],
+            ['connect-prefab-instance', () => Editor.Message.request('scene', 'connect-prefab-instance', { node: nodeUuid, prefab: prefabUuid })],
+            ['set-prefab-connection', () => Editor.Message.request('scene', 'set-prefab-connection', { node: nodeUuid, prefab: prefabUuid })],
+            ['apply-prefab-link', () => Editor.Message.request('scene', 'apply-prefab-link', { node: nodeUuid, prefab: prefabUuid })]
         ];
-        for (const method of methods) {
-            try { await method(); return { success: true }; } catch { /* try next */ }
+        const failures: string[] = [];
+        for (const [name, method] of methods) {
+            try {
+                const result: any = await method();
+                // A message that resolves `false` declined the link; it is not a success.
+                if (result === false) { failures.push(`${name}: returned false`); continue; }
+                return { success: true };
+            } catch (err: any) {
+                failures.push(`${name}: ${err?.message || err}`);
+            }
         }
-        return { success: false, error: 'All prefab connection methods failed' };
+        return { success: false, error: `All prefab connection methods failed (${failures.join('; ')})` };
+    }
+
+    /** Fields describing a failed node->instance conversion, so the failure is not buried in `message`. */
+    private conversionFailureFields(convertResult: any): Record<string, any> {
+        if (convertResult.success) return {};
+        return {
+            warning: 'The prefab asset was written, but the scene node was NOT converted into a linked prefab instance; it is still a plain node.',
+            conversionError: convertResult.error,
+            instruction: 'Use the written prefab as-is, or link the node in the editor (right-click node > Link Prefab). Re-running create will not retry the link.'
+        };
     }
 
     private async savePrefabWithMeta(prefabPath: string, prefabData: any[], metaData: any): Promise<any> {
