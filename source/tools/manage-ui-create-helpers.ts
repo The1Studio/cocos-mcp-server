@@ -12,29 +12,42 @@ async function createNodeWithComponents(
     const raw = await Editor.Message.request('scene', 'create-node', opts);
     const uuid: string = Array.isArray(raw) ? raw[0] : raw as string;
 
-    // Add components sequentially
+    // Add components sequentially. A failed add used to be swallowed into a console.warn the
+    // MCP caller never sees, so a node missing its cc.UITransform came back as `success`
+    // (issue #71). Collect the failures and fail the call, naming the node and components.
+    const failed: string[] = [];
     for (const comp of components) {
         try {
             await Editor.Message.request('scene', 'create-component', { uuid, component: comp });
             await new Promise(r => setTimeout(r, 50));
-        } catch (e) {
-            console.warn(`[manage-ui] Failed to add component ${comp}:`, e);
+        } catch (e: any) {
+            failed.push(`${comp} (${e?.message ?? e})`);
         }
+    }
+    if (failed.length > 0) {
+        throw new Error(`Node '${name}' (${uuid}) was created but adding component(s) failed: ${failed.join('; ')}`);
     }
     return { uuid };
 }
 
-/** Set a component property via Editor.Message scene API */
-async function setProp(nodeUuid: string, compIndex: number, prop: string, value: any): Promise<void> {
+/**
+ * Set a component property via Editor.Message scene API.
+ *
+ * Issue #71: the dump MUST carry the property's `type` when it is a structured value — a
+ * typeless `{ value: {r,g,b,a} }` is decoded as the type default, which is how a label's
+ * `color="#FFFFFF"` landed as rgba(0,0,0,0). A rejected write now throws instead of being
+ * logged and reported as success.
+ */
+async function setProp(nodeUuid: string, compIndex: number, prop: string, value: any, type?: string): Promise<void> {
     const path = `__comps__.${compIndex}.${prop}`;
     try {
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid,
             path,
-            dump: { value }
+            dump: type ? { value, type } : { value }
         });
-    } catch (e) {
-        console.warn(`[manage-ui] Failed to set ${path}:`, e);
+    } catch (e: any) {
+        throw new Error(`Failed to set ${path} on ${nodeUuid}: ${e?.message ?? e}`);
     }
 }
 
@@ -89,15 +102,20 @@ export async function createLabel(args: any): Promise<ActionToolResult> {
 
         await new Promise(r => setTimeout(r, 100));
         const nodeData = await queryNode(uuid);
-        if (!nodeData?.__comps__) return successResult({ uuid }, 'Label node created');
+        if (!nodeData?.__comps__) {
+            return errorResult(`Label node ${uuid} was created but its components could not be read back; cannot confirm cc.UITransform/cc.Label exist`);
+        }
 
         const labelIdx = findCompIndex(nodeData.__comps__, 'cc.Label');
-        if (labelIdx >= 0) {
+        if (labelIdx < 0 || findCompIndex(nodeData.__comps__, 'cc.UITransform') < 0) {
+            return errorResult(`Label node ${uuid} is missing a required component after creation (cc.Label: ${labelIdx >= 0}, cc.UITransform: ${findCompIndex(nodeData.__comps__, 'cc.UITransform') >= 0})`);
+        }
+        {
             await setProp(uuid, labelIdx, 'string', text);
             await setProp(uuid, labelIdx, 'fontSize', fontSize);
             if (color) {
                 const c = typeof color === 'string' ? hexToRgba(color) : color;
-                await setProp(uuid, labelIdx, 'color', c);
+                await setProp(uuid, labelIdx, 'color', c, 'cc.Color');
             }
             if (horizontalAlign !== undefined) await setProp(uuid, labelIdx, 'horizontalAlign', horizontalAlign);
             if (verticalAlign !== undefined) await setProp(uuid, labelIdx, 'verticalAlign', verticalAlign);
@@ -124,9 +142,9 @@ export async function createButton(args: any): Promise<ActionToolResult> {
         const buttonIdx = nodeData?.__comps__ ? findCompIndex(nodeData.__comps__, 'cc.Button') : -1;
 
         if (buttonIdx >= 0) {
-            if (normalColor) await setProp(uuid, buttonIdx, 'normalColor', hexToRgba(normalColor));
-            if (hoverColor) await setProp(uuid, buttonIdx, 'hoverColor', hexToRgba(hoverColor));
-            if (pressedColor) await setProp(uuid, buttonIdx, 'pressedColor', hexToRgba(pressedColor));
+            if (normalColor) await setProp(uuid, buttonIdx, 'normalColor', hexToRgba(normalColor), 'cc.Color');
+            if (hoverColor) await setProp(uuid, buttonIdx, 'hoverColor', hexToRgba(hoverColor), 'cc.Color');
+            if (pressedColor) await setProp(uuid, buttonIdx, 'pressedColor', hexToRgba(pressedColor), 'cc.Color');
         }
 
         // Create child Label

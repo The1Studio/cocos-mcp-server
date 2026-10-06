@@ -70,20 +70,31 @@ describe('ManageUI', () => {
         }));
     });
 
-    // Create label action tests
-    it('create_label succeeds without parentUuid (optional)', async () => {
+    // Create label action tests (issue #71: typed color dump, no swallowed component failures)
+    function mockLabelEditor(opts: { failComponent?: string; comps?: string[] } = {}) {
         const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-        mockRequest.mockResolvedValueOnce('label-node-1'); // create-node
-        mockRequest.mockResolvedValueOnce({}); // create-component
+        mockRequest.mockImplementation(async (_m: string, action: string, payload: any) => {
+            if (action === 'create-node') return 'label-node-1';
+            if (action === 'create-component') {
+                if (payload.component === opts.failComponent) throw new Error('boom');
+                return {};
+            }
+            if (action === 'query-node') {
+                return { __comps__: (opts.comps ?? ['cc.UITransform', 'cc.Label']).map(type => ({ type })) };
+            }
+            return undefined;
+        });
+        return mockRequest;
+    }
 
+    it('create_label succeeds without parentUuid (optional)', async () => {
+        mockLabelEditor();
         const result = await tool.execute('create_label', { text: 'Label Text' });
         expect(result.success).toBe(true);
     });
 
     it('create_label calls Editor.Message.request to create node and label component', async () => {
-        const mockRequest = (global as any).Editor.Message.request as jest.Mock;
-        mockRequest.mockResolvedValueOnce('label-node-1'); // create-node
-        mockRequest.mockResolvedValueOnce({}); // create-component
+        const mockRequest = mockLabelEditor();
 
         const result = await tool.execute('create_label', {
             parentUuid: 'parent-123',
@@ -96,6 +107,28 @@ describe('ManageUI', () => {
         expect(mockRequest).toHaveBeenCalledWith('scene', 'create-node', expect.objectContaining({
             parent: 'parent-123'
         }));
+    });
+
+    it('create_label writes color as a typed cc.Color dump', async () => {
+        const mockRequest = mockLabelEditor();
+        await tool.execute('create_label', { text: 'x', color: '#FFFFFF' });
+        expect(mockRequest).toHaveBeenCalledWith('scene', 'set-property', expect.objectContaining({
+            path: '__comps__.1.color',
+            dump: { value: { r: 255, g: 255, b: 255, a: 255 }, type: 'cc.Color' }
+        }));
+    });
+
+    it('create_label fails when cc.UITransform could not be added instead of reporting success', async () => {
+        mockLabelEditor({ failComponent: 'cc.UITransform' });
+        const result = await tool.execute('create_label', { text: 'x' });
+        expect(result.success).toBe(false);
+        expect(JSON.stringify(result)).toContain('cc.UITransform');
+    });
+
+    it('create_label fails when the read-back shows no cc.UITransform', async () => {
+        mockLabelEditor({ comps: ['cc.Label'] });
+        const result = await tool.execute('create_label', { text: 'x' });
+        expect(result.success).toBe(false);
     });
 
     // Create button action tests
