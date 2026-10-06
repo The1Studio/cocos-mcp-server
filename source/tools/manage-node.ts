@@ -1,6 +1,8 @@
 import { BaseActionTool } from './base-action-tool';
 import { ActionToolResult, NodeInfo, successResult, errorResult } from '../types';
 import { coerceBool, coerceInt, coerceFloat, normalizeVec3 } from '../utils/normalize';
+import { applySiblingIndex, SiblingOrderResult } from './manage-node-sibling-order';
+import { resolveInstantiableAssetUuid } from './manage-node-asset-resolve';
 import { is2DNode, is2DComponentType, is3DComponentType, normalizeTransformValue, getComponentCategory, getNodePath, searchNodeInTree } from './manage-node-transform-helpers';
 
 /** Longest `awaitNodeCommit` waits for a freshly created node to become queryable. */
@@ -181,18 +183,34 @@ export class ManageNode extends BaseActionTool {
 
             let finalAssetUuid = args.assetUuid;
             let assetType: string | undefined;
+            let pathInfo: any;
             if (args.assetPath && !finalAssetUuid) {
                 try {
                     const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', args.assetPath);
                     if (assetInfo && assetInfo.uuid) {
                         finalAssetUuid = assetInfo.uuid;
                         assetType = assetInfo.type;
+                        pathInfo = assetInfo;
                         console.log(`Asset path '${args.assetPath}' resolved to UUID: ${finalAssetUuid}`);
                     } else {
                         return errorResult(`Asset not found at path: ${args.assetPath}`);
                     }
                 } catch (err) {
                     return errorResult(`Failed to resolve asset path '${args.assetPath}': ${err}`);
+                }
+            }
+
+            // A raw model asset (.fbx/.gltf) is not instantiable; redirect it to its
+            // `gltf-scene` sub-asset instead of creating an empty node (issue #117).
+            let resolvedFromModel: string | undefined;
+            if (finalAssetUuid) {
+                const resolved = await resolveInstantiableAssetUuid(finalAssetUuid, pathInfo);
+                if (resolved.resolvedFrom) {
+                    resolvedFromModel = resolved.resolvedFrom;
+                    finalAssetUuid = resolved.uuid;
+                    assetType = undefined; // re-resolved below for the sub-asset
+                } else if (!assetType && resolved.info?.type) {
+                    assetType = resolved.info.type; // reuse the lookup instead of repeating it
                 }
             }
 
@@ -245,24 +263,18 @@ export class ManageNode extends BaseActionTool {
             const nodeUuid = await Editor.Message.request('scene', 'create-node', createNodeOptions);
             const uuid = Array.isArray(nodeUuid) ? nodeUuid[0] : nodeUuid;
 
+            // `set-parent` appends, so honouring siblingIndex needs an explicit reorder, and
+            // the outcome is reported rather than assumed (issue #99 item 2).
+            let siblingOrder: (SiblingOrderResult & { requested: number }) | undefined;
             if (siblingIndex !== undefined && siblingIndex >= 0 && uuid && targetParentUuid) {
                 try {
                     await this.awaitNodeCommit(uuid);
-                    await Editor.Message.request('scene', 'set-parent', {
-                        parent: targetParentUuid,
-                        uuids: [uuid],
-                        keepWorldTransform: coerceBool(args.keepWorldTransform) || false
-                    });
-                    // Best-effort verification: this re-parent is a secondary ordering step
-                    // after node creation already succeeded, so a mismatch is logged rather
-                    // than failing the whole create — the verificationData read-back below
-                    // still reports the node's true final parent either way.
-                    const verifyInfo = await this.getNodeInfo(uuid);
-                    if (!verifyInfo.success || verifyInfo.data?.parent !== targetParentUuid) {
-                        console.warn(`Sibling-index reparent did not verify: expected parent '${targetParentUuid}', got '${verifyInfo.data?.parent}'`);
-                    }
                 } catch (err) {
-                    console.warn('Failed to set sibling index:', err);
+                    console.warn('Failed to await node commit before sibling ordering:', err);
+                }
+                siblingOrder = { requested: siblingIndex, ...(await applySiblingIndex(targetParentUuid, uuid, siblingIndex)) };
+                if (!siblingOrder.applied) {
+                    console.warn(`siblingIndex ${siblingIndex} was not applied: ${siblingOrder.reason}`);
                 }
             }
 
@@ -334,6 +346,11 @@ export class ManageNode extends BaseActionTool {
                 nodeType: args.nodeType || 'Node',
                 fromAsset: !!finalAssetUuid,
                 assetUuid: finalAssetUuid,
+                ...(resolvedFromModel ? { resolvedFromModelUuid: resolvedFromModel } : {}),
+                ...(siblingOrder ? { siblingOrder } : {}),
+                ...(siblingOrder && !siblingOrder.applied
+                    ? { warning: `siblingIndex ${siblingOrder.requested} was NOT applied (${siblingOrder.reason}); the node is the last child.` }
+                    : {}),
                 message: successMessage,
                 verificationData
             });
@@ -711,16 +728,9 @@ export class ManageNode extends BaseActionTool {
                 uuids: [nodeUuid],
                 keepWorldTransform
             });
+            let siblingOrder: SiblingOrderResult | undefined;
             if (siblingIndex >= 0) {
-                try {
-                    await Editor.Message.request('scene', 'set-property', {
-                        uuid: nodeUuid,
-                        path: 'siblingIndex',
-                        dump: { value: siblingIndex }
-                    });
-                } catch (err) {
-                    console.warn('Failed to set siblingIndex after move:', err);
-                }
+                siblingOrder = await applySiblingIndex(newParentUuid, nodeUuid, siblingIndex);
             }
 
             // Read back the actual parent. `set-parent` silently no-ops for some prefab-
@@ -737,7 +747,13 @@ export class ManageNode extends BaseActionTool {
                 );
             }
 
-            return successResult({ nodeUuid, newParentUuid, nodeInfo: verifyInfo.data }, 'Node moved successfully');
+            if (siblingOrder && !siblingOrder.applied) {
+                return errorResult(
+                    `Node was moved under '${newParentUuid}' but siblingIndex ${siblingIndex} was NOT applied: ${siblingOrder.reason}.`
+                );
+            }
+
+            return successResult({ nodeUuid, newParentUuid, siblingOrder, nodeInfo: verifyInfo.data }, 'Node moved successfully');
         } catch (err: any) {
             return errorResult(err.message);
         }
