@@ -181,12 +181,17 @@ claude mcp add --transport http cocos-creator http://127.0.0.1:3000/mcp (use you
   "mcpServers": { 
 
    "cocos-creator": {
-      "url": "http://localhost:3000/mcp"
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+         "Authorization": "Bearer <authToken>"
+      }
    }
   }
 
 }
 ```
+
+**Authentication:** every HTTP endpoint (`/mcp`, `/api/*`, `/health`) requires `Authorization: Bearer <token>`. The token is generated on first run and stored in `settings/mcp-server.json` inside your project — copy its `authToken` value into your client config, or set `authToken` there yourself. Requests from browsers are denied unless the origin is listed in `allowedOrigins`, and only `127.0.0.1`/`localhost` Host headers are accepted.
 
 ## Features
 

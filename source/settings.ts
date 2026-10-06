@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MCPServerSettings, ToolManagerSettings, ToolConfiguration, ToolConfig } from './types';
@@ -6,7 +7,9 @@ const DEFAULT_SETTINGS: MCPServerSettings = {
     port: 3000,
     autoStart: false,
     enableDebugLog: false,
-    allowedOrigins: ['*'],
+    // No browser origin is trusted by default — every request still needs the authToken.
+    allowedOrigins: [],
+    authToken: '',
     maxConnections: 10
 };
 
@@ -32,17 +35,28 @@ function ensureSettingsDir(): void {
 }
 
 export function readSettings(): MCPServerSettings {
+    let settings = DEFAULT_SETTINGS;
     try {
         ensureSettingsDir();
         const settingsFile = getSettingsPath();
         if (fs.existsSync(settingsFile)) {
             const content = fs.readFileSync(settingsFile, 'utf8');
-            return { ...DEFAULT_SETTINGS, ...JSON.parse(content) };
+            settings = { ...DEFAULT_SETTINGS, ...JSON.parse(content) };
         }
     } catch (e) {
         console.error('Failed to read settings:', e);
     }
-    return DEFAULT_SETTINGS;
+    // Every HTTP endpoint requires this token; generate and persist one so clients
+    // can read it from settings/mcp-server.json and configure themselves.
+    if (!settings.authToken) {
+        settings = { ...settings, authToken: crypto.randomBytes(32).toString('hex') };
+        try {
+            saveSettings(settings);
+        } catch {
+            // Read-only project dir — the generated token still protects this run.
+        }
+    }
+    return settings;
 }
 
 export function saveSettings(settings: MCPServerSettings): void {
