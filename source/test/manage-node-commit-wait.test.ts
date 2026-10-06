@@ -68,3 +68,50 @@ describe('ManageNode.create commit wait (#6)', () => {
         expect(log).not.toContain('create-component');
     }, 20000);
 });
+
+/**
+ * #136 — `create` passed `components` to `scene:create-node` AND re-added each one with
+ * `scene:create-component`, so a component the editor had already attached (UITransform on a
+ * UI-layer node) logged "already contains UITransform".
+ */
+describe('ManageNode.create does not duplicate-add components (#136)', () => {
+    let tool: ManageNode;
+    let mockRequest: jest.Mock;
+    let added: string[];
+
+    beforeEach(() => {
+        tool = new ManageNode();
+        mockRequest = (global as any).Editor.Message.request as jest.Mock;
+        mockRequest.mockReset();
+        added = [];
+    });
+
+    afterEach(() => {
+        mockRequest.mockReset();
+        mockRequest.mockResolvedValue({});
+    });
+
+    function route(comps: any[]) {
+        mockRequest.mockImplementation(async (_pkg: string, message: string, ...args: any[]) => {
+            switch (message) {
+                case 'create-node': return 'node-uuid-1';
+                case 'query-node': return { uuid: { value: 'node-uuid-1' }, name: { value: 'X' }, __comps__: comps };
+                case 'create-component': added.push(args[0].component); return {};
+                default: return {};
+            }
+        });
+    }
+
+    it('skips a component the node already carries and adds the rest', async () => {
+        route([{ type: 'cc.UITransform' }]);
+        const result = await tool.execute('create', { name: 'X', components: ['cc.UITransform', 'cc.Sprite'] });
+        expect(result.success).toBe(true);
+        expect(added).toEqual(['cc.Sprite']);
+    });
+
+    it('still adds every component when none is present', async () => {
+        route([]);
+        await tool.execute('create', { name: 'X', components: ['cc.UITransform', 'cc.Sprite'] });
+        expect(added).toEqual(['cc.UITransform', 'cc.Sprite']);
+    });
+});
