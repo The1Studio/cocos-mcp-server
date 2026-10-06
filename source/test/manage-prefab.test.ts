@@ -200,6 +200,7 @@ describe('ManagePrefab', () => {
             mockRequest
                 .mockResolvedValueOnce(nodeDump)                                         // query-node
                 .mockResolvedValueOnce({ url: 'db://assets/Foo.prefab', file: tmpFile }) // query-asset-info
+                .mockResolvedValueOnce(nodeDump)                                         // query-node (root, foreign-instance guard)
                 .mockImplementationOnce(async () => {                                    // apply-prefab
                     fs.writeFileSync(tmpFile, JSON.stringify([{ __type__: 'cc.Prefab', v: 2 }]), 'utf-8');
                     const future = Date.now() + 5000;

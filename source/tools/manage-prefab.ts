@@ -454,7 +454,8 @@ export class ManagePrefab extends BaseActionTool {
         return {
             success: true,
             rootUuid: prefab.rootUuid || nodeUuid,
-            assetUuid: prefab.uuid || prefab.prefabStateInfo?.assetUuid
+            assetUuid: prefab.uuid || prefab.prefabStateInfo?.assetUuid,
+            nodeData
         };
     }
 
@@ -494,10 +495,25 @@ export class ManagePrefab extends BaseActionTool {
         try {
             const context = await this.resolvePrefabContext(nodeUuid);
             if (!context.success) return context;
-            const { rootUuid, assetUuid } = context;
+            const { rootUuid, assetUuid, nodeData } = context;
 
             const prefabPath = await this.resolvePrefabFilePath(assetUuid);
             const mtimeBefore = this.statMtimeMs(prefabPath);
+
+            // Refuse BEFORE the write: apply-prefab serializes everything under the resolved
+            // root, so a foreign instance nested in it would be absorbed into this asset (#120).
+            if (assetUuid) {
+                const foreign = await this.findForeignPrefabInstances(
+                    rootUuid, assetUuid, prefabPath, rootUuid === nodeUuid ? nodeData : undefined
+                );
+                if (foreign.length > 0) {
+                    return {
+                        success: false,
+                        error: `Refusing to apply ${rootUuid} to prefab ${assetUuid}: its subtree contains prefab instance(s) ${foreign.join(', ')} that the asset does not already reference. Applying would write their content into this prefab. Move those instances out from under the root (manage_node action=move) and retry.`,
+                        data: { nodeUuid, rootUuid, assetUuid, prefabPath, foreignPrefabAssets: foreign }
+                    };
+                }
+            }
 
             // `scene:apply-prefab` takes the instance root uuid as a POSITIONAL string
             // and resolves to a boolean. The old `{ node: uuid }` object form resolved
@@ -614,6 +630,59 @@ export class ManagePrefab extends BaseActionTool {
         }
     }
 
+    /** A `query-node` `children` entry is a uuid string or a property dump; return its uuid or ''. */
+    private childUuidOf(entry: any): string {
+        if (typeof entry === 'string') return entry;
+        if (entry && typeof entry === 'object') {
+            if (typeof entry.uuid === 'string') return entry.uuid;
+            if (entry.value && typeof entry.value.uuid === 'string') return entry.value.uuid;
+        }
+        return '';
+    }
+
+    /**
+     * Prefab asset uuids found in the live subtree under `rootUuid` that are neither the
+     * target `assetUuid` nor already referenced by the target asset file (#120 item 2).
+     *
+     * `apply-prefab` serializes the whole resolved root. When unrelated instances were nested
+     * under it (the old `instantiate` parenting bug, or a hand-built hierarchy), applying
+     * absorbed THEIR content into the target asset - 35 lines became 646, and a whole scene
+     * was written into a leaf prefab. A nested instance the asset already carries is
+     * legitimate and has its uuid in the file; an instance the file has never heard of is
+     * foreign. The walk fails closed on an unreadable asset file (nothing is "already
+     * carried") but not on an unqueryable node (it only sees what the editor will show).
+     */
+    private async findForeignPrefabInstances(
+        rootUuid: string,
+        assetUuid: string,
+        prefabPath: string | null,
+        rootDump?: any
+    ): Promise<string[]> {
+        let assetText = '';
+        if (prefabPath) {
+            try { assetText = fs.readFileSync(prefabPath, 'utf-8'); } catch { assetText = ''; }
+        }
+        const foreign = new Set<string>();
+        const visit = async (uuid: string, known?: any): Promise<void> => {
+            let nodeData = known;
+            if (!nodeData) {
+                try { nodeData = await Editor.Message.request('scene', 'query-node', uuid); } catch { return; }
+            }
+            if (!nodeData || typeof nodeData !== 'object') return;
+            const nestedAsset = nodeData.__prefab__?.uuid;
+            if (typeof nestedAsset === 'string' && nestedAsset && nestedAsset !== assetUuid && !assetText.includes(nestedAsset)) {
+                foreign.add(nestedAsset);
+            }
+            const children: any[] = Array.isArray(nodeData.children) ? nodeData.children : [];
+            for (const child of children) {
+                const childUuid = this.childUuidOf(child);
+                if (childUuid) await visit(childUuid);
+            }
+        };
+        await visit(rootUuid, rootDump);
+        return [...foreign];
+    }
+
     /**
      * Walk a live prefab-instance subtree and collect the `__prefab__.fileId` of every node.
      *
@@ -626,14 +695,6 @@ export class ManagePrefab extends BaseActionTool {
     private async collectInstanceFileIds(rootUuid: string): Promise<Set<string>> {
         const fileIds = new Set<string>();
         let complete = true;
-        const childUuidOf = (entry: any): string => {
-            if (typeof entry === 'string') return entry;
-            if (entry && typeof entry === 'object') {
-                if (typeof entry.uuid === 'string') return entry.uuid;
-                if (entry.value && typeof entry.value.uuid === 'string') return entry.value.uuid;
-            }
-            return '';
-        };
         const visit = async (uuid: string): Promise<void> => {
             if (!complete) return;
             if (!uuid) { complete = false; return; }
@@ -648,7 +709,7 @@ export class ManagePrefab extends BaseActionTool {
             if (typeof fileId !== 'string' || !fileId) { complete = false; return; }
             fileIds.add(fileId);
             const children: any[] = Array.isArray(nodeData.children) ? nodeData.children : [];
-            for (const child of children) await visit(childUuidOf(child));
+            for (const child of children) await visit(this.childUuidOf(child));
         };
         await visit(rootUuid);
         return complete ? fileIds : new Set<string>();
