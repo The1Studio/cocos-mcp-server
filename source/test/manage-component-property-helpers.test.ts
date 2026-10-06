@@ -1,4 +1,4 @@
-import { convertPropertyValue, ASSET_REFERENCE_PROPERTY_TYPES, SUPPORTED_PROPERTY_TYPES, verifyComponentPropertyChange } from '../tools/manage-component-property-helpers';
+import { analyzeProperty, convertPropertyValue, ASSET_REFERENCE_PROPERTY_TYPES, SUPPORTED_PROPERTY_TYPES, verifyComponentPropertyChange } from '../tools/manage-component-property-helpers';
 
 /**
  * Tests for convertPropertyValue's asset-reference coercion (issue #26).
@@ -237,5 +237,34 @@ describe('convertPropertyValue — string propertyType rejects non-primitive val
     it('hints that a JSON-encoded string is the supported shape for structured payloads', () => {
         const payload = { level: 1 };
         expect(convertPropertyValue('string', JSON.stringify(payload))).toBe('{"level":1}');
+    });
+});
+
+describe('analyzeProperty — append slot of an array (issue #68)', () => {
+    const comp = (arr: any[]) => ({
+        properties: { value: { priceLabels: { name: 'priceLabels', type: 'cc.Label', isArray: true, value: arr } } }
+    });
+
+    it('reports the append slot on an EMPTY array', () => {
+        const r = analyzeProperty(comp([]), 'priceLabels.0');
+        expect(r.exists).toBe(true);
+        expect(r.appendTo).toEqual({ arrayProperty: 'priceLabels', currentLength: 0 });
+    });
+
+    it('reports the append slot one past the end of a populated array', () => {
+        const r = analyzeProperty(comp([{ value: { uuid: 'a' }, type: 'cc.Label' }]), 'priceLabels.1');
+        expect(r.appendTo).toEqual({ arrayProperty: 'priceLabels', currentLength: 1 });
+    });
+
+    it('does not flag an existing index as an append', () => {
+        const r = analyzeProperty(comp([{ value: { uuid: 'a' }, type: 'cc.Label' }]), 'priceLabels.0');
+        expect(r.exists).toBe(true);
+        expect(r.appendTo).toBeUndefined();
+    });
+
+    it('rejects an index beyond the append slot and explains why', () => {
+        const r = analyzeProperty(comp([]), 'priceLabels.3');
+        expect(r.exists).toBe(false);
+        expect(r.notFoundHint).toMatch(/is an array with 0 element/);
     });
 });

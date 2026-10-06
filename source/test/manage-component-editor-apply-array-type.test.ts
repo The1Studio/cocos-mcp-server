@@ -41,11 +41,17 @@ describe('applyPropertyToEditor — nodeArray carries an explicit array dump (is
 
         expect(requestMock).toHaveBeenCalledTimes(1);
         const payload = requestMock.mock.calls[0][2];
+        // Issue #67: elements are full `{ value: { uuid }, type }` dumps and the element
+        // template carries a reference value — bare `{ uuid }` elements / a null template
+        // throw "reading 'hasOwnProperty'" in the editor for every array state.
         expect(payload.dump).toEqual({
-            value: processedValue,
+            value: [
+                { value: { uuid: 'node-a' }, type: 'cc.Node' },
+                { value: { uuid: 'node-b' }, type: 'cc.Node' }
+            ],
             type: 'cc.Node',
             isArray: true,
-            elementTypeData: { value: null, type: 'cc.Node' }
+            elementTypeData: { value: { uuid: '' }, type: 'cc.Node' }
         });
     });
 
@@ -56,7 +62,7 @@ describe('applyPropertyToEditor — nodeArray carries an explicit array dump (is
         );
 
         const payload = requestMock.mock.calls[0][2];
-        expect(payload.dump).toEqual({ value: [], type: 'cc.Node', isArray: true, elementTypeData: { value: null, type: 'cc.Node' } });
+        expect(payload.dump).toEqual({ value: [], type: 'cc.Node', isArray: true, elementTypeData: { value: { uuid: '' }, type: 'cc.Node' } });
     });
 });
 
@@ -96,9 +102,13 @@ describe('applyPropertyToEditor — componentArray (new propertyType, issue #18)
         const setCalls = requestMock.mock.calls.filter((c: any[]) => c[1] === 'set-property');
         expect(setCalls.length).toBe(1);
         expect(setCalls[0][2].dump).toEqual({
-            value: [{ uuid: 'comp-id-1' }, { uuid: 'comp-id-2' }],
+            value: [
+                { value: { uuid: 'comp-id-1' }, type: 'WaypointMarker' },
+                { value: { uuid: 'comp-id-2' }, type: 'WaypointMarker' }
+            ],
+            type: 'WaypointMarker',
             isArray: true,
-            elementTypeData: { value: null, type: 'WaypointMarker' }
+            elementTypeData: { value: { uuid: '' }, type: 'WaypointMarker' }
         });
         expect(result).toEqual([{ uuid: 'comp-id-1' }, { uuid: 'comp-id-2' }]);
     });
@@ -114,7 +124,7 @@ describe('applyPropertyToEditor — componentArray (new propertyType, issue #18)
         expect(getComponentInfo).not.toHaveBeenCalled();
         expect(requestMock).toHaveBeenCalledTimes(1);
         const payload = requestMock.mock.calls[0][2];
-        expect(payload.dump).toEqual({ value: [], isArray: true, elementTypeData: { value: null, type: 'cc.Component' } });
+        expect(payload.dump).toEqual({ value: [], isArray: true, elementTypeData: { value: { uuid: '' }, type: 'cc.Component' } });
         expect(result).toEqual([]);
     });
 

@@ -111,7 +111,9 @@ export function describeUnhandledPropertyType(propertyType: string, processedVal
             `call would report a write it did not perform (issue #66). An array of assets/uuids/colors ` +
             `wants propertyType 'assetArray', 'nodeArray', 'componentArray' or 'colorArray'; an array of ` +
             `plain value objects with NO uuid semantics (cc.RealCurve keyFrames, cc.Gradient alphaKeys) ` +
-            `has no supported propertyType yet. Nothing was written.`
+            `has no whole-array propertyType yet: write it element by element with dotted paths instead ` +
+            `('keyFrames.0.time', 'keyFrames.0.value' — an index one past the end appends a new element). ` +
+            `Nothing was written.`
         );
     }
 
@@ -138,6 +140,18 @@ export async function applyPropertyToEditor(
     // fall through to the terminal `else`: there it produces a dump with no `type`, the
     // editor decodes nothing, and the caller is told the write succeeded (issue #66).
     const unhandledWarning = describeUnhandledPropertyType(propertyType, processedValue);
+
+    // Issue #72: `_materials` / `_mesh`-style serialized BACKING fields are not the public
+    // accessor. Writing a single `{ uuid }` asset dump into the array-typed `_materials`
+    // field reported success while removing BOTH `mesh` and the materials from the
+    // component. Refuse it and name the public accessor instead.
+    if (property === '_materials' && (ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType)) {
+        throw new Error(
+            `'${property}' is the serialized backing array, not a writable material slot — a single-asset ` +
+            `write to it corrupts the component. Write 'sharedMaterials' with propertyType 'assetArray', ` +
+            `or 'sharedMaterials.<index>' with propertyType 'material'. Nothing was written.`
+        );
+    }
 
     // EVERY asset-reference propertyType must land here. Falling through to the terminal `else`
     // sends a dump with no `type` field — the same shape that makes the nodeArray path fail
@@ -236,7 +250,16 @@ export async function applyPropertyToEditor(
         // `type` field (see the asset-reference branch above).
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid, path: propertyPath,
-            dump: { value: processedValue, type: 'cc.Node', isArray: true, elementTypeData: { value: null, type: 'cc.Node' } }
+            // Issue #67: every element must itself be a full dump `{ value: { uuid }, type }`
+            // (the shape query-node returns) and `elementTypeData.value` must be a reference
+            // dump, not `null` — a bare `{ uuid }` element or a null element template makes the
+            // editor throw "Cannot read properties of undefined (reading 'hasOwnProperty')"
+            // for EVERY array state, exactly as assetArray did before it shipped element dumps.
+            dump: {
+                value: processedValue.map((ref: any) => ({ value: ref, type: 'cc.Node' })),
+                type: 'cc.Node', isArray: true,
+                elementTypeData: { value: { uuid: '' }, type: 'cc.Node' }
+            }
         });
 
     } else if (propertyType === 'assetArray' && Array.isArray(processedValue)) {
@@ -568,7 +591,7 @@ async function applyComponentReferenceArray(
     if (targetNodeUuids.length === 0) {
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid, path: propertyPath,
-            dump: { value: [], isArray: true, elementTypeData: { value: null, type: 'cc.Component' } }
+            dump: { value: [], isArray: true, elementTypeData: { value: { uuid: '' }, type: 'cc.Component' } }
         });
         return [];
     }
@@ -588,7 +611,12 @@ async function applyComponentReferenceArray(
 
     await Editor.Message.request('scene', 'set-property', {
         uuid: nodeUuid, path: propertyPath,
-        dump: { value: resolvedRefs, isArray: true, elementTypeData: { value: null, type: elementType } }
+        // Issue #67: typed element dumps + a reference element template, as for nodeArray.
+        dump: {
+            value: resolvedRefs.map(ref => ({ value: ref, type: elementType })),
+            type: elementType, isArray: true,
+            elementTypeData: { value: { uuid: '' }, type: elementType }
+        }
     });
 
     return resolvedRefs;
