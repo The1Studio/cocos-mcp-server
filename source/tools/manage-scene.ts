@@ -31,6 +31,11 @@ export class ManageScene extends BaseActionTool {
                 type: 'string',
                 description: '[open] Scene file path (e.g., db://assets/scenes/Main.scene)'
             },
+            reimport: {
+                type: 'boolean',
+                description: '[open] Reimport the scene asset first so out-of-band edits to the .scene file are read from disk (default true). false = open the editor\'s cached copy.',
+                default: true
+            },
             sceneName: {
                 type: 'string',
                 description: '[create] Name of the new scene'
@@ -55,7 +60,7 @@ export class ManageScene extends BaseActionTool {
     protected actionHandlers: Record<string, (args: Record<string, any>) => Promise<ActionToolResult>> = {
         get_current: (args) => this.getCurrentScene(),
         list: (args) => this.getSceneList(),
-        open: (args) => this.openScene(args.scenePath),
+        open: (args) => this.openScene(args.scenePath, coerceBool(args.reimport) !== false),
         save: (args) => this.saveScene(),
         create: (args) => this.createScene(args.sceneName, args.savePath),
         save_as: (args) => this.saveSceneAs(args.path),
@@ -113,22 +118,46 @@ export class ManageScene extends BaseActionTool {
         });
     }
 
-    private async openScene(scenePath: string): Promise<ActionToolResult> {
+    /**
+     * `scene:open-scene` serves the editor's CACHED copy of a scene asset: after the `.scene`
+     * file is edited out of band it resolves successfully while the editor keeps showing the
+     * old content, and the next editor-driven save silently overwrites the disk edit (#65,
+     * live-confirmed — only `manage_asset reimport` forced a re-read). Open therefore
+     * reimports the scene asset first so the editor reads the file as it is on disk, and
+     * reports that it did. `reimport: false` opts out (keeps the editor's in-memory copy).
+     */
+    private async openScene(scenePath: string, reimport: boolean = true): Promise<ActionToolResult> {
         if (!scenePath) {
             return errorResult('scenePath is required for action=open');
         }
-        return new Promise((resolve) => {
-            Editor.Message.request('asset-db', 'query-uuid', scenePath).then((uuid: string | null) => {
-                if (!uuid) {
-                    throw new Error('Scene not found');
+        try {
+            const uuid: string | null = await Editor.Message.request('asset-db', 'query-uuid', scenePath);
+            if (!uuid) {
+                return errorResult('Scene not found');
+            }
+            if (reimport) {
+                const reimported = await (Editor.Message.request as any)('asset-db', 'reimport-asset', scenePath);
+                if (reimported === false) {
+                    return errorResult(
+                        `asset-db:reimport-asset returned false for '${scenePath}' — the editor rejected the reimport, ` +
+                        'so the scene would be opened from its cached copy. Nothing was opened. Pass reimport=false to open the cached copy deliberately.'
+                    );
                 }
-                return Editor.Message.request('scene', 'open-scene', uuid);
-            }).then(() => {
-                resolve(successResult(null, `Scene opened: ${scenePath}`));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+            }
+            await Editor.Message.request('scene', 'open-scene', uuid);
+            const ready = await Editor.Message.request('scene', 'query-is-ready').catch(() => undefined);
+            if (ready === false) {
+                return errorResult(`open-scene resolved for '${scenePath}' but the scene is not ready afterward — it did not finish loading.`);
+            }
+            return successResult(
+                { reimported: reimport },
+                reimport
+                    ? `Scene opened: ${scenePath} (asset reimported first, so the editor read the file from disk)`
+                    : `Scene opened: ${scenePath} (from the editor's cached copy — out-of-band disk edits are NOT picked up)`
+            );
+        } catch (err: any) {
+            return errorResult(err.message);
+        }
     }
 
     /**
