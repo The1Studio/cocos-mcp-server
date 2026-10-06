@@ -519,7 +519,18 @@ export class ManageComponent extends BaseActionTool {
             }
 
             if (!propertyInfo.exists) {
-                return { success: false, error: `Property '${property}' not found on component '${componentType}'. Available properties: ${propertyInfo.availableProperties.join(', ')}` };
+                return { success: false, error: `Property '${property}' not found on component '${componentType}'. Available properties: ${propertyInfo.availableProperties.join(', ')}${propertyInfo.notFoundHint ? `. ${propertyInfo.notFoundHint}` : ''}` };
+            }
+
+            // Issue #68: the index is one past the end of the array, so the element does not
+            // exist yet. The editor's set-property rejects an unknown index, so grow the array
+            // by one first (`<array>.length`), then fall through to the normal typed write.
+            if (propertyInfo.appendTo) {
+                const { arrayProperty, currentLength } = propertyInfo.appendTo;
+                await Editor.Message.request('scene', 'set-property', {
+                    uuid: nodeUuid, path: `__comps__.${rawComponentIndex}.${arrayProperty}.length`,
+                    dump: { value: currentLength + 1 }
+                });
             }
 
             // Convert value based on explicit propertyType.

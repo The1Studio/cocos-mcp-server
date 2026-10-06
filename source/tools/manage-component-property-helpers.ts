@@ -52,6 +52,14 @@ export interface PropertyAnalysisResult {
     type: string;
     availableProperties: string[];
     originalValue: any;
+    /**
+     * Set when the requested dotted path indexes ONE PAST the end of an existing array
+     * (`priceLabels.0` on an empty array, `slots.3` on a 3-element one — issue #68). The
+     * element does not exist yet, so the editor must grow the array before it can be written.
+     */
+    appendTo?: { arrayProperty: string; currentLength: number };
+    /** Why a not-found lookup failed when the cause is more specific than "no such name". */
+    notFoundHint?: string;
 }
 
 /** Returns true if propData looks like a Cocos Creator property descriptor object */
@@ -89,6 +97,7 @@ export function analyzeProperty(component: any, propertyName: string): PropertyA
     const availableProperties: string[] = [];
     let propertyValue: any = undefined;
     let propertyExists = false;
+    let notFoundHint: string | undefined;
 
     // Method 1: direct property access (flat path only)
     if (!propertyName.includes('.') && Object.prototype.hasOwnProperty.call(component, propertyName)) {
@@ -122,6 +131,19 @@ export function analyzeProperty(component: any, propertyName: string): PropertyA
 
             const descriptor = cursor ? cursor[segment] : undefined;
             if (descriptor === undefined) {
+                // Issue #68: an index past the end of an array. `length` itself is the append
+                // slot; anything further out is a genuine gap the caller must fill in order.
+                if (Array.isArray(cursor) && /^\d+$/.test(segment)) {
+                    const arrayProperty = segments.slice(0, i).join('.');
+                    if (isLeaf && Number(segment) === cursor.length) {
+                        return {
+                            exists: true, type: 'unknown', availableProperties, originalValue: undefined,
+                            appendTo: { arrayProperty, currentLength: cursor.length }
+                        };
+                    }
+                    notFoundHint = `'${arrayProperty}' is an array with ${cursor.length} element(s); index ${segment} is out of range. ` +
+                        `Write index ${cursor.length} first (it appends), or set the whole array with an array propertyType.`;
+                }
                 cursor = undefined;
                 break;
             }
@@ -159,7 +181,7 @@ export function analyzeProperty(component: any, propertyName: string): PropertyA
     }
 
     if (!propertyExists) {
-        return { exists: false, type: 'unknown', availableProperties, originalValue: undefined };
+        return { exists: false, type: 'unknown', availableProperties, originalValue: undefined, notFoundHint };
     }
 
     // Infer type from value structure
@@ -305,6 +327,15 @@ export function convertPropertyValue(propertyType: string, value: any): any {
 
     if ((ASSET_REFERENCE_PROPERTY_TYPES as readonly string[]).includes(propertyType)) {
         if (typeof value === 'string') return { uuid: value };
+        // Issue #72: a whole-array write (`sharedMaterials: [uuid, ...]`) is the form callers
+        // reach for first; name the propertyType that carries it instead of a bare type error.
+        if (Array.isArray(value)) {
+            throw new Error(
+                `${propertyType} value must be a single string UUID, but an array was received. ` +
+                `To write an array of assets (e.g. cc.MeshRenderer.sharedMaterials) use propertyType 'assetArray', ` +
+                `or write one element at a time with a dotted index ('sharedMaterials.0', which appends at the end of the array).`
+            );
+        }
         throw new Error(`${propertyType} value must be a string UUID (received typeof ${typeof value})`);
     }
     switch (propertyType) {

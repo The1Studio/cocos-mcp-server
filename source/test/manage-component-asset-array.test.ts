@@ -140,3 +140,31 @@ describe('verifyComponentPropertyChange — asset array read-back', () => {
         expect(result.verified).toBe(false);
     });
 });
+
+describe('issue #72 — fresh MeshRenderer.sharedMaterials', () => {
+    it('names assetArray when a single-asset propertyType receives an array', () => {
+        expect(() => convertPropertyValue('material', ['m-1'])).toThrow(/use propertyType 'assetArray'/);
+    });
+
+    it('refuses a single-asset write to the serialized _materials backing field', async () => {
+        await expect(applyPropertyToEditor(
+            {
+                ...baseArgs, propertyPath: '__comps__.0._materials', componentType: 'cc.MeshRenderer',
+                property: '_materials', propertyType: 'material', value: 'm-1', processedValue: { uuid: 'm-1' }
+            },
+            getComponentInfo
+        )).rejects.toThrow(/serialized backing array/);
+        expect(requestMock).not.toHaveBeenCalled();
+    });
+
+    it('still allows an indexed material write to the public accessor', async () => {
+        await applyPropertyToEditor(
+            {
+                ...baseArgs, propertyPath: '__comps__.0.sharedMaterials.0', componentType: 'cc.MeshRenderer',
+                property: 'sharedMaterials.0', propertyType: 'material', value: 'm-1', processedValue: { uuid: 'm-1' }
+            },
+            getComponentInfo
+        );
+        expect(requestMock).toHaveBeenCalledTimes(1);
+    });
+});
