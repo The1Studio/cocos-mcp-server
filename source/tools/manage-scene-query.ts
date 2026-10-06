@@ -78,14 +78,27 @@ export class ManageSceneQuery extends BaseActionTool {
         });
     }
 
+    /**
+     * `scene:soft-reload` resets the open scene's in-memory runtime state; it does NOT re-read
+     * the `.scene` file (#65 — callers expected a disk re-read and got the cached copy back,
+     * then overwrote their own out-of-band edit on the next save). It is reported as exactly
+     * that, and a scene that is not ready afterward is a failure. To pick up edits made to
+     * the file on disk, use `manage_scene action=open` (it reimports the asset first).
+     */
     private async softReload(): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'soft-reload').then(() => {
-                resolve(successResult(null, 'Scene soft reloaded successfully'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('scene', 'soft-reload');
+            const ready = await Editor.Message.request('scene', 'query-is-ready').catch(() => undefined);
+            if (ready === false) {
+                return errorResult('soft-reload resolved but the scene is not ready afterward — it did not finish reloading.');
+            }
+            return successResult(
+                { rereadFromDisk: false },
+                'Scene soft reloaded (in-memory only; the .scene file was NOT re-read — use manage_scene action=open to load out-of-band disk edits)'
+            );
+        } catch (err: any) {
+            return errorResult(err.message);
+        }
     }
 
     private async queryReady(): Promise<ActionToolResult> {
