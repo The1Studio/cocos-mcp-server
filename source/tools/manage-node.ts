@@ -281,7 +281,16 @@ export class ManageNode extends BaseActionTool {
             if (args.components && args.components.length > 0 && uuid) {
                 try {
                     await this.awaitNodeCommit(uuid);
+                    // `create-node` was already handed `components`, and the editor auto-adds
+                    // some on creation (UITransform on a UI-layer node), so re-adding blindly
+                    // logs "already contains <Component>" for a correct create (#136). Skip
+                    // what the node already carries; an unreadable node falls back to adding all.
+                    const present = await this.queryComponentTypes(uuid);
                     for (const componentType of args.components) {
+                        if (present.has(componentType)) {
+                            console.log(`Component ${componentType} already present, skipping duplicate add`);
+                            continue;
+                        }
                         try {
                             await Editor.Message.request('scene', 'create-component', {
                                 uuid,
@@ -358,6 +367,21 @@ export class ManageNode extends BaseActionTool {
         } catch (err: any) {
             return errorResult(`Failed to create node: ${err.message}. Args: ${JSON.stringify(args)}`);
         }
+    }
+
+    /** Component type names currently on a node, or an empty set when the node cannot be read. */
+    private async queryComponentTypes(uuid: string): Promise<Set<string>> {
+        const types = new Set<string>();
+        try {
+            const dump: any = await Editor.Message.request('scene', 'query-node', uuid);
+            for (const comp of (dump?.__comps__ || [])) {
+                const type = comp?.type ?? comp?.__type__;
+                if (typeof type === 'string') types.add(type);
+            }
+        } catch {
+            // fall through: caller adds every requested component, as before
+        }
+        return types;
     }
 
     /**
