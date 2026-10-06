@@ -13,17 +13,26 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
 }
 
 /**
- * Resolve a caller-supplied fog type — a bare enum name ("LINEAR"), a
- * "FogType.LINEAR" form, a number, or a numeric string — into the numeric
- * value cc.FogInfo.FogType expects. Returns undefined when unrecognized so
- * the caller can reject it instead of writing a raw string onto fog.type.
+ * Resolve a caller-supplied enum value — a bare member name ("LINEAR"), a
+ * "EnumName.LINEAR" form, a number, or a numeric string — into the numeric
+ * value the given cc enum object expects. Returns undefined when the value
+ * cannot be resolved to one of the enum's own members, so the caller can
+ * reject it (out-of-range included) instead of writing a raw/invalid value
+ * onto a scene property whose macro derives from it (e.g. CC_USE_FOG).
  */
-function resolveFogType(value: string | number, fogTypeEnum: Record<string, number>): number | undefined {
-    if (typeof value === 'number') return value;
+function resolveEnumType(value: string | number, enumObj: Record<string, number>): number | undefined {
+    const validValues = Object.values(enumObj);
+    if (typeof value === 'number') return validValues.includes(value) ? value : undefined;
     const trimmed = String(value).trim();
-    if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
-    const name = trimmed.replace(/^FogType\./i, '').toUpperCase();
-    return name in fogTypeEnum ? fogTypeEnum[name] : undefined;
+    if (/^\d+$/.test(trimmed)) {
+        const num = parseInt(trimmed, 10);
+        return validValues.includes(num) ? num : undefined;
+    }
+    // Case-insensitive member lookup: cc enum key casing is inconsistent
+    // across enums (FogType.LINEAR is upper-case, ShadowType.ShadowMap is not).
+    const bare = trimmed.replace(/^\w+\./i, '').toLowerCase();
+    const key = Object.keys(enumObj).find((k) => k.toLowerCase() === bare);
+    return key !== undefined ? enumObj[key] : undefined;
 }
 
 export const methods: { [key: string]: (...any: any) => any } = {
@@ -1817,7 +1826,7 @@ export const methods: { [key: string]: (...any: any) => any } = {
             const skybox = scene && scene.globals && scene.globals.skybox;
             return {
                 success: true, data: {
-                    shadows: shadows ? { enabled: shadows.enabled, type: shadows.type, shadowMapSize: shadows.mapSize } : null,
+                    shadows: shadows ? { enabled: shadows.enabled, type: shadows.type, shadowMapSize: shadows.shadowMapSize } : null,
                     fog: fog ? { enabled: fog.enabled, type: fog.type, fogStart: fog.fogStart, fogEnd: fog.fogEnd, fogDensity: fog.fogDensity } : null,
                     skybox: skybox ? { enabled: skybox.enabled, useHDR: skybox.useHDR, rotationAngle: skybox.rotationAngle } : null,
                     ambient: env ? { skyColor: env.skyColor, groundAlbedo: env.groundAlbedo } : null,
@@ -1826,37 +1835,48 @@ export const methods: { [key: string]: (...any: any) => any } = {
         } catch (error: any) { return { success: false, error: error.message }; }
     },
 
-    setShadowSettings(enabled: boolean | undefined, type: string | undefined, shadowMapSize: number | undefined) {
+    setShadowSettings(enabled: boolean | undefined, type: string | number | undefined, shadowMapSize: number | undefined) {
         try {
-            const { director } = require('cc');
+            const { director, ShadowType } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
             const shadows = scene.globals && scene.globals.shadows;
             if (!shadows) return { success: false, error: 'Shadow globals not available — 3D scene required' };
-            if (enabled !== undefined) shadows.enabled = enabled;
-            if (type !== undefined) shadows.type = type;
-            if (shadowMapSize !== undefined) shadows.mapSize = shadowMapSize;
-            return { success: true, data: { enabled: shadows.enabled, type: shadows.type, mapSize: shadows.mapSize } };
+            // `!= null` (not `!== undefined`): the editor IPC serializes an
+            // omitted arg to `null`, not `undefined` — see setFogSettings.
+            if (enabled != null) shadows.enabled = enabled;
+            if (type != null) {
+                const resolvedType = resolveEnumType(type, ShadowType);
+                if (resolvedType === undefined) return { success: false, error: `Unknown shadow type: ${type} — expected ShadowType.Planar or ShadowType.ShadowMap` };
+                shadows.type = resolvedType;
+            }
+            if (shadowMapSize != null) shadows.shadowMapSize = shadowMapSize;
+            return { success: true, data: { enabled: shadows.enabled, type: shadows.type, shadowMapSize: shadows.shadowMapSize } };
         } catch (error: any) { return { success: false, error: error.message }; }
     },
 
-    setFogSettings(enabled: boolean | undefined, fogColor: string | undefined, type: string | undefined, fogStart: number | undefined, fogEnd: number | undefined, fogDensity: number | undefined) {
+    setFogSettings(enabled: boolean | undefined, fogColor: string | undefined, type: string | number | undefined, fogStart: number | undefined, fogEnd: number | undefined, fogDensity: number | undefined) {
         try {
             const { director, Color, FogInfo } = require('cc');
             const scene = director.getScene();
             if (!scene) return { success: false, error: 'No active scene' };
             const fog = scene.globals && scene.globals.fog;
             if (!fog) return { success: false, error: 'Fog globals not available — 3D scene required' };
-            if (enabled !== undefined) fog.enabled = enabled;
-            if (type !== undefined) {
-                const resolvedType = resolveFogType(type, FogInfo.FogType);
-                if (resolvedType === undefined) return { success: false, error: `Unknown fog type: ${type}` };
+            // `!= null` (not `!== undefined`): the editor IPC serializes an
+            // omitted arg to `null`. Under the old `!== undefined` guard a
+            // caller that omitted `type` wrote `fog.type = null`, which
+            // poisoned the process-wide CC_USE_FOG macro and crashed every
+            // later scene open until the editor restarted.
+            if (enabled != null) fog.enabled = enabled;
+            if (type != null) {
+                const resolvedType = resolveEnumType(type, FogInfo.FogType);
+                if (resolvedType === undefined) return { success: false, error: `Unknown fog type: ${type} — expected FogType.LINEAR/EXP/EXP_SQUARED/LAYERED` };
                 fog.type = resolvedType;
             }
-            if (fogStart !== undefined) fog.fogStart = fogStart;
-            if (fogEnd !== undefined) fog.fogEnd = fogEnd;
-            if (fogDensity !== undefined) fog.fogDensity = fogDensity;
-            if (fogColor !== undefined) {
+            if (fogStart != null) fog.fogStart = fogStart;
+            if (fogEnd != null) fog.fogEnd = fogEnd;
+            if (fogDensity != null) fog.fogDensity = fogDensity;
+            if (fogColor != null) {
                 const { r, g, b } = hexToRgb(fogColor);
                 fog.fogColor = new Color(r, g, b, 255);
             }
@@ -1871,15 +1891,15 @@ export const methods: { [key: string]: (...any: any) => any } = {
             if (!scene) return { success: false, error: 'No active scene' };
             const env = scene.globals && scene.globals.environment;
             if (!env) return { success: false, error: 'Ambient/environment globals not available — 3D scene required' };
-            if (skyColor !== undefined) {
+            if (skyColor != null) {
                 const { r, g, b } = hexToRgb(skyColor);
                 env.skyColor = Vec4.fromColor(new Vec4(), new Color(r, g, b, 255));
             }
-            if (groundAlbedo !== undefined) {
+            if (groundAlbedo != null) {
                 const { r, g, b } = hexToRgb(groundAlbedo);
                 env.groundAlbedo = Vec4.fromColor(new Vec4(), new Color(r, g, b, 255));
             }
-            if (skyIllum !== undefined) env.skyIllum = skyIllum;
+            if (skyIllum != null) env.skyIllum = skyIllum;
             return { success: true, data: { skyColor: env.skyColor, groundAlbedo: env.groundAlbedo, skyIllum: env.skyIllum } };
         } catch (error: any) { return { success: false, error: error.message }; }
     },
@@ -1891,9 +1911,9 @@ export const methods: { [key: string]: (...any: any) => any } = {
             if (!scene) return { success: false, error: 'No active scene' };
             const skybox = scene.globals && scene.globals.skybox;
             if (!skybox) return { success: false, error: 'Skybox globals not available — 3D scene required' };
-            if (enabled !== undefined) skybox.enabled = enabled;
-            if (useHDR !== undefined) skybox.useHDR = useHDR;
-            if (rotationAngle !== undefined) skybox.rotationAngle = rotationAngle;
+            if (enabled != null) skybox.enabled = enabled;
+            if (useHDR != null) skybox.useHDR = useHDR;
+            if (rotationAngle != null) skybox.rotationAngle = rotationAngle;
             return { success: true, data: { enabled: skybox.enabled, useHDR: skybox.useHDR, rotationAngle: skybox.rotationAngle } };
         } catch (error: any) { return { success: false, error: error.message }; }
     },
@@ -1905,11 +1925,11 @@ export const methods: { [key: string]: (...any: any) => any } = {
             if (!pipeline) return { success: false, error: 'No render pipeline — 3D scene required' };
             const pp = pipeline.postProcess || (pipeline.getPostProcess && pipeline.getPostProcess());
             if (!pp) return { success: false, error: 'PostProcess not available on this pipeline' };
-            if (bloom !== undefined && pp.bloom) {
-                if (bloom.enabled !== undefined) pp.bloom.enabled = bloom.enabled;
-                if (bloom.intensity !== undefined) pp.bloom.intensity = bloom.intensity;
+            if (bloom != null && pp.bloom) {
+                if (bloom.enabled != null) pp.bloom.enabled = bloom.enabled;
+                if (bloom.intensity != null) pp.bloom.intensity = bloom.intensity;
             }
-            if (tonemap !== undefined && pp.colorGrading) {
+            if (tonemap != null && pp.colorGrading) {
                 pp.colorGrading.tonemapMode = tonemap;
             }
             return { success: true, data: { bloom: pp.bloom ? { enabled: pp.bloom.enabled, intensity: pp.bloom.intensity } : null, tonemap } };

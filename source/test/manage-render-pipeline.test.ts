@@ -70,6 +70,19 @@ describe('ManageRenderPipeline', () => {
                 args: [false, undefined, undefined]
             }));
         });
+
+        it('surfaces a scene-rejected out-of-range shadow type as a top-level error', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce({
+                success: false,
+                error: 'Unknown shadow type: 5 — expected ShadowType.Planar or ShadowType.ShadowMap'
+            });
+
+            const result = await tool.execute('set_shadow', { type: 5 });
+            expect(result.success).toBe(false);
+            expect(result.isError).toBe(true);
+            expect(result.error).toMatch(/Unknown shadow type/);
+        });
     });
 
     describe('set_fog action', () => {
@@ -90,6 +103,30 @@ describe('ManageRenderPipeline', () => {
                 method: 'setFogSettings',
                 args: [true, '#CCCCCC', 'LINEAR', 1, 100, 0.5]
             }));
+        });
+
+        it('handles undefined optional params', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce({});
+
+            const result = await tool.execute('set_fog', { enabled: false });
+            expect(result.success).toBe(true);
+            expect(mockRequest).toHaveBeenCalledWith('scene', 'execute-scene-script', expect.objectContaining({
+                args: [false, undefined, undefined, undefined, undefined, undefined]
+            }));
+        });
+
+        it('surfaces a scene-rejected out-of-range fog type as a top-level error', async () => {
+            const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+            mockRequest.mockResolvedValueOnce({
+                success: false,
+                error: 'Unknown fog type: 99 — expected FogType.LINEAR/EXP/EXP_SQUARED/LAYERED'
+            });
+
+            const result = await tool.execute('set_fog', { type: 99 });
+            expect(result.success).toBe(false);
+            expect(result.isError).toBe(true);
+            expect(result.error).toMatch(/Unknown fog type/);
         });
     });
 
