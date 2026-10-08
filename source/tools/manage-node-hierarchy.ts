@@ -27,7 +27,10 @@ export class ManageNodeHierarchy extends BaseActionTool {
             },
             uuid: { type: 'string', description: 'Node or component UUID' },
             path: { type: 'string', description: 'Property or array path (e.g., position, __comps__)' },
-            target: { type: 'number', description: 'Target item original index (move_array_element) or target parent UUID (paste)' },
+            target: {
+                oneOf: [{ type: 'number' }, { type: 'string' }],
+                description: 'Target item original index as a number (move_array_element) or target parent node UUID as a string (paste)'
+            },
             offset: { type: 'number', description: 'Offset amount, positive or negative (move_array_element)' },
             index: { type: 'number', description: 'Index to remove (remove_array_element)' },
             uuids: {
@@ -56,14 +59,28 @@ export class ManageNodeHierarchy extends BaseActionTool {
             }
             return this.removeArrayElement(args.uuid, args.path, index);
         },
-        copy: (args) => this.copyNode(normalizeStringArray(args.uuids)!),
-        paste: (args) => this.pasteNode(args.target, normalizeStringArray(args.uuids)!, coerceBool(args.keepWorldTransform) ?? false),
-        cut: (args) => this.cutNode(normalizeStringArray(args.uuids)!),
+        copy: (args) => this.withUuids('copy', args, (uuids) => this.copyNode(uuids)),
+        paste: (args) => this.withUuids('paste', args, (uuids) =>
+            this.pasteNode(args.target, uuids, coerceBool(args.keepWorldTransform) ?? false)),
+        cut: (args) => this.withUuids('cut', args, (uuids) => this.cutNode(uuids)),
         reset_transform: (args) => this.resetTransform(args.uuid),
         reset_component: (args) => this.resetComponent(args.uuid),
         restore_prefab: (args) => this.restorePrefab(args.nodeUuid, args.assetUuid),
         execute_method: (args) => this.executeMethod(args.uuid, args.name, args.args),
     };
+
+    /** Reject missing/empty `uuids` up front: forwarding it makes the editor act on nothing (#149). */
+    private withUuids(
+        action: string,
+        args: Record<string, any>,
+        run: (uuids: string[]) => Promise<ActionToolResult>
+    ): Promise<ActionToolResult> {
+        const uuids = normalizeStringArray(args.uuids);
+        if (!uuids || uuids.length === 0) {
+            return Promise.resolve(errorResult(`${action} requires 'uuids': a node UUID or a non-empty array of node UUIDs`));
+        }
+        return run(uuids);
+    }
 
     private async resetProperty(uuid: string, path: string): Promise<ActionToolResult> {
         return new Promise((resolve) => {
@@ -128,13 +145,22 @@ export class ManageNodeHierarchy extends BaseActionTool {
     }
 
     private async pasteNode(target: string, uuids: string[], keepWorldTransform: boolean): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'paste-node', { target, uuids, keepWorldTransform }).then((result: string | string[]) => {
-                resolve(successResult({ newUuids: result }, 'Node(s) pasted successfully'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            const result: string | string[] = await Editor.Message.request('scene', 'paste-node', { target, uuids, keepWorldTransform });
+            const newUuids = normalizeStringArray(result) ?? [];
+            if (newUuids.length === 0) {
+                return errorResult('Editor reported success for paste-node but created no nodes.');
+            }
+            for (const newUuid of newUuids) {
+                const node = await Editor.Message.request('scene', 'query-node', newUuid);
+                if (!node) {
+                    return errorResult(`paste-node returned ${newUuid}, but no such node exists in the scene.`);
+                }
+            }
+            return successResult({ newUuids }, 'Node(s) pasted successfully');
+        } catch (err: any) {
+            return errorResult(err.message);
+        }
     }
 
     private async cutNode(uuids: string[]): Promise<ActionToolResult> {
