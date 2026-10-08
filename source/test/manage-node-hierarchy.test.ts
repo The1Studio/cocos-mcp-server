@@ -112,6 +112,67 @@ describe('ManageNodeHierarchy', () => {
         });
     });
 
+    describe('paste / copy / cut uuids guard (#149)', () => {
+        const getRequest = () => (global as any).Editor.Message.request as jest.Mock;
+
+        it.each([
+            ['absent', {}],
+            ['empty array', { uuids: [] }],
+            ['empty string', { uuids: '' }],
+        ])('paste rejects %s uuids without dispatching to the editor', async (_label, extra) => {
+            const result = await tool.execute('paste', { target: 'parent-uuid', ...extra });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/uuids/i);
+            expect(getRequest()).not.toHaveBeenCalled();
+        });
+
+        it.each(['copy', 'cut'])('%s rejects absent uuids without dispatching to the editor', async (action) => {
+            const result = await tool.execute(action, {});
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/uuids/i);
+            expect(getRequest()).not.toHaveBeenCalled();
+        });
+
+        it('paste forwards a string target and the normalized uuids', async () => {
+            getRequest().mockImplementation(async (_mod: string, msg: string) =>
+                msg === 'paste-node' ? ['new-1'] : { uuid: 'new-1' });
+
+            const result = await tool.execute('paste', { target: 'parent-uuid', uuids: 'src-1' });
+
+            expect(getRequest()).toHaveBeenCalledWith('scene', 'paste-node', {
+                target: 'parent-uuid', uuids: ['src-1'], keepWorldTransform: false,
+            });
+            expect(result.success).toBe(true);
+            expect((result.data as any).newUuids).toEqual(['new-1']);
+        });
+
+        it('paste reports failure when the editor creates no nodes', async () => {
+            getRequest().mockResolvedValue([]);
+
+            const result = await tool.execute('paste', { target: 'p', uuids: ['src-1'] });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/no nodes/i);
+        });
+
+        it('paste reports failure when a returned uuid does not resolve to a node', async () => {
+            getRequest().mockImplementation(async (_mod: string, msg: string) =>
+                msg === 'paste-node' ? ['ghost-1'] : null);
+
+            const result = await tool.execute('paste', { target: 'p', uuids: ['src-1'] });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/ghost-1/);
+        });
+
+        it('declares target as a string-or-number schema (parent UUID for paste)', () => {
+            const types = ((tool.inputSchema.properties as any).target.oneOf as any[]).map((t) => t.type);
+            expect(types).toEqual(expect.arrayContaining(['string', 'number']));
+        });
+    });
+
     describe('error propagation (unchanged behavior)', () => {
         it('still returns an error when the editor throws', async () => {
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
