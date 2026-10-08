@@ -678,15 +678,20 @@ describe('ManageComponent', () => {
             expect(result.data.warning).toBeUndefined();
         });
 
-        it('does NOT flag a reference between two nodes inside the SAME prefab instance', async () => {
+        it('flags a reference between two nodes inside the SAME prefab instance as persistence-unverified (#76)', async () => {
+            // #76 follow-up: a reference from the instance root to its own child still verified
+            // live (changeVerified:true) yet was absent from the saved scene and prefab. The
+            // cross-instance override warning does not apply, but the instance warning does.
             const sameInstance = { rootUuid: 'instance-root', uuid: 'prefab-asset' };
             wire({ ...sameInstance }, { ...sameInstance });
 
             const result = await setTarget();
 
             expect(result.success).toBe(true);
-            expect(result.data.persistenceVerified).toBeUndefined();
-            expect(result.data.warning).toBeUndefined();
+            expect(result.data.changeVerified).toBe(true);
+            expect(result.data.persistenceVerified).toBe(false);
+            expect(result.data.warning).toMatch(/inside a prefab instance/);
+            expect(result.data.warning).not.toMatch(/cc\.TargetOverrideInfo/);
         });
 
         it('flags a reference between two DIFFERENT prefab instances', async () => {

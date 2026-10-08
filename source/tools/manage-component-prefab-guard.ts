@@ -12,6 +12,13 @@
  * observe this class of loss by construction. This module supplies the missing signal:
  * it does not change the write, it tells the caller the write may not survive a save.
  *
+ * Issue #76 widened the scope: the loss is not specific to references. A plain-value or
+ * asset write on a component that lives inside a prefab instance reads back verified from the
+ * live scene yet was reported as absent from both the prefab asset and the scene's
+ * `propertyOverrides` after a save. Whether an instance write lands as an override cannot be
+ * observed from a live read-back, so ANY write on a prefab-instance node is reported as
+ * live-verified but not persistence-verified (advisory; never changes the write).
+ *
  * Detection uses the node dump's `__prefab__` block — the same discriminator
  * `ManageComponent`'s sibling `ManagePrefab.resolvePrefabContext` already drives both
  * `apply-prefab` and `restore-prefab` from.
@@ -32,6 +39,13 @@ const WARNING =
     'A cross-prefab reference persists only as a cc.TargetOverrideInfo record on the instance\'s ' +
     'cc.PrefabInfo.targetOverrides — this write does not create one, so the field may read back null ' +
     'after the scene or prefab is saved. Verify the saved asset before relying on this reference.';
+
+const INSTANCE_WARNING =
+    'Live value set and verified, but this component sits inside a prefab instance. A property write on ' +
+    'an instance persists only if the editor records it as a propertyOverride on the instance, and the ' +
+    'live read-back used for changeVerified cannot observe that — reports show such writes verifying ' +
+    'live and then missing from the saved scene and prefab (issue #76). Treat the write as ' +
+    'persistence-unverified: save, then read the scene/prefab file (or re-query after a reload) before relying on it.';
 
 /**
  * Pull the referenced node UUIDs out of an already-converted property value.
@@ -74,12 +88,16 @@ async function prefabInstanceRoot(
 }
 
 /**
- * Report whether a reference write crosses a prefab-instance boundary.
+ * Report whether a property write may not survive a save because of prefab-instance semantics.
  *
- * At risk when the component's node and a referenced node resolve to DIFFERENT
- * prefab-instance roots — including the plain-scene-to-instance and
- * instance-to-plain-scene directions. Two nodes inside the same instance, and two
- * nodes both outside any instance, serialize normally and are not flagged.
+ * Two independent signals, the first more specific so it wins:
+ *  1. A REFERENCE write whose component node and referenced node resolve to DIFFERENT
+ *     prefab-instance roots (including plain-scene-to-instance and back) needs a
+ *     cc.TargetOverrideInfo the editor never creates (issue #48).
+ *  2. ANY write on a component whose node is inside a prefab instance may not be recorded as a
+ *     propertyOverride (issue #76) — including references between nodes of the SAME instance
+ *     and plain values/assets, which signal 1 deliberately did not cover.
+ * Nodes outside any instance serialize normally and are not flagged.
  */
 export async function detectPrefabOverrideRisk(
     nodeUuid: string,
@@ -87,16 +105,18 @@ export async function detectPrefabOverrideRisk(
     processedValue: any,
     queryNode: (uuid: string) => Promise<any>
 ): Promise<PrefabOverrideRisk> {
-    const targetUuids = extractReferencedNodeUuids(propertyType, processedValue);
-    if (targetUuids.length === 0) return { atRisk: false };
-
     const sourceRoot = await prefabInstanceRoot(nodeUuid, queryNode);
-    for (const targetUuid of targetUuids) {
+
+    for (const targetUuid of extractReferencedNodeUuids(propertyType, processedValue)) {
         if (targetUuid === nodeUuid) continue;
         const targetRoot = await prefabInstanceRoot(targetUuid, queryNode);
         if (targetRoot !== sourceRoot) {
             return { atRisk: true, warning: WARNING };
         }
+    }
+
+    if (sourceRoot !== null) {
+        return { atRisk: true, warning: INSTANCE_WARNING };
     }
     return { atRisk: false };
 }
