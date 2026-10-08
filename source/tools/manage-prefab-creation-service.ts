@@ -130,6 +130,14 @@ const COMPONENT_DEFAULTS: Record<string, Record<string, any>> = {
     },
 };
 
+/** A component whose index is reserved but whose body is serialized after the whole tree is indexed (#147). */
+interface DeferredComponent {
+    component: any;
+    nodeIndex: number;
+    componentIndex: number;
+    compPrefabInfoIndex: number;
+}
+
 export class PrefabCreationService {
 
     async createPrefabWithAssetDB(nodeUuid: string, savePath: string, prefabName: string, includeChildren: boolean, includeComponents: boolean): Promise<any> {
@@ -422,10 +430,20 @@ export class PrefabCreationService {
             nodeFileIds: new Map<string, string>(),
             nodeUuidToIndex: new Map<string, number>(),
             componentUuidToIndex: new Map<string, number>(),
-            losses: [] as Array<{ property: string; uuid: string; reason: string }>
+            losses: [] as Array<{ property: string; uuid: string; reason: string }>,
+            deferredComponents: [] as DeferredComponent[]
         };
 
         await this.createCompleteNodeTree(nodeData, null, 1, context, includeChildren, includeComponents, prefabName);
+        // Pass 2 (#147): every node and component index is registered now, so a property that
+        // references something visited LATER in the walk (a child pointing at its parent's
+        // component, a later sibling, a later component on the same node) resolves to a
+        // `{__id__}` instead of an unresolved loss.
+        for (const deferred of context.deferredComponents) {
+            const componentObj = this.createComponentObject(deferred.component, deferred.nodeIndex, context);
+            prefabData[deferred.componentIndex] = componentObj;
+            if (componentObj && typeof componentObj === 'object') componentObj.__prefab = { "__id__": deferred.compPrefabInfoIndex };
+        }
         this.lastReferenceLosses = context.losses;
         return prefabData;
     }
@@ -445,7 +463,7 @@ export class PrefabCreationService {
 
     private async createCompleteNodeTree(
         nodeData: any, parentNodeIndex: number | null, nodeIndex: number,
-        context: { prefabData: any[]; currentId: number; prefabAssetIndex: number; nodeFileIds: Map<string, string>; nodeUuidToIndex: Map<string, number>; componentUuidToIndex: Map<string, number>; losses: Array<{ property: string; uuid: string; reason: string }> },
+        context: { prefabData: any[]; currentId: number; prefabAssetIndex: number; nodeFileIds: Map<string, string>; nodeUuidToIndex: Map<string, number>; componentUuidToIndex: Map<string, number>; losses: Array<{ property: string; uuid: string; reason: string }>; deferredComponents: DeferredComponent[] },
         includeChildren: boolean, includeComponents: boolean, nodeName?: string
     ): Promise<void> {
         const { prefabData } = context;
@@ -481,11 +499,12 @@ export class PrefabCreationService {
                 node._components.push({ "__id__": componentIndex });
                 const componentUuid = component.uuid || (component.value && component.value.uuid);
                 if (componentUuid) context.componentUuidToIndex.set(componentUuid, componentIndex);
-                const componentObj = this.createComponentObject(component, nodeIndex, context);
-                prefabData[componentIndex] = componentObj;
                 const compPrefabInfoIndex = context.currentId++;
                 prefabData[compPrefabInfoIndex] = { "__type__": "cc.CompPrefabInfo", "fileId": this.generateFileId() };
-                if (componentObj && typeof componentObj === 'object') componentObj.__prefab = { "__id__": compPrefabInfoIndex };
+                // The slot is reserved here; the component body (and so its reference
+                // properties) is serialized in pass 2 — see createStandardPrefabContent.
+                prefabData[componentIndex] = null;
+                context.deferredComponents.push({ component, nodeIndex, componentIndex, compPrefabInfoIndex });
             }
         }
 
@@ -777,13 +796,17 @@ export class PrefabCreationService {
         // the allowlist had not been taught — the exact mechanism by which `cc.Mesh` and
         // `cc.Skeleton` became null entries in a created prefab (issues #64, #70, #73).
         if (value?.uuid) {
-            if (PrefabCreationService.isAssetType(type)) {
-                return { "__uuid__": value.uuid, "__expectedType__": type };
-            }
             // In-tree component reference: the uuid names a component in the subtree being
-            // serialized, so it encodes as an object index.
+            // serialized, so it encodes as an object index. Checked BEFORE the asset test:
+            // a uuid in the component index IS a component whatever its class is called, and
+            // a custom component named like `TileAsset`/`GameAtlas` matches the asset suffix
+            // arm below — which wrote it as `{__uuid__}` (#147). An asset's uuid can never be
+            // in this index, so the Label-font case the asset branch exists for is unaffected.
             if (context?.componentUuidToIndex?.has(value.uuid)) {
                 return { "__id__": context.componentUuidToIndex.get(value.uuid) };
+            }
+            if (PrefabCreationService.isAssetType(type)) {
+                return { "__uuid__": value.uuid, "__expectedType__": type };
             }
             // Unresolved. A prefab asset has no way to express a reference to something
             // outside the subtree, so null is the only encodable answer — but the null is
