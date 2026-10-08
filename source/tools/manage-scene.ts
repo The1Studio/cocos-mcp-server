@@ -3,7 +3,7 @@ import { ActionToolResult, SceneInfo, successResult, errorResult } from '../type
 import { coerceBool } from '../utils/normalize';
 import { resolveAsset } from '../utils/asset-path';
 import {
-    readOverrideSnapshot, describeOverrideLoss, statMtimeMs, waitForFileRewrite
+    readOverrideSnapshot, describeOverrideLoss, statMtimeMs, waitForFileRewrite, readPrefabRootActive
 } from '../utils/save-artifact-guard';
 
 /** Longest `saveScene` waits for the scene file to be rewritten before calling the save unconfirmed. */
@@ -246,10 +246,27 @@ export class ManageScene extends BaseActionTool {
             );
         }
 
+        // 3. Prefab-edit mode (#99 item 4): the editor's own prefab serializer was reported to
+        // write the root as `_active: true` whatever the live root's state. The artifact is
+        // read back and compared with the live root; a disagreement fails the save instead of
+        // being reported as "Scene saved successfully".
+        const rootActive = scenePath !== null && scenePath.endsWith('.prefab')
+            ? await this.verifyPrefabRootActive(scenePath)
+            : null;
+        if (rootActive && rootActive.flip) {
+            return {
+                success: false,
+                error: rootActive.flip,
+                data: { file: scenePath, dirty: false, editorDirty, rootActiveVerified: false, ...rootActive.detail },
+                isError: true
+            };
+        }
+
         return successResult(
             {
                 dirty: false, editorDirty, file: scenePath,
                 persistenceVerified: artifact.verdict === 'verified',
+                ...(rootActive ? { rootActiveVerified: rootActive.verified } : {}),
                 ...(artifact.mtimeMs !== null ? { mtimeMs: artifact.mtimeMs } : {})
             },
             artifact.verdict === 'verified'
@@ -305,6 +322,46 @@ export class ManageScene extends BaseActionTool {
         return {
             verified: false, verdict: 'dropped', mtimeMs: mtimeAfter, lostOverrides: null,
             reason: `${scenePath} existed before the save and was not rewritten by it (mtime unchanged), so the reported-successful save did not serialise anything`
+        };
+    }
+
+    /**
+     * Compare the saved `.prefab`'s root `_active` with the live root node's `active`.
+     *
+     * In prefab-edit mode `scene:query-node-tree` yields a wrapper whose single child is the
+     * prefab's root node; with any other shape there is no unambiguous live root to compare,
+     * so the result is `verified: false` (unknown) rather than a guess. Unknown on either side
+     * never fails the save — only a confirmed disagreement does.
+     */
+    private async verifyPrefabRootActive(
+        prefabPath: string
+    ): Promise<{ verified: boolean; flip: string | null; detail: Record<string, any> }> {
+        const unknown = { verified: false, flip: null, detail: {} };
+        const persisted = readPrefabRootActive(prefabPath);
+        if (persisted === null) return unknown;
+
+        let live: boolean | null = null;
+        try {
+            const tree: any = await Editor.Message.request('scene', 'query-node-tree');
+            const children: any[] = Array.isArray(tree?.children) ? tree.children : [];
+            const rootUuid = children.length === 1 ? (children[0]?.uuid || children[0]?.value?.uuid) : null;
+            if (!rootUuid) return unknown;
+            const dump: any = await Editor.Message.request('scene', 'query-node', rootUuid);
+            const active = dump?.active?.value ?? dump?.active;
+            if (typeof active === 'boolean') live = active;
+        } catch {
+            return unknown;
+        }
+        if (live === null) return unknown;
+        if (live === persisted) return { verified: true, flip: null, detail: {} };
+
+        return {
+            verified: false,
+            detail: { liveRootActive: live, persistedRootActive: persisted },
+            flip: `Prefab saved to ${prefabPath}, but the saved root node has _active=${persisted} while the live root is ` +
+                `${live ? 'active' : 'inactive'} (active=${live}). The editor's prefab-mode serializer rewrote the root's ` +
+                `activation state (#99 item 4); the .prefab on disk does not match what you edited. Fix the root's ` +
+                `active flag in the editor and save again, or correct _active in the file.`
         };
     }
 

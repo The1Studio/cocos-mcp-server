@@ -130,3 +130,27 @@ export async function waitForFileRewrite(
     }
     return mtime;
 }
+
+/**
+ * The persisted `_active` of a `.prefab` file's root node, or `null` when it cannot be read.
+ *
+ * Follows `cc.Prefab.data` to the root node entry (falling back to the first `cc.Node` when
+ * `data` is absent) and returns its `_active` only when that is a real boolean — an
+ * unreadable file, a non-prefab shape or a missing field is "unknown", never `false`, so it
+ * cannot masquerade as a root that was saved inactive (#99 item 4).
+ */
+export function readPrefabRootActive(filePath: string | null): boolean | null {
+    if (!filePath) return null;
+    let parsed: any;
+    try {
+        parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch {
+        return null;
+    }
+    if (!Array.isArray(parsed)) return null;
+    const dataIndex = parsed[0]?.data?.__id__;
+    const root = typeof dataIndex === 'number' && parsed[dataIndex]?.__type__ === 'cc.Node'
+        ? parsed[dataIndex]
+        : parsed.find((entry: any) => entry?.__type__ === 'cc.Node');
+    return typeof root?._active === 'boolean' ? root._active : null;
+}

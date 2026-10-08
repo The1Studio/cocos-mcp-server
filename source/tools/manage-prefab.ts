@@ -42,7 +42,7 @@ export class ManagePrefab extends BaseActionTool {
             },
             position: {
                 type: 'object',
-                description: 'Initial position {x, y, z} for instantiated prefab (optional)',
+                description: 'Initial position {x, y, z} for instantiated prefab, LOCAL to parentUuid (matching manage_node create); relative to the scene root when parentUuid is omitted (optional)',
                 properties: {
                     x: { type: 'number' },
                     y: { type: 'number' },
@@ -340,7 +340,13 @@ export class ManagePrefab extends BaseActionTool {
                 createNodeOptions.name = assetInfo.name;
             }
 
-            if (position) {
+            // `create-node`'s `position` option is applied in WORLD space, but this tool's
+            // contract is parent-local (matching manage_node create), so under a transformed
+            // parent the instance landed in the wrong place (#148). With no caller parent the
+            // instance sits on the scene root, where world == local, and the option is kept.
+            // With a caller parent the local position is written after creation instead.
+            const applyLocalPosition = !!position && !!parentUuid;
+            if (position && !applyLocalPosition) {
                 // `position` is a documented top-level CreateNodeOptions field; `dump`
                 // is explicitly commented out as unused in @cocos/creator-types — it was
                 // silently ignored, so instantiated prefabs never picked up this position.
@@ -358,6 +364,11 @@ export class ManagePrefab extends BaseActionTool {
                     error: `create-node returned no node uuid for prefab '${prefabUuid}' — nothing was instantiated`,
                     instruction: 'Ensure a scene is open and the prefab asset is valid, then retry.'
                 };
+            }
+
+            if (applyLocalPosition) {
+                const positionFailure = await this.applyLocalPosition(uuid, position, prefabUuid);
+                if (positionFailure) return positionFailure;
             }
 
             // Apply rotation and scale if provided
@@ -395,6 +406,42 @@ export class ManagePrefab extends BaseActionTool {
                 instruction: 'Check that the prefabUuid is correct and the asset DB is ready.'
             };
         }
+    }
+
+    /**
+     * Write `position` as the node's LOCAL position and read it back (#148). Returns a
+     * failure result — never a silent success — when the write is rejected or the node does
+     * not read back at the requested position; the instance already exists in the scene by
+     * then, so the failure names it. An unreadable read-back proves nothing either way and
+     * is not treated as a failure.
+     */
+    private async applyLocalPosition(
+        uuid: string, position: { x: number; y: number; z: number }, prefabUuid: string
+    ): Promise<any | null> {
+        const fail = (reason: string) => ({
+            success: false,
+            error: `Prefab '${prefabUuid}' was instantiated as node ${uuid}, but its local position could not be applied: ${reason}`,
+            instruction: `The node exists at the parent's origin. Set it with manage_node action=set_transform nodeUuid=${uuid}, or delete it and retry.`
+        });
+        try {
+            await Editor.Message.request('scene', 'set-property', {
+                uuid, path: 'position', dump: { value: position, type: 'cc.Vec3' }
+            });
+        } catch (err: any) {
+            return fail(err?.message || String(err));
+        }
+        let applied: any = null;
+        try {
+            const dump: any = await Editor.Message.request('scene', 'query-node', uuid);
+            applied = dump?.position?.value ?? null;
+        } catch {
+            return null;
+        }
+        if (!applied) return null;
+        const differs = (['x', 'y', 'z'] as const).some(axis => Math.abs((applied[axis] ?? 0) - (position[axis] ?? 0)) > 1e-4);
+        return differs
+            ? fail(`read back (${applied.x}, ${applied.y}, ${applied.z}) instead of (${position.x}, ${position.y}, ${position.z})`)
+            : null;
     }
 
     private async createPrefab(args: any): Promise<any> {
