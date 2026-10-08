@@ -20,9 +20,37 @@ function assertArrayItemIsPrimitive(propertyType: string, item: any): void {
         throw new Error(
             `${propertyType} items must be primitives (received ${Array.isArray(item) ? 'array' : 'object'}). ` +
             `Array-of-OBJECT fields (e.g. a cc.RealCurve spline's keyFrames, a cc.Gradient's alphaKeys) ` +
-            `have no supported propertyType yet — no value was written (issue #66).`
+            `are written with propertyType 'objectArray' — no value was written (issue #66).`
         );
     }
+}
+
+export function isPlainObject(v: any): v is Record<string, any> {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * Compare an `objectArray` request against the editor's read-back (issue #66).
+ *
+ * The read-back wraps every node of the tree as a dump (`{ value, type, ... }`), so the
+ * comparison walks the REQUESTED structure and unwraps the dump alongside it. Extra keys the
+ * editor reports (internal ids, defaults for fields the caller never named) are ignored; a
+ * requested leaf that is missing or different fails the match.
+ */
+export function matchesRequestedStructure(expected: any, dump: any): boolean {
+    if (Array.isArray(expected)) {
+        const actual = Array.isArray(dump) ? dump : dump?.value;
+        return Array.isArray(actual) && actual.length === expected.length &&
+            expected.every((e, i) => matchesRequestedStructure(e, actual[i]));
+    }
+    if (isPlainObject(expected)) {
+        if (!isPlainObject(dump)) return false;
+        const fields = isPlainObject(dump.value) ? dump.value : dump;
+        return Object.keys(expected).every(k => matchesRequestedStructure(expected[k], fields[k]));
+    }
+    const actual = isPlainObject(dump) && 'value' in dump ? dump.value : dump;
+    if (typeof expected === 'number' || typeof actual === 'number') return Number(actual) === Number(expected);
+    return actual === expected;
 }
 
 /**
@@ -299,7 +327,8 @@ export const SUPPORTED_PROPERTY_TYPES = [
     'color', 'vec2', 'vec3', 'size',
     'node', 'component',
     ...ASSET_REFERENCE_PROPERTY_TYPES,
-    'nodeArray', 'colorArray', 'numberArray', 'stringArray', 'componentArray', 'assetArray'
+    'nodeArray', 'colorArray', 'numberArray', 'stringArray', 'componentArray', 'assetArray',
+    'objectArray'
 ] as const;
 
 /**
@@ -479,6 +508,26 @@ export function convertPropertyValue(propertyType: string, value: any): any {
                 });
             }
             throw new Error(`StringArray value must be an array (received typeof ${typeof value})`);
+        case 'objectArray':
+            {
+                // Issue #66: array of plain value objects (cc.RealCurve keyFrames, cc.Gradient
+                // alphaKeys). Elements are written leaf by leaf, so they must be objects whose
+                // keys are the CCClass field names; a `uuid` key means a reference, which has
+                // its own propertyTypes and a different dump shape.
+                const coerced = parseJsonPayload(value);
+                if (!Array.isArray(coerced)) {
+                    throw new Error(`objectArray value must be an array of plain objects (received typeof ${typeof value})`);
+                }
+                coerced.forEach((item: any, idx: number) => {
+                    if (!isPlainObject(item)) {
+                        throw new Error(`objectArray items must be plain objects (item ${idx} is ${Array.isArray(item) ? 'an array' : item === null ? 'null' : typeof item}). Primitive arrays use numberArray/stringArray.`);
+                    }
+                    if ('uuid' in item) {
+                        throw new Error(`objectArray item ${idx} has a 'uuid' key, so it is a reference — use nodeArray, componentArray or assetArray for reference arrays.`);
+                    }
+                });
+                return coerced;
+            }
         default:
             throw new Error(`Unsupported property type: ${propertyType}. Supported types: ${SUPPORTED_PROPERTY_TYPES.join(', ')}`);
     }
@@ -643,7 +692,10 @@ export async function verifyComponentPropertyChange(
             };
 
             let verified = false;
-            if (Array.isArray(expectedValue)) {
+            if (Array.isArray(expectedValue) && expectedValue.some(e => isPlainObject(e) && !('uuid' in e))) {
+                // objectArray (issue #66): elements are plain value objects, not references.
+                verified = matchesRequestedStructure(expectedValue, propertyData);
+            } else if (Array.isArray(expectedValue)) {
                 // nodeArray / componentArray: every element is itself a { uuid } reference.
                 // Compare by per-element uuid (order-preserving), never by deep-equaling the
                 // whole array — the editor's read-back dump may carry extra per-element

@@ -64,10 +64,10 @@ describe('applyPropertyToEditor — an unhandled propertyType must not be writte
         expect(requestMock).not.toHaveBeenCalled();
     });
 
-    it('names the missing array branch when the value is an array of plain objects', async () => {
+    it('names the missing array branch when an unrecognised propertyType carries an array of plain objects', async () => {
         await expect(applyPropertyToEditor(
             {
-                ...baseArgs, propertyType: 'objectArray',
+                ...baseArgs, propertyType: 'someFutureArray',
                 value: realCurveKeyFrames, processedValue: realCurveKeyFrames
             },
             jest.fn()
@@ -102,9 +102,9 @@ describe('describeUnhandledPropertyType — the branch inventory (#66)', () => {
             'nodeArray', 'colorArray', 'numberArray', 'stringArray', 'componentArray', 'assetArray'
         ];
 
-        // The array-of-object types the issue asks for do NOT exist yet, so they must be
-        // reported rather than silently accepted.
-        for (const unhandled of ['object', 'objectArray']) {
+        // `object` (a whole nested CCClass group) has no branch, so it must be reported
+        // rather than silently accepted. `objectArray` gained one in #66.
+        for (const unhandled of ['object']) {
             expect(describeUnhandledPropertyType(unhandled, 1)).not.toBeNull();
         }
 
@@ -118,7 +118,7 @@ describe('describeUnhandledPropertyType — the branch inventory (#66)', () => {
             expect(describeUnhandledPropertyType(handled, null)).toBeNull();
         }
 
-        expect(describeUnhandledPropertyType('objectArray', [{ time: 0 }])).toMatch(/ARRAY value/);
+        expect(describeUnhandledPropertyType('someFutureArray', [{ time: 0 }])).toMatch(/ARRAY value/);
         // No listed type may be BOTH accepted and unrecognised.
         expect(accepted.length).toBeGreaterThan(30);
     });

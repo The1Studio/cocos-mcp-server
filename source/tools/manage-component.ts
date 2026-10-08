@@ -36,7 +36,7 @@ export class ManageComponent extends BaseActionTool {
                 description: '[set_property] Property data type for correct value conversion. Must match the actual property type. Use "asset" as the generic fallback for any Cocos asset-reference property (spriteFrame/material/texture/etc. are also accepted directly and behave identically).'
             },
             value: {
-                description: '[set_property] Property value. Format depends on propertyType: string="text", number=42, boolean=true, color={"r":255,"g":0,"b":0,"a":255} or "#FF0000", vec2={"x":100,"y":50}, vec3={"x":1,"y":2,"z":3}, size={"width":100,"height":50}, node/component/asset (or any specific asset type: spriteFrame/prefab/material/texture/spriteAtlas/audioClip/font/animationClip/mesh/skeleton/physicsMaterial/renderTexture/textAsset/jsonAsset/particleAsset/sceneAsset)="uuid-string", nodeArray=["uuid1","uuid2"], componentArray=["node-uuid1","node-uuid2"] (each a node UUID containing the target component, same as "component"), assetArray=["asset-uuid1","asset-uuid2"] (an array-of-assets @property such as AudioClip[]/SpriteFrame[]; element type is read from the declaration), colorArray=[{"r":255,...}], numberArray=[1,2,3], stringArray=["a","b"]. For any object/array-shaped propertyType (size, vec2, vec3, color, and the *Array types), a JSON-encoded string of the same shape (e.g. \'{"width":94,"height":94}\') is also accepted and parsed automatically — a transport that stringifies structured args does not need special-casing.'
+                description: '[set_property] Property value. Format depends on propertyType: string="text", number=42, boolean=true, color={"r":255,"g":0,"b":0,"a":255} or "#FF0000", vec2={"x":100,"y":50}, vec3={"x":1,"y":2,"z":3}, size={"width":100,"height":50}, node/component/asset (or any specific asset type: spriteFrame/prefab/material/texture/spriteAtlas/audioClip/font/animationClip/mesh/skeleton/physicsMaterial/renderTexture/textAsset/jsonAsset/particleAsset/sceneAsset)="uuid-string", nodeArray=["uuid1","uuid2"], componentArray=["node-uuid1","node-uuid2"] (each a node UUID containing the target component, same as "component"), assetArray=["asset-uuid1","asset-uuid2"] (an array-of-assets @property such as AudioClip[]/SpriteFrame[]; element type is read from the declaration), colorArray=[{"r":255,...}], numberArray=[1,2,3], stringArray=["a","b"], objectArray=[{"time":0,"value":1},...] (an array of plain value objects with no uuid, e.g. cc.RealCurve keyFrames or cc.Gradient alphaKeys; keys are the CCClass field names, written element by element and verified against the read-back). For any object/array-shaped propertyType (size, vec2, vec3, color, and the *Array types), a JSON-encoded string of the same shape (e.g. \'{"width":94,"height":94}\') is also accepted and parsed automatically — a transport that stringifies structured args does not need special-casing.'
             },
             properties: {
                 type: 'array',
@@ -323,7 +323,7 @@ export class ManageComponent extends BaseActionTool {
             property,
             actualValue: fieldResult.actualValue,
             changeVerified: fieldResult.changeVerified,
-            // Only present when the write crosses a prefab-instance boundary (issue #48):
+            // Only present when the write sits on or crosses a prefab instance (issues #48, #76):
             // the live read-back verified, but the value may not survive a save.
             ...(fieldResult.warning ? { persistenceVerified: fieldResult.persistenceVerified, warning: fieldResult.warning } : {})
         }, `Successfully set ${componentType}.${property}`);
@@ -545,7 +545,7 @@ export class ManageComponent extends BaseActionTool {
             // Build the (possibly dotted) component property path and apply via type-aware Editor API.
             const propertyPath = `__comps__.${rawComponentIndex}.${property}`;
             const actualExpectedValue = await applyPropertyToEditor(
-                { nodeUuid, propertyPath, rawComponentIndex, componentType, property, propertyType, value, processedValue },
+                { nodeUuid, propertyPath, rawComponentIndex, componentType, property, propertyType, value, processedValue, originalValue },
                 (uuid, type) => this.getComponentInfo(uuid, type)
             );
 

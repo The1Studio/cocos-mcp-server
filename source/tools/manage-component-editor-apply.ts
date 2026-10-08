@@ -38,6 +38,8 @@ export interface ApplyPropertyArgs {
     propertyType: string;
     value: any;
     processedValue: any;
+    /** The property's current value (used by `objectArray` to skip a no-op resize). */
+    originalValue?: any;
 }
 
 /**
@@ -90,7 +92,9 @@ const HANDLED_ARRAY_TYPES = new Set<string>([
     // propertyType — a regression this guard narrowly avoided, since refusing them would
     // have broken calls that succeed today (issue #66's own report lists scalar and array
     // writes on the same components as working).
-    'numberArray', 'stringArray'
+    'numberArray', 'stringArray',
+    // Issue #66: written element-wise by `writeStructureAt` below.
+    'objectArray'
 ]);
 
 /**
@@ -111,9 +115,7 @@ export function describeUnhandledPropertyType(propertyType: string, processedVal
             `call would report a write it did not perform (issue #66). An array of assets/uuids/colors ` +
             `wants propertyType 'assetArray', 'nodeArray', 'componentArray' or 'colorArray'; an array of ` +
             `plain value objects with NO uuid semantics (cc.RealCurve keyFrames, cc.Gradient alphaKeys) ` +
-            `has no whole-array propertyType yet: write it element by element with dotted paths instead ` +
-            `('keyFrames.0.time', 'keyFrames.0.value' — an index one past the end appends a new element). ` +
-            `Nothing was written.`
+            `wants propertyType 'objectArray'. Nothing was written.`
         );
     }
 
@@ -125,6 +127,38 @@ export function describeUnhandledPropertyType(propertyType: string, processedVal
 }
 
 /**
+ * Write a plain structure through the editor leaf by leaf (issue #66).
+ *
+ * `set-property` decodes a whole-array dump only when it knows the element class, which for a
+ * cc.RealCurve / cc.Gradient element is only visible in a live editor. The element-wise form
+ * needs no class: grow/shrink the array via `<path>.length`, then write each primitive leaf
+ * to its dotted path as a typeless `{ value }` (the same dump the plain-scalar branch sends).
+ * Objects recurse by key, arrays by index.
+ */
+async function writeStructureAt(
+    nodeUuid: string, path: string, value: any, currentLength?: number
+): Promise<void> {
+    if (Array.isArray(value)) {
+        if (currentLength !== value.length) {
+            await Editor.Message.request('scene', 'set-property', {
+                uuid: nodeUuid, path: `${path}.length`, dump: { value: value.length }
+            });
+        }
+        for (let i = 0; i < value.length; i++) {
+            await writeStructureAt(nodeUuid, `${path}.${i}`, value[i]);
+        }
+    } else if (value !== null && typeof value === 'object') {
+        for (const key of Object.keys(value)) {
+            await writeStructureAt(nodeUuid, `${path}.${key}`, value[key]);
+        }
+    } else {
+        await Editor.Message.request('scene', 'set-property', {
+            uuid: nodeUuid, path, dump: { value }
+        });
+    }
+}
+
+/**
  * Apply a processed property value to the Cocos Creator editor scene.
  * Returns the actual expected value (may differ from processedValue for component refs).
  * Throws on unrecoverable Editor API error.
@@ -133,7 +167,7 @@ export async function applyPropertyToEditor(
     args: ApplyPropertyArgs,
     getComponentInfo: (nodeUuid: string, componentType: string) => Promise<ActionToolResult>
 ): Promise<any> {
-    const { nodeUuid, propertyPath, rawComponentIndex, componentType, property, propertyType, value, processedValue } = args;
+    const { nodeUuid, propertyPath, rawComponentIndex, componentType, property, propertyType, value, processedValue, originalValue } = args;
     let actualExpectedValue = processedValue;
 
     // A propertyType `convertPropertyValue` accepted but no branch below applies must not
@@ -297,6 +331,12 @@ export async function applyPropertyToEditor(
         await Editor.Message.request('scene', 'set-property', {
             uuid: nodeUuid, path: propertyPath, dump: { value: colorArrayValue, type: 'cc.Color' }
         });
+
+    } else if (propertyType === 'objectArray' && Array.isArray(processedValue)) {
+        await writeStructureAt(
+            nodeUuid, propertyPath, processedValue,
+            Array.isArray(originalValue) ? originalValue.length : undefined
+        );
 
     } else if (unhandledWarning) {
         // Issue #66: the propertyType is in SUPPORTED_PROPERTY_TYPES, so `convertPropertyValue`
