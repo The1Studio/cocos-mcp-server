@@ -345,11 +345,12 @@ export class ManageComponent extends BaseActionTool {
             return errorResult('properties must be a non-empty array of {property, propertyType, value} entries for action=set_properties_batch');
         }
 
-        // Resolve the target component once for the whole batch.
-        const resolution = await this.resolveTargetComponent(nodeUuid, componentType, undefined);
+        // Resolve the target component up front; a failure here fails the whole batch.
+        let resolution = await this.resolveTargetComponent(nodeUuid, componentType, undefined);
         if (!resolution.ok) {
             return resolution.result;
         }
+        let dumpIsStale = false;
 
         const results: Array<{ property: string; success: boolean; actualValue?: any; changeVerified?: boolean; persistenceVerified?: boolean; warning?: string; error?: string }> = [];
 
@@ -367,7 +368,21 @@ export class ManageComponent extends BaseActionTool {
                 continue;
             }
 
+            // #153: every entry is analysed against the component dump, so one that depends on an
+            // earlier write (the next array slot, a field of a just-grown structure) must see the
+            // editor's state AFTER that write, not the pre-batch snapshot.
+            if (dumpIsStale) {
+                const refreshed = await this.resolveTargetComponent(nodeUuid, componentType, undefined);
+                if (!refreshed.ok) {
+                    results.push({ property, success: false, error: refreshed.result.error || `Could not re-read '${componentType}' after the previous entry's write` });
+                    continue;
+                }
+                resolution = refreshed;
+                dumpIsStale = false;
+            }
+
             try {
+                dumpIsStale = true;
                 const fieldResult = await this.applySingleProperty(
                     nodeUuid, componentType, resolution.targetComponent, resolution.rawComponentIndex,
                     { property, propertyType, value }
