@@ -41,7 +41,7 @@ After creating plan.md and phase files, hydrate tasks (unless `--no-tasks`):
 
 See SKILL.md "Active Plan State" section for full rules. Key points:
 - Check `## Plan Context` injected by hooks for active/suggested/none state
-- After creating plan: `node .opencode/scripts/set-active-plan.cjs {plan-dir}`
+- After creating plan: `bun .opencode/scripts/set-active-plan.cjs {plan-dir}`
 - Active plans use plan-specific reports path; suggested plans use default path
 
 ## File Structure

@@ -640,7 +640,7 @@ async function applyComponentReferenceArray(
     let elementType = '';
     for (const targetNodeUuid of targetNodeUuids) {
         if (typeof targetNodeUuid !== 'string') {
-            throw new Error('componentArray items must be string node UUIDs (each containing the target component)');
+            throw new Error('componentArray items must be string Node UUIDs (each containing the target component)');
         }
         const { componentId, expectedComponentType } = await resolveComponentReference(
             nodeUuid, componentType, property, targetNodeUuid, getComponentInfo

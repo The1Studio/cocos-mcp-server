@@ -33,7 +33,7 @@ The skill is located at `.claude/skills/plans-kanban/`.
 If `--stop` flag is provided:
 
 ```bash
-node .claude/skills/plans-kanban/scripts/server.cjs --stop
+bun .claude/skills/plans-kanban/scripts/server.cjs --stop
 ```
 
 ### Start Server
@@ -46,7 +46,7 @@ INPUT_DIR="$1"
 PLANS_DIR="${INPUT_DIR:-./plans}"
 
 # Start kanban dashboard
-node .claude/skills/plans-kanban/scripts/server.cjs \
+bun .claude/skills/plans-kanban/scripts/server.cjs \
   --dir "$PLANS_DIR" \
   --host 0.0.0.0 \
   --open \
@@ -61,7 +61,7 @@ node .claude/skills/plans-kanban/scripts/server.cjs \
 Example Bash tool call:
 ```json
 {
-  "command": "node .claude/skills/plans-kanban/scripts/server.cjs --dir \"./plans\" --host 0.0.0.0 --open --foreground",
+  "command": "bun .claude/skills/plans-kanban/scripts/server.cjs --dir \"./plans\" --host 0.0.0.0 --open --foreground",
   "run_in_background": true,
   "timeout": 300000,
   "description": "Start kanban server in background"

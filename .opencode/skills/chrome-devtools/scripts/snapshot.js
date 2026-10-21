@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Get DOM snapshot with selectors
  * Usage: node snapshot.js [--url https://example.com] [--output snapshot.json]

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * llms.txt Analyzer Script
@@ -172,7 +172,7 @@ function main() {
 
   if (args.length === 0) {
     console.error('Usage: node analyze-llms-txt.js <content-file-or-stdin>');
-    console.error('Or pipe content: cat llms.txt | node analyze-llms-txt.js');
+    console.error('Or pipe content: cat llms.txt | bun analyze-llms-txt.js');
     process.exit(1);
   }
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * broad-pattern-detector.test.cjs - Unit tests for glob breadth detection
  *

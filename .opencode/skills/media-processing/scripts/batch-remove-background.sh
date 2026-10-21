@@ -66,7 +66,7 @@ mkdir -p "$OUTPUT_DIR"
 if ! command -v rmbg &> /dev/null; then
     echo -e "${YELLOW}Warning: rmbg-cli not found${NC}"
     echo "Installing rmbg-cli globally..."
-    npm install -g rmbg-cli
+    bun add -g rmbg-cli
     echo -e "${GREEN}✓ rmbg-cli installed${NC}"
 fi
 

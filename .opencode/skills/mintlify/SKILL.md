@@ -13,7 +13,7 @@ Mintlify is a modern documentation platform that transforms Markdown/MDX files i
 ## Quick Start
 
 ```bash
-npm i -g mintlify
+bun add -g mintlify
 mint new                    # Initialize new docs
 mint dev                    # Local preview
 mint validate               # Validate configuration
@@ -100,7 +100,7 @@ description: "Quick introduction"
 
 <CodeGroup>
 ```bash
-npm install
+bun install
 ```
 
 ```python

@@ -17,11 +17,11 @@
 
 ```bash
 # STEP 1: Execute detect-topic.js script
-node scripts/detect-topic.js "<user query>"
+bun scripts/detect-topic.js "<user query>"
 # Returns: {"topic": "X", "library": "Y", "isTopicSpecific": true}
 
 # STEP 2: Execute fetch-docs.js script (handles URL construction automatically)
-node scripts/fetch-docs.js "<user query>"
+bun scripts/fetch-docs.js "<user query>"
 # Script constructs: context7.com/{library}/llms.txt?topic={topic}
 # Script handles fallback if topic URL fails
 # Returns: llms.txt content with 1-5 URLs
@@ -39,10 +39,10 @@ node scripts/fetch-docs.js "<user query>"
 **shadcn date picker:**
 ```bash
 # Execute script (automatic URL construction)
-node scripts/detect-topic.js "How do I use date picker in shadcn?"
+bun scripts/detect-topic.js "How do I use date picker in shadcn?"
 # {"topic": "date", "library": "shadcn/ui", "isTopicSpecific": true}
 
-node scripts/fetch-docs.js "How do I use date picker in shadcn?"
+bun scripts/fetch-docs.js "How do I use date picker in shadcn?"
 # Script fetches: context7.com/shadcn-ui/ui/llms.txt?topic=date
 # Returns: 2-3 date-specific URLs
 
@@ -53,10 +53,10 @@ node scripts/fetch-docs.js "How do I use date picker in shadcn?"
 **Next.js caching:**
 ```bash
 # Execute scripts (no manual URL needed)
-node scripts/detect-topic.js "Next.js caching strategies"
+bun scripts/detect-topic.js "Next.js caching strategies"
 # {"topic": "cache", "library": "next.js", "isTopicSpecific": true}
 
-node scripts/fetch-docs.js "Next.js caching strategies"
+bun scripts/fetch-docs.js "Next.js caching strategies"
 # Script fetches: context7.com/vercel/next.js/llms.txt?topic=cache
 # Returns: 3-4 URLs
 

@@ -330,7 +330,7 @@ Look for `[MCPServer]` and tool-specific prefixes in console.
 3. Extend `BaseActionTool`
 4. Implement required properties and `actionHandlers` map
 5. Register in `MCPServer.initializeTools()`
-6. Build: `npm run build`
+6. Build: `bun run build`
 7. Test via curl or MCP client
 
 ### Modifying Existing Tool
@@ -339,7 +339,7 @@ Look for `[MCPServer]` and tool-specific prefixes in console.
 2. Edit action handler or add new action
 3. Update `actions` array if adding action
 4. Update `inputSchema` if changing parameters
-5. Build: `npm run build`
+5. Build: `bun run build`
 6. Test the modified action
 
 ### Debugging

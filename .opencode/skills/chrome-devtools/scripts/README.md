@@ -43,7 +43,7 @@ sudo apt-get install -y libnss3 libnspr4 libasound2t64 libatk1.0-0 libatk-bridge
 
 **All platforms** - Install Node dependencies:
 ```bash
-npm install
+bun install
 ```
 
 ## Scripts
@@ -61,25 +61,25 @@ Inject authentication (cookies, tokens, storage) for testing protected routes.
 
 ```bash
 # Inject cookies
-node inject-auth.js --url https://example.com --cookies '[{"name":"session","value":"abc123","domain":".example.com"}]'
+bun inject-auth.js --url https://example.com --cookies '[{"name":"session","value":"abc123","domain":".example.com"}]'
 
 # Inject Bearer token (stores in localStorage + sets HTTP header)
-node inject-auth.js --url https://example.com --token "Bearer eyJhbGciOi..." --header Authorization
+bun inject-auth.js --url https://example.com --token "Bearer eyJhbGciOi..." --header Authorization
 
 # Inject localStorage items
-node inject-auth.js --url https://example.com --local-storage '{"auth_token":"xyz","user_id":"123"}'
+bun inject-auth.js --url https://example.com --local-storage '{"auth_token":"xyz","user_id":"123"}'
 
 # Inject sessionStorage items
-node inject-auth.js --url https://example.com --session-storage '{"temp_key":"value"}'
+bun inject-auth.js --url https://example.com --session-storage '{"temp_key":"value"}'
 
 # Combined injection
-node inject-auth.js --url https://example.com \
+bun inject-auth.js --url https://example.com \
   --cookies '[{"name":"session","value":"abc"}]' \
   --local-storage '{"user":"data"}' \
   --reload true
 
 # Clear saved auth session
-node inject-auth.js --url https://example.com --cookies '[]' --clear true
+bun inject-auth.js --url https://example.com --cookies '[]' --clear true
 ```
 
 Options:
@@ -98,7 +98,7 @@ Options:
 Navigate to a URL.
 
 ```bash
-node navigate.js --url https://example.com [--wait-until networkidle2] [--timeout 30000]
+bun navigate.js --url https://example.com [--wait-until networkidle2] [--timeout 30000]
 ```
 
 ### screenshot.js
@@ -107,7 +107,7 @@ Take a screenshot with automatic compression.
 **Important**: Always save screenshots to `./docs/screenshots` directory.
 
 ```bash
-node screenshot.js --output screenshot.png [--url https://example.com] [--full-page true] [--selector .element] [--max-size 5] [--no-compress]
+bun screenshot.js --output screenshot.png [--url https://example.com] [--full-page true] [--selector .element] [--max-size 5] [--no-compress]
 ```
 
 **Automatic Compression**: Screenshots >5MB are automatically compressed using ImageMagick to ensure compatibility with Gemini API and Claude Code. Install ImageMagick for this feature:
@@ -124,56 +124,56 @@ Options:
 Click an element.
 
 ```bash
-node click.js --selector ".button" [--url https://example.com] [--wait-for ".result"]
+bun click.js --selector ".button" [--url https://example.com] [--wait-for ".result"]
 ```
 
 ### fill.js
 Fill form fields.
 
 ```bash
-node fill.js --selector "#input" --value "text" [--url https://example.com] [--clear true]
+bun fill.js --selector "#input" --value "text" [--url https://example.com] [--clear true]
 ```
 
 ### evaluate.js
 Execute JavaScript in page context.
 
 ```bash
-node evaluate.js --script "document.title" [--url https://example.com]
+bun evaluate.js --script "document.title" [--url https://example.com]
 ```
 
 ### snapshot.js
 Get DOM snapshot with interactive elements.
 
 ```bash
-node snapshot.js [--url https://example.com] [--output snapshot.json]
+bun snapshot.js [--url https://example.com] [--output snapshot.json]
 ```
 
 ### console.js
 Monitor console messages.
 
 ```bash
-node console.js --url https://example.com [--types error,warn] [--duration 5000]
+bun console.js --url https://example.com [--types error,warn] [--duration 5000]
 ```
 
 ### network.js
 Monitor network requests.
 
 ```bash
-node network.js --url https://example.com [--types xhr,fetch] [--output requests.json]
+bun network.js --url https://example.com [--types xhr,fetch] [--output requests.json]
 ```
 
 ### performance.js
 Measure performance metrics and record trace.
 
 ```bash
-node performance.js --url https://example.com [--trace trace.json] [--metrics] [--resources true]
+bun performance.js --url https://example.com [--trace trace.json] [--metrics] [--resources true]
 ```
 
 ### ws-debug.js
 Debug WebSocket connections (basic mode).
 
 ```bash
-node ws-debug.js
+bun ws-debug.js
 ```
 
 Monitors WebSocket events via CDP: created, handshake, response, closed, error.
@@ -182,7 +182,7 @@ Monitors WebSocket events via CDP: created, handshake, response, closed, error.
 Debug WebSocket connections with full event tracking.
 
 ```bash
-node ws-full-debug.js
+bun ws-full-debug.js
 ```
 
 Monitors all WebSocket events including frame sent/received, with detailed logging.
@@ -202,19 +202,19 @@ Scripts that accept `--selector` (click.js, fill.js, screenshot.js) support both
 
 ```bash
 # Element tag
-node click.js --selector "button" --url https://example.com
+bun click.js --selector "button" --url https://example.com
 
 # Class selector
-node click.js --selector ".btn-submit" --url https://example.com
+bun click.js --selector ".btn-submit" --url https://example.com
 
 # ID selector
-node fill.js --selector "#email" --value "user@example.com" --url https://example.com
+bun fill.js --selector "#email" --value "user@example.com" --url https://example.com
 
 # Attribute selector
-node click.js --selector 'button[type="submit"]' --url https://example.com
+bun click.js --selector 'button[type="submit"]' --url https://example.com
 
 # Complex selector
-node screenshot.js --selector "div.container > button.btn-primary" --output btn.png
+bun screenshot.js --selector "div.container > button.btn-primary" --output btn.png
 ```
 
 ### XPath Selectors
@@ -223,22 +223,22 @@ XPath selectors start with `/` or `(//` and are automatically detected:
 
 ```bash
 # Text matching - exact
-node click.js --selector '//button[text()="Submit"]' --url https://example.com
+bun click.js --selector '//button[text()="Submit"]' --url https://example.com
 
 # Text matching - contains
-node click.js --selector '//button[contains(text(),"Submit")]' --url https://example.com
+bun click.js --selector '//button[contains(text(),"Submit")]' --url https://example.com
 
 # Attribute matching
-node fill.js --selector '//input[@type="email"]' --value "user@example.com"
+bun fill.js --selector '//input[@type="email"]' --value "user@example.com"
 
 # Multiple conditions
-node click.js --selector '//button[@type="submit" and contains(text(),"Save")]'
+bun click.js --selector '//button[@type="submit" and contains(text(),"Save")]'
 
 # Descendant selection
-node screenshot.js --selector '//div[@class="modal"]//button[@class="close"]' --output modal.png
+bun screenshot.js --selector '//div[@class="modal"]//button[@class="close"]' --output modal.png
 
 # Nth element
-node click.js --selector '(//button)[2]'  # Second button on page
+bun click.js --selector '(//button)[2]'  # Second button on page
 ```
 
 ### Discovering Selectors
@@ -247,13 +247,13 @@ Use `snapshot.js` to discover correct selectors:
 
 ```bash
 # Get all interactive elements
-node snapshot.js --url https://example.com | jq '.elements[]'
+bun snapshot.js --url https://example.com | jq '.elements[]'
 
 # Find buttons
-node snapshot.js --url https://example.com | jq '.elements[] | select(.tagName=="BUTTON")'
+bun snapshot.js --url https://example.com | jq '.elements[] | select(.tagName=="BUTTON")'
 
 # Find inputs
-node snapshot.js --url https://example.com | jq '.elements[] | select(.tagName=="INPUT")'
+bun snapshot.js --url https://example.com | jq '.elements[] | select(.tagName=="INPUT")'
 ```
 
 ### Security

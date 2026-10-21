@@ -15,10 +15,10 @@ First, the @remotion/captions package needs to be installed.
 If it is not installed, use the following command:
 
 ```bash
-npx remotion add @remotion/captions # If project uses npm
+bunx remotion add @remotion/captions # If project uses npm
 bunx remotion add @remotion/captions # If project uses bun
-yarn remotion add @remotion/captions # If project uses yarn
-pnpm exec remotion add @remotion/captions # If project uses pnpm
+bun run remotion add @remotion/captions # If project uses yarn
+bun x remotion add @remotion/captions # If project uses pnpm
 ```
 
 ## Creating pages

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * TaskCompleted Hook - Logs task completions and injects progress context
  *

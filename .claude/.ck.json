@@ -61,18 +61,18 @@
     "ClaudeKit Engineer": {
       "installedSettings": {
         "hooks": [
-          "node $HOME/.claude/hooks/session-init.cjs",
-          "node $HOME/.claude/hooks/subagent-init.cjs",
-          "node $HOME/.claude/hooks/team-context-inject.cjs",
-          "node $HOME/.claude/hooks/cook-after-plan-reminder.cjs",
-          "node $HOME/.claude/hooks/dev-rules-reminder.cjs",
-          "node $HOME/.claude/hooks/usage-context-awareness.cjs",
-          "node $HOME/.claude/hooks/descriptive-name.cjs",
-          "node $HOME/.claude/hooks/scout-block.cjs",
-          "node $HOME/.claude/hooks/privacy-block.cjs",
-          "node $HOME/.claude/hooks/post-edit-simplify-reminder.cjs",
-          "node $HOME/.claude/hooks/task-completed-handler.cjs",
-          "node $HOME/.claude/hooks/teammate-idle-handler.cjs"
+          "bun $HOME/.claude/hooks/session-init.cjs",
+          "bun $HOME/.claude/hooks/subagent-init.cjs",
+          "bun $HOME/.claude/hooks/team-context-inject.cjs",
+          "bun $HOME/.claude/hooks/cook-after-plan-reminder.cjs",
+          "bun $HOME/.claude/hooks/dev-rules-reminder.cjs",
+          "bun $HOME/.claude/hooks/usage-context-awareness.cjs",
+          "bun $HOME/.claude/hooks/descriptive-name.cjs",
+          "bun $HOME/.claude/hooks/scout-block.cjs",
+          "bun $HOME/.claude/hooks/privacy-block.cjs",
+          "bun $HOME/.claude/hooks/post-edit-simplify-reminder.cjs",
+          "bun $HOME/.claude/hooks/task-completed-handler.cjs",
+          "bun $HOME/.claude/hooks/teammate-idle-handler.cjs"
         ],
         "mcpServers": []
       }

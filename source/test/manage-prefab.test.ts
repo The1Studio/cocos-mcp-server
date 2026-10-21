@@ -194,7 +194,7 @@ describe('ManagePrefab', () => {
             expect(result.success).toBe(false);
         });
 
-        it('passes the instance root uuid POSITIONALLY, never as a { node } object', async () => {
+        it('passes the instance root uuid POSITIONALLY, never as a { Node } object', async () => {
             const tmpFile = writePrefabFile();
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
@@ -276,7 +276,7 @@ describe('ManagePrefab', () => {
             fs.unlinkSync(tmpFile);
         });
 
-        it('errors when the node is not part of a prefab instance', async () => {
+        it('errors when the Node is not part of a prefab instance', async () => {
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest.mockResolvedValueOnce({ name: 'PlainNode' });
 
@@ -384,11 +384,11 @@ describe('ManagePrefab', () => {
          * The walker passed the dump object to `query-node`, never reached a child, so every
          * LIVE child looked orphaned and was deleted from the asset on each `update`.
          */
-        it('reads child uuids out of query-node dump entries and keeps live children', async () => {
+        it('reads child uuids out of query-Node dump entries and keeps live children', async () => {
             const tmpFile = writePrefabAsset([{ __type__: 'cc.Prefab' }]);
             routeMessages({
                 'query-node': (uuid: any) => {
-                    if (typeof uuid !== 'string') throw new Error('query-node expects a uuid string');
+                    if (typeof uuid !== 'string') throw new Error('query-Node expects a uuid string');
                     if (uuid === ROOT_UUID) {
                         return { ...nodeDump, __prefab__: { ...nodeDump.__prefab__, fileId: 'root' },
                             children: [{ value: { uuid: 'keep-uuid' }, type: 'cc.Node' }] };
@@ -795,7 +795,7 @@ describe('ManagePrefab', () => {
             expect(result.error).toContain(PREFAB_UUID);
         });
 
-        it('fails when create-node returns no node uuid', async () => {
+        it('fails when create-Node returns no Node uuid', async () => {
             const mockRequest = routeInstantiate({
                 'query-asset-info': () => assetInfo,
                 'query-node-tree': () => SCENE_ROOT,
@@ -811,7 +811,7 @@ describe('ManagePrefab', () => {
             expect(mockRequest.mock.calls.map((c: any[]) => c[1])).toContain('create-node');
         });
 
-        it('fails when create-node returns an empty array', async () => {
+        it('fails when create-Node returns an empty array', async () => {
             routeInstantiate({
                 'query-asset-info': () => assetInfo,
                 'query-node-tree': () => SCENE_ROOT,
@@ -840,7 +840,7 @@ describe('ManagePrefab', () => {
             }));
         });
 
-        it('passes the asset db type so create-node links a PrefabInstance instead of a flattened copy', async () => {
+        it('passes the asset db type so create-Node links a PrefabInstance instead of a flattened copy', async () => {
             // Regression test: 3.8.7's NodeManager.createNodeFromAsset() picks the
             // linked-instance branch based on options.type. Omitting it (as the old
             // code did) falls back to a plain-dump node with no cc.PrefabInfo — the

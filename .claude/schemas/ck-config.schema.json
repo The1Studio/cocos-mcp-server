@@ -226,13 +226,7 @@
         },
         "packageManager": {
           "type": "string",
-          "enum": [
-            "auto",
-            "npm",
-            "yarn",
-            "pnpm",
-            "bun"
-          ],
+          "enum": ["auto", "bun"],
           "default": "auto",
           "description": "Package manager (auto=detect from lockfile)"
         },

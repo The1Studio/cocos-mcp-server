@@ -17,17 +17,17 @@
 
 ```bash
 # STEP 1: Execute detect-topic.js script
-node scripts/detect-topic.js "<user query>"
+bun scripts/detect-topic.js "<user query>"
 # Returns: {"isTopicSpecific": false} for general queries
 
 # STEP 2: Execute fetch-docs.js script (handles URL construction)
-node scripts/fetch-docs.js "<user query>"
+bun scripts/fetch-docs.js "<user query>"
 # Script constructs context7.com URL automatically
 # Script handles GitHub/website URL patterns
 # Returns: llms.txt content with 5-20+ URLs
 
 # STEP 3: Execute analyze-llms-txt.js script
-cat llms.txt | node scripts/analyze-llms-txt.js -
+cat llms.txt | bun scripts/analyze-llms-txt.js -
 # Groups URLs: critical, important, supplementary
 # Recommends: agent distribution strategy
 # Returns: {totalUrls, grouped, distribution}
@@ -46,14 +46,14 @@ cat llms.txt | node scripts/analyze-llms-txt.js -
 **Astro framework:**
 ```bash
 # Execute scripts (no manual URL construction)
-node scripts/detect-topic.js "Documentation for Astro"
+bun scripts/detect-topic.js "Documentation for Astro"
 # {"isTopicSpecific": false}
 
-node scripts/fetch-docs.js "Documentation for Astro"
+bun scripts/fetch-docs.js "Documentation for Astro"
 # Script fetches: context7.com/withastro/astro/llms.txt
 # Returns: llms.txt with 8 URLs
 
-node scripts/analyze-llms-txt.js < llms.txt
+bun scripts/analyze-llms-txt.js < llms.txt
 # {totalUrls: 8, distribution: "3-agents", grouped: {...}}
 
 # Deploy 3 Explorer agents as recommended:

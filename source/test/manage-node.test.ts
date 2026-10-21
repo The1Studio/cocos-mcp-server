@@ -73,7 +73,7 @@ describe('ManageNode', () => {
             }));
         });
 
-        it('still creates the node when the asset type lookup fails', async () => {
+        it('still creates the Node when the asset type lookup fails', async () => {
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
                 .mockResolvedValueOnce({ uuid: 'scene-root-uuid' })   // query-node-tree
@@ -161,7 +161,7 @@ describe('ManageNode', () => {
     // a resolved promise here does not guarantee the node was deleted (it also explains
     // issue #73, where "deleted" nodes reappear because the delete never took effect).
     describe('delete action (read-back verification, issue #74)', () => {
-        it('reports success when the read-back confirms the node no longer resolves', async () => {
+        it('reports success when the read-back confirms the Node no longer resolves', async () => {
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
                 .mockResolvedValueOnce({}) // remove-node
@@ -172,18 +172,18 @@ describe('ManageNode', () => {
             expect(result.success).toBe(true);
         });
 
-        it('treats a rejected read-back query as confirmation the node was deleted', async () => {
+        it('treats a rejected read-back query as confirmation the Node was deleted', async () => {
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
                 .mockResolvedValueOnce({}) // remove-node
-                .mockRejectedValueOnce(new Error('node not found')); // query-node rejects post-delete
+                .mockRejectedValueOnce(new Error('Node not found')); // query-node rejects post-delete
 
             const result = await tool.execute('delete', { uuid: 'node-1' });
 
             expect(result.success).toBe(true);
         });
 
-        it('reports failure when the read-back shows the node is still resolvable (prefab-instance child blocked)', async () => {
+        it('reports failure when the read-back shows the Node is still resolvable (prefab-instance child blocked)', async () => {
             const mockRequest = (global as any).Editor.Message.request as jest.Mock;
             mockRequest
                 .mockResolvedValueOnce({}) // remove-node resolves but is a silent no-op

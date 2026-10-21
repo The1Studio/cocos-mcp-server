@@ -143,7 +143,7 @@ export class PrefabCreationService {
     async createPrefabWithAssetDB(nodeUuid: string, savePath: string, prefabName: string, includeChildren: boolean, includeComponents: boolean): Promise<any> {
         try {
             const nodeData = await this.getNodeData(nodeUuid);
-            if (!nodeData) return { success: false, error: 'Cannot get node data' };
+            if (!nodeData) return { success: false, error: 'Cannot get Node data' };
 
             const tempPrefabContent = JSON.stringify([{ "__type__": "cc.Prefab", "_name": prefabName }], null, 2);
             const createResult = await this.createAssetWithAssetDB(savePath, tempPrefabContent);
@@ -214,7 +214,7 @@ export class PrefabCreationService {
                     ...this.conversionFailureFields(convertResult),
                     propertiesVerifiedFrom: readBack.source,
                     ...(this.lastPrunedStaleChildren.length > 0 ? { prunedStaleChildren: [...this.lastPrunedStaleChildren] } : {}),
-                    message: convertResult.success ? 'Prefab created and node converted' : 'Prefab created, node conversion failed'
+                    message: convertResult.success ? 'Prefab created and Node converted' : 'Prefab created, Node conversion failed'
                 }
             };
         } catch (error) {
@@ -265,7 +265,7 @@ export class PrefabCreationService {
                         prefabUuid, prefabPath, nodeUuid, prefabName,
                         convertedToPrefabInstance: convertResult.success,
                         ...this.conversionFailureFields(convertResult),
-                        message: convertResult.success ? 'Custom prefab created and node converted' : 'Prefab created, node conversion failed'
+                        message: convertResult.success ? 'Custom prefab created and Node converted' : 'Prefab created, Node conversion failed'
                     }
                 };
             }
@@ -342,7 +342,7 @@ export class PrefabCreationService {
                 }
             }
         } catch (error) {
-            console.warn(`Failed to get component info for node ${node.uuid}:`, error);
+            console.warn(`Failed to get component info for Node ${node.uuid}:`, error);
         }
         if (node.children && Array.isArray(node.children)) {
             if (liveChildUuids) {
@@ -779,7 +779,7 @@ export class PrefabCreationService {
             // A node outside the subtree being serialized cannot be encoded in a prefab —
             // the format has no cross-file node reference. This one genuinely must be
             // dropped, but it is still a data loss and is recorded as such.
-            this.recordLoss(context, propertyPath, value.uuid, 'node is outside the prefab subtree being serialized');
+            this.recordLoss(context, propertyPath, value.uuid, 'Node is outside the prefab subtree being serialized');
             return null;
         }
 
@@ -973,9 +973,9 @@ export class PrefabCreationService {
     private conversionFailureFields(convertResult: any): Record<string, any> {
         if (convertResult.success) return {};
         return {
-            warning: 'The prefab asset was written, but the scene node was NOT converted into a linked prefab instance; it is still a plain node.',
+            warning: 'The prefab asset was written, but the scene Node was NOT converted into a linked prefab instance; it is still a plain node.',
             conversionError: convertResult.error,
-            instruction: 'Use the written prefab as-is, or link the node in the editor (right-click node > Link Prefab). Re-running create will not retry the link.'
+            instruction: 'Use the written prefab as-is, or link the Node in the editor (right-click Node > Link Prefab). Re-running create will not retry the link.'
         };
     }
 

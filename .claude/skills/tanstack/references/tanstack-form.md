@@ -2,8 +2,8 @@
 
 ## Setup
 ```bash
-npm i @tanstack/react-form
-npm i @tanstack/zod-form-adapter zod  # optional: Zod validation
+bun install @tanstack/react-form
+bun install @tanstack/zod-form-adapter zod  # optional: Zod validation
 ```
 
 ## useForm

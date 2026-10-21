@@ -412,9 +412,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 18
+          bun-version: 1.4.3
 
       - name: Install dependencies
         run: npm install

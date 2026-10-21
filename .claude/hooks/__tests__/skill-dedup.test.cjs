@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Tests for skill-dedup.cjs hook
  * Run: node --test .claude/hooks/__tests__/skill-dedup.test.cjs

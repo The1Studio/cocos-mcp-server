@@ -6,7 +6,7 @@ Quick workflow for TypeScript/type errors.
 ```bash
 bun run typecheck
 tsc --noEmit
-npx tsc --noEmit
+bunx tsc --noEmit
 ```
 
 ## Rules

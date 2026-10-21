@@ -155,7 +155,7 @@ Track order types via `billing_reason`:
 - Go: Official SDK
 
 **Framework Adapters:**
-- Next.js: `@polar-sh/nextjs` (quickstart: `npx polar-init`)
+- Next.js: `@polar-sh/nextjs` (quickstart: `bunx polar-init`)
 - Laravel: `polar-sh/laravel`
 - Remix, Astro, Express, TanStack Start
 - Elysia, Fastify, Hono, SvelteKit

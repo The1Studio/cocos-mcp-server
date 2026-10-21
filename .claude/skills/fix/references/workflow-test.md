@@ -62,7 +62,7 @@ Use `code-reviewer` agent.
 
 ## Common Commands
 ```bash
-npm test
+bun test
 bun test
 pytest
 go test ./...

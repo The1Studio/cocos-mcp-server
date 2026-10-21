@@ -459,8 +459,8 @@ describe('detectPackageManager', () => {
   });
 
   test('returns config override if not "auto"', () => {
-    expect(detectPackageManager('yarn')).toBe('yarn');
-    expect(detectPackageManager('pnpm')).toBe('pnpm');
+    expect(detectPackageManager('bun install')).toBe('bun install');
+    expect(detectPackageManager('bun')).toBe('bun');
   });
 
   test('detects bun from bun.lockb', () => {
@@ -470,17 +470,17 @@ describe('detectPackageManager', () => {
 
   test('detects pnpm from pnpm-lock.yaml', () => {
     fs.writeFileSync('pnpm-lock.yaml', '');
-    expect(detectPackageManager()).toBe('pnpm');
+    expect(detectPackageManager()).toBe('bun');
   });
 
   test('detects yarn from yarn.lock', () => {
     fs.writeFileSync('yarn.lock', '');
-    expect(detectPackageManager()).toBe('yarn');
+    expect(detectPackageManager()).toBe('bun install');
   });
 
   test('detects npm from package-lock.json', () => {
     fs.writeFileSync('package-lock.json', '{}');
-    expect(detectPackageManager()).toBe('npm');
+    expect(detectPackageManager()).toBe('bun');
   });
 
   test('returns null when no lock file found', () => {

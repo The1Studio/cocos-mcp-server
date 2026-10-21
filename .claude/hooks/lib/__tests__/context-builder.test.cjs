@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Tests for context-builder.cjs - rules/workflows backward compatibility
  * Run: node --test .claude/hooks/lib/__tests__/context-builder.test.cjs

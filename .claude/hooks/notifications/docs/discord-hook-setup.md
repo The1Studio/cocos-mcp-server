@@ -25,7 +25,7 @@ Add to your `.claude/settings.json` (project) or `~/.claude/settings.json` (glob
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/notifications/notify.cjs"
+            "command": "bun .claude/hooks/notifications/notify.cjs"
           }
         ]
       }
@@ -38,7 +38,7 @@ Add to your `.claude/settings.json` (project) or `~/.claude/settings.json` (glob
 
 ```bash
 echo '{"hook_event_name":"Stop","cwd":"'"$(pwd)"'","session_id":"test123"}' | \
-  node .claude/hooks/notifications/notify.cjs
+  bun .claude/hooks/notifications/notify.cjs
 ```
 
 ---
@@ -182,7 +182,7 @@ Claude will automatically:
 #!/bin/bash
 # deploy.sh
 
-if npm run build && npm run test; then
+if npm run build && bun run test; then
     ./.claude/hooks/send-discord.sh '✅ Build and tests passed - ready to deploy'
 else
     ./.claude/hooks/send-discord.sh '❌ Build or tests failed - deployment blocked'
@@ -193,7 +193,7 @@ fi
 ```json
 {
   "scripts": {
-    "deploy": "npm run build && npm run test && ./.claude/hooks/send-discord.sh '✅ Deployment successful'",
+    "deploy": "npm run build && bun run test && ./.claude/hooks/send-discord.sh '✅ Deployment successful'",
     "notify": "./.claude/hooks/send-discord.sh"
   }
 }

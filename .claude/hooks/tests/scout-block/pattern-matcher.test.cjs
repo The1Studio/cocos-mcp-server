@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * pattern-matcher.test.cjs - Unit tests for gitignore-spec pattern matching
  *

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * MCP Management CLI - Command-line interface for MCP operations
  */

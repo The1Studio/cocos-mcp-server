@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * test-privacy-block.cjs - Unit tests for privacy-block hook
  */
@@ -13,7 +13,7 @@ const CK_CONFIG_PATH = path.join(__dirname, '..', '.ck.json');
 async function runHook(hookData, cwd = undefined) {
   return new Promise((resolve) => {
     const options = cwd ? { cwd } : {};
-    const proc = spawn('node', [HOOK_PATH], options);
+    const proc = spawn('bun', [HOOK_PATH], options);
     let stderr = '';
 
     proc.stderr.on('data', (data) => {

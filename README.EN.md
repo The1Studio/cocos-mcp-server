@@ -292,13 +292,13 @@ YourProject/
 
 ```bash
 cd extensions/cocos-mcp-server
-npm install
+bun install
 ```
 
 ### 3. Build the Plugin
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### 4. Enable Plugin
@@ -364,13 +364,13 @@ cocos-mcp-server/
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Build for development with watch mode
-npm run watch
+bun run watch
 
 # Build for production
-npm run build
+bun run build
 ```
 
 ### Adding New Tools
@@ -394,7 +394,7 @@ The plugin is fully written in TypeScript with:
 
 1. **Server won't start**: Check port availability and firewall settings
 2. **Tools not working**: Ensure scene is loaded and UUIDs are valid
-3. **Build errors**: Run `npm run build` to check for TypeScript errors
+3. **Build errors**: Run `bun run build` to check for TypeScript errors
 4. **Connection issues**: Verify HTTP URL and server status
 
 ### Debug Mode

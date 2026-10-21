@@ -386,7 +386,7 @@ When asked to create animations with anime.js:
 
 ## NPM Installation
 ```bash
-npm install animejs
+bun install animejs
 ```
 
 ## Version Check

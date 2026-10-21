@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Test script for modularization-hook.js (PostToolUse hook)
@@ -80,7 +80,7 @@ let failed = 0;
 for (const test of testCases) {
   try {
     const input = JSON.stringify(test.input);
-    const result = execSync(`node "${scriptPath}"`, {
+    const result = execSync(`bun "${scriptPath}"`, {
       input,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],

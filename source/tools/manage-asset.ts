@@ -382,7 +382,8 @@ export class ManageAsset extends BaseActionTool {
                     'recurse into folder contents. Reimport each child asset individually by its own url instead.'
                 );
             }
-            const result = await Editor.Message.request('asset-db', 'reimport-asset', url);
+            // Declared void by the editor typings; the runtime can still return false.
+            const result: unknown = await Editor.Message.request('asset-db', 'reimport-asset', url);
             if (result === false) {
                 return errorResult(`asset-db:reimport-asset returned false for '${url}' — the editor rejected the reimport.`);
             }

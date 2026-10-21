@@ -130,9 +130,9 @@ expect(spy).toHaveBeenCalledWith('message');
 ## Commands
 
 ```bash
-npx vitest run              # Run all
-npx vitest                  # Watch mode
-npx vitest run --coverage   # Coverage
-npx vitest run -u           # Update snapshots
-npx vitest --browser        # Browser mode
+bunx vitest run              # Run all
+bunx vitest                  # Watch mode
+bunx vitest run --coverage   # Coverage
+bunx vitest run -u           # Update snapshots
+bunx vitest --browser        # Browser mode
 ```

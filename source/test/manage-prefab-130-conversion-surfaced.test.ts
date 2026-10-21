@@ -2,7 +2,7 @@ import { PrefabCreationService } from '../tools/manage-prefab-creation-service';
 
 /**
  * #130 — `manage_prefab action=create` reported `convertedToPrefabInstance: false` with
- * a bare "node conversion failed" message, and the only link messages it tried
+ * a bare "Node conversion failed" message, and the only link messages it tried
  * (`connect-prefab-instance` / `set-prefab-connection` / `apply-prefab-link`) are not
  * 3.8.7 messages. The editor's own facade call is `linkPrefab(nodeUuid, assetUuid)`.
  * (The importer `_name` exception from the same report is #114 defect 2, fixed.)
@@ -41,7 +41,7 @@ describe('PrefabCreationService — node->instance conversion (#130)', () => {
         mockRequest = (global as any).Editor.Message.request as jest.Mock;
     });
 
-    it('links the node with scene:link-prefab (nodeUuid, assetUuid) and reports it converted', async () => {
+    it('links the Node with scene:link-prefab (nodeUuid, assetUuid) and reports it converted', async () => {
         route(() => true);
         const result = await create();
         expect(result.success).toBe(true);

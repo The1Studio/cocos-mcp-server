@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * test-path-extractor.cjs - Unit tests for path-extractor module
  */
@@ -49,11 +49,11 @@ const commandTests = [
   // Note: Build commands may extract 'build' as a blocked dir name, but this is handled
   // at the dispatcher level (build commands bypass path checking entirely).
   // The path extractor correctly identifies blocked dir names like 'build'.
-  { cmd: 'npm run build', hasPath: 'build', desc: 'npm run build (extracts build)' },
-  { cmd: 'pnpm build', hasPath: 'build', desc: 'pnpm build (extracts build)' },
+  { cmd: 'bun run build', hasPath: 'build', desc: 'bun run build (extracts build)' },
+  { cmd: 'bun build', hasPath: 'build', desc: 'bun build (extracts build)' },
   { cmd: 'cd build', hasPath: 'build', desc: 'cd build (extracts build)' },
-  { cmd: 'yarn test', hasPath: null, desc: 'yarn test (no blocked paths)' },
-  { cmd: 'npm install', hasPath: null, desc: 'npm install (no blocked paths)' },
+  { cmd: 'bun test', hasPath: null, desc: 'bun test (no blocked paths)' },
+  { cmd: 'bun install', hasPath: null, desc: 'bun install (no blocked paths)' },
 ];
 
 const looksLikePathTests = [
@@ -64,7 +64,7 @@ const looksLikePathTests = [
   { str: 'file.txt', expected: true, desc: 'file with extension' },
   { str: 'node_modules', expected: true, desc: 'blocked dir name' },
   { str: 'ls', expected: false, desc: 'command word' },
-  { str: 'npm', expected: false, desc: 'package manager' },
+  { str: 'bun', expected: false, desc: 'package manager' },
   { str: '-rf', expected: false, desc: 'flag' },
   { str: '123', expected: false, desc: 'number' },
 ];

@@ -8817,7 +8817,7 @@ npm run build
 
 1. **服务器无法启动**: 检查端口可用性和防火墙设置
 2. **工具不工作**: 确保场景已加载且 UUID 有效
-3. **构建错误**: 运行 `npm run build` 检查 TypeScript 错误
+3. **构建错误**: 运行 `bun run build` 检查 TypeScript 错误
 4. **连接问题**: 验证 HTTP URL 和服务器状态
 
 ### 调试模式
@@ -20982,7 +20982,7 @@ Use `--prefix` option to specify target directory. (Do not use `cd` - to ensure 
 npm install --production --prefix extensions/cocos-mcp-server
 ```
 
-- On error: Display "npm install failed." and **stop**
+- On error: Display "bun install failed." and **stop**
 
 ### 4. Result Message
 
@@ -22972,7 +22972,7 @@ npm run build      # TypeScript compilation (source/ → dist/)
 npm run watch      # Watch mode for development
 ```
 
-Verify changes compile cleanly with `npm run build`. No linter or test runner is configured.
+Verify changes compile cleanly with `bun run build`. No linter or test runner is configured.
 
 ## Architecture (v2.0)
 
@@ -28165,7 +28165,7 @@ export class MCPServer {
     "author": "LiDaxian",
     "editor": ">=3.5.0",
     "scripts": {
-        "preinstall": "node ./scripts/preinstall.js",
+        "preinstall": "bun ./scripts/preinstall.js",
         "build": "tsc",
         "watch": "tsc -w"
     },
@@ -30502,7 +30502,7 @@ The plugin is fully written in TypeScript with:
 
 1. **Server won't start**: Check port availability and firewall settings
 2. **Tools not working**: Ensure scene is loaded and UUIDs are valid
-3. **Build errors**: Run `npm run build` to check for TypeScript errors
+3. **Build errors**: Run `bun run build` to check for TypeScript errors
 4. **Connection issues**: Verify HTTP URL and server status
 
 ### Debug Mode
@@ -30594,7 +30594,7 @@ The skill will automatically perform the following:
 
 1. Verify current directory is a Cocos Creator project (checks for `assets/` folder)
 2. Git clone the plugin to `extensions/cocos-mcp-server/` (or git pull if already exists)
-3. Install dependencies with `npm install --production`
+3. Install dependencies with `bun install --production`
 
 ### Post-Installation Setup
 
@@ -30943,7 +30943,7 @@ npm run build
 
 1. **Server won't start**: Check port availability and firewall settings
 2. **Tools not working**: Verify scene is loaded and UUIDs are valid
-3. **Build errors**: Check TypeScript errors with `npm run build`
+3. **Build errors**: Check TypeScript errors with `bun run build`
 4. **Connection issues**: Verify HTTP URL and server status
 
 ### Debug Mode

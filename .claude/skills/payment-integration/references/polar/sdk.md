@@ -6,7 +6,7 @@ Multi-language SDKs and framework adapters.
 
 **Installation:**
 ```bash
-npm install @polar-sh/sdk
+bun install @polar-sh/sdk
 ```
 
 **Configuration:**
@@ -207,7 +207,7 @@ checkout, err := client.Checkouts.Create(ctx, &polar.CheckoutCreateParams{
 
 **Quick Start:**
 ```bash
-npx polar-init
+bunx polar-init
 ```
 
 **Configuration:**
@@ -367,7 +367,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
 **Installation:**
 ```bash
-npm install @polar-sh/better-auth
+bun install @polar-sh/better-auth
 ```
 
 **Configuration:**

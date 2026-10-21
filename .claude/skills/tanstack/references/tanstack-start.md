@@ -2,10 +2,10 @@
 
 ## CLI Commands
 ```bash
-npm create @tanstack/start@latest         # scaffold project
-npm run dev                               # vite dev server
-npm run build                             # production build
-NITRO_PRESET=cloudflare-workers npm run build  # deploy target
+bun create @tanstack/start@latest         # scaffold project
+bun run dev                               # vite dev server
+bun run build                             # production build
+ NITRO_PRESET=cloudflare-workers bun run build  # deploy target
 ```
 
 ## app.config.ts

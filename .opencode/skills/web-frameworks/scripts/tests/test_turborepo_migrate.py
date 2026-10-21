@@ -21,8 +21,8 @@ def mock_monorepo(tmp_path):
         "private": True,
         "workspaces": ["apps/*", "packages/*"],
         "scripts": {
-            "build": "npm run build --workspaces",
-            "test": "npm run test --workspaces"
+            "build": "bun run build --workspaces",
+            "test": "bun run test --workspaces"
         }
     }
 

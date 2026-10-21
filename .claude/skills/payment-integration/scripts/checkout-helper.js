@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Checkout Helper Script
@@ -6,7 +6,7 @@
  * Generate checkout sessions for both SePay and Polar platforms.
  *
  * Usage:
- *   node checkout-helper.js <platform> <config-json>
+ *   bun checkout-helper.js <platform> <config-json>
  *
  * Platforms: sepay, polar
  *
@@ -181,15 +181,15 @@ if (require.main === module) {
   const args = process.argv.slice(2);
 
   if (args.length < 2) {
-    console.log('Usage: node checkout-helper.js <platform> <config-json>');
+    console.log('Usage: bun checkout-helper.js <platform> <config-json>');
     console.log('\nPlatforms:');
     console.log('  sepay  - SePay checkout form generation');
     console.log('  polar  - Polar checkout session configuration');
     console.log('\nExamples:');
     console.log('\nSePay:');
-    console.log('  node checkout-helper.js sepay \'{"orderInvoiceNumber":"ORD001","orderAmount":100000,"successUrl":"https://example.com/success","errorUrl":"https://example.com/error","cancelUrl":"https://example.com/cancel"}\'');
+    console.log('  bun checkout-helper.js sepay \'{"orderInvoiceNumber":"ORD001","orderAmount":100000,"successUrl":"https://example.com/success","errorUrl":"https://example.com/error","cancelUrl":"https://example.com/cancel"}\'');
     console.log('\nPolar:');
-    console.log('  node checkout-helper.js polar \'{"productPriceId":"price_xxx","successUrl":"https://example.com/success","externalCustomerId":"user_123"}\'');
+    console.log('  bun checkout-helper.js polar \'{"productPriceId":"price_xxx","successUrl":"https://example.com/success","externalCustomerId":"user_123"}\'');
     process.exit(1);
   }
 

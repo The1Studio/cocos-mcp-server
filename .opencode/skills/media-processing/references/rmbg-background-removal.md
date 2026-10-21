@@ -5,9 +5,9 @@ Local AI-powered background removal tool. Repository: https://github.com/mrgooni
 ## Installation
 
 ```bash
-npm install -g rmbg-cli
+bun add -g rmbg-cli
 # or
-pnpm install -g rmbg-cli
+bun install -g rmbg-cli
 ```
 
 ## Usage

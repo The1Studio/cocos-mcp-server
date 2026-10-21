@@ -13,8 +13,8 @@ Comprehensive tests for statusline implementation modules.
 ### All Tests
 ```bash
 # From project root
-node .claude/hooks/lib/__tests__/statusline.test.cjs
-node .claude/hooks/lib/__tests__/statusline-integration.test.cjs
+bun .claude/hooks/lib/__tests__/statusline.test.cjs
+bun .claude/hooks/lib/__tests__/statusline-integration.test.cjs
 ```
 
 ### Run Specific Test Category
@@ -184,13 +184,13 @@ assertTrue(result.tools.length > 0, 'Should track tools');
 ### Check Specific Module
 ```bash
 # Test only colors
-node -e "const c = require('./.claude/hooks/lib/colors.cjs'); console.log(c.coloredBar(50))"
+bun -e "const c = require('./.claude/hooks/lib/colors.cjs'); console.log(c.coloredBar(50))"
 
 # Test only parser
-node -e "const {parseTranscript} = require('./.claude/hooks/lib/transcript-parser.cjs'); console.log('Parser loaded')"
+bun -e "const {parseTranscript} = require('./.claude/hooks/lib/transcript-parser.cjs'); console.log('Parser loaded')"
 
 # Test only config counter
-node -e "const {countConfigs} = require('./.claude/hooks/lib/config-counter.cjs'); console.log(countConfigs('/tmp'))"
+bun -e "const {countConfigs} = require('./.claude/hooks/lib/config-counter.cjs'); console.log(countConfigs('/tmp'))"
 ```
 
 ## Performance Characteristics
@@ -214,12 +214,12 @@ When modifying statusline modules:
 
 1. Run unit tests first:
    ```bash
-   node .claude/hooks/lib/__tests__/statusline.test.cjs
+   bun .claude/hooks/lib/__tests__/statusline.test.cjs
    ```
 
 2. Run integration tests:
    ```bash
-   node .claude/hooks/lib/__tests__/statusline-integration.test.cjs
+   bun .claude/hooks/lib/__tests__/statusline-integration.test.cjs
    ```
 
 3. Update test cases for new features/functions

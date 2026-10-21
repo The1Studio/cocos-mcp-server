@@ -18,7 +18,7 @@ const scriptsDir = path.join(__dirname, '..');
 
 function runScript(script, args = [], timeout = 10000) {
   return new Promise((resolve) => {
-    const proc = spawn('node', [path.join(scriptsDir, script), ...args], {
+    const proc = spawn('bun', [path.join(scriptsDir, script), ...args], {
       timeout,
       stdio: ['pipe', 'pipe', 'pipe']
     });

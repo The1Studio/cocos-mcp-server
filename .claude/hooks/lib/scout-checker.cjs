@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * scout-checker.cjs - Facade for scout-block modules
  *
@@ -42,7 +42,7 @@ const VENV_CREATION_PATTERN = /^(python3?|py)\s+(-[\w.]+\s+)*-m\s+venv\s+|^uv\s+
 
 /**
  * Strip leading ENV variable assignments and command wrappers (sudo, env, etc.)
- * e.g., "NODE_ENV=production npm run build" → "npm run build"
+ * e.g., " NODE_ENV=production bun run build" → "bun run build"
  * @param {string} command - The command to strip
  * @returns {string}
  */
@@ -169,10 +169,10 @@ function checkScoutBlock({ toolName, toolInput, options = {} }) {
   }
 
   // For Bash commands, split compound commands (&&, ||, ;) and check
-  // each sub-command independently. This prevents "echo msg && npm run build"
+  // each sub-command independently. This prevents "echo msg && bun run build"
   // from being blocked due to "build" token in the allowed build sub-command.
   // Must split BEFORE isAllowedCommand because BUILD_COMMAND_PATTERN has no end
-  // anchor and would match the prefix of "npm run build && cat dist/file.js".
+  // anchor and would match the prefix of "bun run build && cat dist/file.js".
   if (toolInput.command) {
     const subCommands = splitCompoundCommand(toolInput.command);
     const nonAllowed = subCommands.filter(cmd => !isAllowedCommand(cmd.trim()));

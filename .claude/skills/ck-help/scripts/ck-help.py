@@ -423,7 +423,7 @@ CATEGORY_GUIDES = {
         ],
         "tip": """Add to settings.json:
 ```json
-"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "node .claude/hooks/notifications/notify.cjs"}]}]
+"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "bun .claude/hooks/notifications/notify.cjs"}]}]
 ```
 Docs: `.claude/hooks/notifications/docs/`""",
     },

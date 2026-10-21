@@ -193,7 +193,7 @@ For each tool in the plan:
 - TypeScript strict mode enabled
 - No `any` types - use proper types
 - Explicit Promise<T> return types
-- Build process configured (`npm run build`)
+- Build process configured (`bun run build`)
 
 ---
 
@@ -213,7 +213,7 @@ To ensure quality, review the code for:
 
 #### 3.2 Test and Build
 
-**Important:** MCP servers are long-running processes that wait for requests over stdio/stdin or sse/http. Running them directly in your main process (e.g., `python server.py` or `node dist/index.js`) will cause your process to hang indefinitely.
+**Important:** MCP servers are long-running processes that wait for requests over stdio/stdin or sse/http. Running them directly in your main process (e.g., `python server.py` or `bun dist/index.js`) will cause your process to hang indefinitely.
 
 **Safe ways to test the server:**
 - Use the evaluation harness (see Phase 4) - recommended approach
@@ -227,7 +227,7 @@ To ensure quality, review the code for:
 - Or use the evaluation harness directly (it manages the server for stdio transport)
 
 **For Node/TypeScript:**
-- Run `npm run build` and ensure it completes without errors
+- Run `bun run build` and ensure it completes without errors
 - Verify dist/index.js is created
 - To manually test: Run server in tmux, then test with evaluation harness in main process
 - Or use the evaluation harness directly (it manages the server for stdio transport)

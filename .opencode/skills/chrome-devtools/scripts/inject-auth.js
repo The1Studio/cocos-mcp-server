@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Inject authentication cookies/tokens into browser session
  * Usage: node inject-auth.js --url https://example.com --cookies '[{"name":"token","value":"xxx","domain":".example.com"}]'

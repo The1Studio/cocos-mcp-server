@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * error-formatter.cjs - Rich, actionable error messages for scout-block
  *

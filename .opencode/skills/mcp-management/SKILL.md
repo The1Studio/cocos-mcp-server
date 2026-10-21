@@ -57,9 +57,9 @@ This ensures parseable, consistent output instead of unpredictable natural langu
 ### 2. Capability Discovery
 
 ```bash
-npx tsx scripts/cli.ts list-tools  # Saves to assets/tools.json
-npx tsx scripts/cli.ts list-prompts
-npx tsx scripts/cli.ts list-resources
+bunx tsx scripts/cli.ts list-tools  # Saves to assets/tools.json
+bunx tsx scripts/cli.ts list-prompts
+bunx tsx scripts/cli.ts list-resources
 ```
 
 Aggregates capabilities from multiple servers with server identification.
@@ -78,7 +78,7 @@ echo "Take a screenshot of https://example.com" | gemini -y -m <gemini.model>
 
 **Secondary: Direct Scripts**
 ```bash
-npx tsx scripts/cli.ts call-tool memory create_entities '{"entities":[...]}'
+bunx tsx scripts/cli.ts call-tool memory create_entities '{"entities":[...]}'
 ```
 
 **Fallback: mcp-manager Subagent**
@@ -151,7 +151,7 @@ Command-line interface for MCP operations. Commands:
 
 **Method 1: Gemini CLI** (recommended)
 ```bash
-npm install -g gemini-cli
+bun add -g gemini-cli
 mkdir -p .gemini && ln -sf .opencode/.mcp.json .gemini/settings.json
 # IMPORTANT: Use stdin piping, NOT -p flag (deprecated, skips MCP init)
 # GEMINI.md auto-loads to enforce JSON responses
@@ -162,9 +162,9 @@ Returns structured JSON: `{"server":"puppeteer","tool":"screenshot","success":tr
 
 **Method 2: Scripts**
 ```bash
-cd .opencode/skills/mcp-management/scripts && npm install
-npx tsx cli.ts list-tools  # Saves to assets/tools.json
-npx tsx cli.ts call-tool memory create_entities '{"entities":[...]}'
+cd .opencode/skills/mcp-management/scripts && bun install
+bunx tsx cli.ts list-tools  # Saves to assets/tools.json
+bunx tsx cli.ts call-tool memory create_entities '{"entities":[...]}'
 ```
 
 **Method 3: mcp-manager Subagent**
@@ -192,7 +192,7 @@ See [references/mcp-protocol.md](references/mcp-protocol.md) for:
 
 2. **Direct CLI Scripts** (Secondary): Manual tool specification
    - Use when: Need specific tool/server control
-   - Execute: `npx tsx scripts/cli.ts call-tool <server> <tool> <args>`
+   - Execute: `bunx tsx scripts/cli.ts call-tool <server> <tool> <args>`
 
 3. **mcp-manager Subagent** (Fallback): Context-efficient delegation
    - Use when: Gemini unavailable or failed

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Import cookies from JSON file exported by browser extensions
  * Supports: EditThisCookie, Cookie-Editor, Netscape (txt) formats

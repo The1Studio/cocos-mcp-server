@@ -5,7 +5,7 @@ Official SDKs for server-side integration.
 ## Node.js
 
 ```bash
-npm install @paddle/paddle-node-sdk
+bun install @paddle/paddle-node-sdk
 ```
 
 ```typescript

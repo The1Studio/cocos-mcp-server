@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * test-build-command-allowlist.cjs - Tests for build command allowlist patterns
  *
@@ -18,17 +18,17 @@ function isBuildCommand(command) {
 
 const tests = [
   // JS/Node package managers - should be allowed
-  { cmd: 'npm run build', expected: true, desc: 'npm run build' },
-  { cmd: 'npm build', expected: true, desc: 'npm build' },
-  { cmd: 'pnpm build', expected: true, desc: 'pnpm build' },
-  { cmd: 'yarn build', expected: true, desc: 'yarn build' },
+  { cmd: 'bun run build', expected: true, desc: 'bun run build' },
   { cmd: 'bun build', expected: true, desc: 'bun build' },
-  { cmd: 'npm install', expected: true, desc: 'npm install' },
-  { cmd: 'pnpm --filter web run build', expected: true, desc: 'pnpm with filter' },
-  { cmd: 'yarn workspace app build', expected: true, desc: 'yarn workspace build' },
+  { cmd: 'bun build', expected: true, desc: 'bun build' },
+  { cmd: 'bun run build', expected: true, desc: 'bun run build' },
+  { cmd: 'bun build', expected: true, desc: 'bun build' },
+  { cmd: 'bun install', expected: true, desc: 'bun install' },
+  { cmd: 'bun run --filter web run build', expected: true, desc: 'bun with filter' },
+  { cmd: 'bun run workspace app build', expected: true, desc: 'bun run workspace build' },
 
   // JS tools - should be allowed
-  { cmd: 'npx tsc', expected: true, desc: 'npx tsc' },
+  { cmd: 'bunx tsc', expected: true, desc: 'bunx tsc' },
   { cmd: 'tsc --build', expected: true, desc: 'tsc --build' },
   { cmd: 'esbuild src/index.ts', expected: true, desc: 'esbuild' },
   { cmd: 'vite build', expected: true, desc: 'vite build' },

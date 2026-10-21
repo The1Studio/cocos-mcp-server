@@ -77,12 +77,12 @@ Use the naming pattern from the `## Naming` section injected by hooks. The patte
 
 After creating the plan folder, update session state so subagents receive the latest context:
 ```bash
-node .opencode/scripts/set-active-plan.cjs {plan-dir}
+bun .opencode/scripts/set-active-plan.cjs {plan-dir}
 ```
 
 Example:
 ```bash
-node .opencode/scripts/set-active-plan.cjs ai_docs/feature/GH-88-add-authentication
+bun .opencode/scripts/set-active-plan.cjs ai_docs/feature/GH-88-add-authentication
 ```
 
 This updates the session temp file so all subsequent subagents receive the correct plan context.

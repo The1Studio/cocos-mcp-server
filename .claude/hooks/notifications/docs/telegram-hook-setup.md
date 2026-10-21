@@ -26,7 +26,7 @@ Add to your `.claude/settings.json` (project) or `~/.claude/settings.json` (glob
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/notifications/notify.cjs"
+            "command": "bun .claude/hooks/notifications/notify.cjs"
           }
         ]
       }
@@ -39,7 +39,7 @@ Add to your `.claude/settings.json` (project) or `~/.claude/settings.json` (glob
 
 ```bash
 echo '{"hook_event_name":"Stop","cwd":"'"$(pwd)"'","session_id":"test123"}' | \
-  node .claude/hooks/notifications/notify.cjs
+  bun .claude/hooks/notifications/notify.cjs
 ```
 
 ---

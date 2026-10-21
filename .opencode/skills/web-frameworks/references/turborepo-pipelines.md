@@ -217,7 +217,7 @@ turbo run build
 turbo run build test lint
 
 # Run with specific package manager
-pnpm turbo run build
+bun turbo run build
 ```
 
 ### Filtering

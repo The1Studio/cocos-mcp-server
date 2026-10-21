@@ -4,7 +4,7 @@
  * The resolver only ever called `query-node` on the value, so a caller who passed the
  * COMPONENT's own uuid — the `uuid` field that `manage_component get_all` / `get_info`
  * hand back, and the obvious thing to reach for when wiring a `@property(SomeComponent)`
- * reference — got `Target node <uuid> not found or has no components`. That error reads
+ * reference — got `Target Node <uuid> not found or has no components`. That error reads
  * as "wrong uuid" when the uuid was right and only the KIND was wrong, so the usual next
  * move is to go hunting for a uuid that does not exist.
  */
@@ -107,9 +107,9 @@ describe('applyPropertyToEditor — component references', () => {
     });
 
     // `query-node` rejects rather than resolving falsy on some editor builds.
-    it('accepts the COMPONENT uuid when query-node throws instead of returning nothing', async () => {
+    it('accepts the COMPONENT uuid when query-Node throws instead of returning nothing', async () => {
         requestMock.mockImplementation((_m: string, action: string, arg: any) => {
-            if (action === 'query-node') return Promise.reject(new Error('node not found'));
+            if (action === 'query-node') return Promise.reject(new Error('Node not found'));
             if (action === 'query-component' && arg === TARGET_COMPONENT_UUID) {
                 return Promise.resolve(targetComponentDump());
             }
@@ -250,7 +250,7 @@ describe('applyPropertyToEditor — component references', () => {
     // Issue #81: the DIRECT component-uuid path did the same exact-string-equality
     // rejection issue #45 already fixed on the node-uuid path — a SUBCLASS component's
     // own uuid was rejected outright even though it satisfies the declared base type.
-    it('resolves a SUBCLASS component when its OWN uuid is passed directly (not a node uuid)', async () => {
+    it('resolves a SUBCLASS component when its OWN uuid is passed directly (not a Node uuid)', async () => {
         requestMock.mockImplementation((_m: string, action: string, arg: any) => {
             if (action === 'query-node') return Promise.resolve(undefined);
             if (action === 'query-component' && arg === TARGET_COMPONENT_UUID) {

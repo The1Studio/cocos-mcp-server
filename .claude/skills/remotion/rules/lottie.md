@@ -13,10 +13,10 @@ First, the @remotion/lottie package needs to be installed.
 If it is not, use the following command:
 
 ```bash
-npx remotion add @remotion/lottie # If project uses npm
+bunx remotion add @remotion/lottie # If project uses npm
 bunx remotion add @remotion/lottie # If project uses bun
-yarn remotion add @remotion/lottie # If project uses yarn
-pnpm exec remotion add @remotion/lottie # If project uses pnpm
+bun run remotion add @remotion/lottie # If project uses yarn
+bun x remotion add @remotion/lottie # If project uses pnpm
 ```
 
 ## Displaying a Lottie file

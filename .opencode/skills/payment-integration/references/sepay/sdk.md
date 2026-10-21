@@ -6,7 +6,7 @@ Official SDKs for Node.js, PHP, and Laravel.
 
 **Installation:**
 ```bash
-npm install github:sepay/sepay-pg-node
+bun install github:sepay/sepay-pg-node
 ```
 
 **Requirements:** Node.js 16+

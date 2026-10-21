@@ -271,7 +271,7 @@ Enable AI assistants (Claude, ChatGPT, etc.) to:
 - TSDoc comments for public APIs
 
 **Acceptance Criteria**:
-- Code passes `npm run build` without warnings
+- Code passes `bun run build` without warnings
 - No `any` types without justification
 - All public methods have documentation
 - Project structure is self-evident

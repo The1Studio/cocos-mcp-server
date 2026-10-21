@@ -372,7 +372,7 @@ db.sales.find({ region: "US" })
 
 ```bash
 # Install
-npm install -g mongodb-atlas-cli
+bun add -g mongodb-atlas-cli
 
 # Login
 atlas auth login

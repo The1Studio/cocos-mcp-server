@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * project-detector.cjs - Project and environment detection logic
  *
@@ -252,15 +252,15 @@ function detectProjectType(configOverride) {
 /**
  * Detect package manager from lock files
  * @param {string} [configOverride] - Manual override from config
- * @returns {'npm' | 'pnpm' | 'yarn' | 'bun' | null}
+ * @returns {'bun' | 'bun' | 'bun install' | 'bun' | null}
  */
 function detectPackageManager(configOverride) {
   if (configOverride && configOverride !== 'auto') return configOverride;
 
   if (fs.existsSync('bun.lockb')) return 'bun';
-  if (fs.existsSync('pnpm-lock.yaml')) return 'pnpm';
-  if (fs.existsSync('yarn.lock')) return 'yarn';
-  if (fs.existsSync('package-lock.json')) return 'npm';
+  if (fs.existsSync('pnpm-lock.yaml')) return 'bun';
+  if (fs.existsSync('yarn.lock')) return 'bun install';
+  if (fs.existsSync('package-lock.json')) return 'bun';
 
   return null;
 }
@@ -383,7 +383,7 @@ function buildContextOutput(config, detections, resolved, gitRoot) {
  * @param {Object} [options.configOverrides] - Override auto-detection
  * @returns {{
  *   type: 'monorepo' | 'library' | 'single-repo',
- *   packageManager: 'npm' | 'pnpm' | 'yarn' | 'bun' | null,
+ *   packageManager: 'bun' | 'bun' | 'bun install' | 'bun' | null,
  *   framework: string | null,
  *   pythonVersion: string | null,
  *   nodeVersion: string,

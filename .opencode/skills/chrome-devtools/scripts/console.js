@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Monitor console messages
  * Usage: node console.js --url https://example.com [--types error,warn] [--duration 5000]

@@ -43,8 +43,8 @@
 
 ```bash
 # Dependency vulnerabilities
-npm audit
-npx snyk test
+bun audit
+bunx snyk test
 
 # OWASP ZAP baseline scan
 docker run -t ghcr.io/zaproxy/zaproxy:stable \

@@ -89,5 +89,5 @@ scenarios:
 ```
 
 ```bash
-npx artillery run artillery.yml
+bunx artillery run artillery.yml
 ```

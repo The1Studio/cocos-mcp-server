@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Tests for descriptive-name.cjs hook - language-aware file naming guidance
  * Run: node --test .claude/hooks/__tests__/descriptive-name.test.cjs
@@ -25,7 +25,7 @@ const HOOK_PATH = path.join(__dirname, '..', 'descriptive-name.cjs');
  */
 function runHook(env = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('node', [HOOK_PATH], {
+    const proc = spawn('bun', [HOOK_PATH], {
       cwd: process.cwd(),
       env: { ...process.env, ...env }
     });
@@ -247,7 +247,7 @@ describe('descriptive-name.cjs', () => {
 
       // Run from temp dir
       const { stdout, exitCode } = await new Promise((resolve, reject) => {
-        const proc = spawn('node', [path.join(hooksDir, 'descriptive-name.cjs')], {
+        const proc = spawn('bun', [path.join(hooksDir, 'descriptive-name.cjs')], {
           cwd: tempDir,
           env: process.env
         });

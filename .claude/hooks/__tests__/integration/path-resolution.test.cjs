@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Integration tests for Issue #327: Path Resolution
  * Run: node --test .claude/hooks/__tests__/integration/path-resolution.test.cjs
@@ -24,7 +24,7 @@ const HOOKS_DIR = path.join(__dirname, '..', '..');
 function runHook(hookName, inputData, options = {}) {
   return new Promise((resolve, reject) => {
     const hookPath = path.join(HOOKS_DIR, hookName);
-    const proc = spawn('node', [hookPath], {
+    const proc = spawn('bun', [hookPath], {
       cwd: options.cwd || process.cwd(),
       env: {
         ...process.env,
@@ -298,7 +298,7 @@ describe('Issue #327: Path Resolution Integration', () => {
 
       for (const hookName of hooks) {
         const hookPath = path.join(HOOKS_DIR, hookName);
-        const proc = spawn('node', [hookPath], {
+        const proc = spawn('bun', [hookPath], {
           cwd: process.cwd(),
           env: { ...process.env, CLAUDE_ENV_FILE: '' }
         });

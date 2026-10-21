@@ -84,26 +84,26 @@ In conversations, simply reference the platforms:
 **SePay Webhook Verification:**
 ```bash
 cd $HOME/.claude/skills/payment-integration/scripts
-node sepay-webhook-verify.js '{"id":12345,"gateway":"Vietcombank",...}'
+bun sepay-webhook-verify.js '{"id":12345,"gateway":"Vietcombank",...}'
 ```
 
 **Polar Webhook Verification:**
 ```bash
-node polar-webhook-verify.js '{"type":"order.paid","data":{...}}' base64secret
+bun polar-webhook-verify.js '{"type":"order.paid","data":{...}}' base64secret
 ```
 
 **Checkout Helper:**
 ```bash
 # SePay
-node checkout-helper.js sepay '{"orderInvoiceNumber":"ORD001","orderAmount":100000,...}'
+bun checkout-helper.js sepay '{"orderInvoiceNumber":"ORD001","orderAmount":100000,...}'
 
 # Polar
-node checkout-helper.js polar '{"productPriceId":"price_xxx","successUrl":"https://..."}'
+bun checkout-helper.js polar '{"productPriceId":"price_xxx","successUrl":"https://..."}'
 ```
 
 **Run Tests:**
 ```bash
-npm test
+bun test
 ```
 
 ## Environment Variables
@@ -188,7 +188,7 @@ All scripts include comprehensive test coverage:
 - Checkout configuration generation
 - Error handling and edge cases
 
-Run `npm test` in the scripts directory to verify functionality.
+Run `bun test` in the scripts directory to verify functionality.
 
 ## Support
 

@@ -11,7 +11,7 @@ The skill is located at `.claude/skills/markdown-novel-viewer/`.
 If `--stop` flag is provided:
 
 ```bash
-node .claude/skills/markdown-novel-viewer/scripts/server.cjs --stop
+bun .claude/skills/markdown-novel-viewer/scripts/server.cjs --stop
 ```
 
 ### Start Server
@@ -21,10 +21,10 @@ Run the `markdown-novel-viewer` server as CC background task with `--foreground`
 ```bash
 INPUT_PATH="<resolved-path>"
 if [[ -d "$INPUT_PATH" ]]; then
-  node .claude/skills/markdown-novel-viewer/scripts/server.cjs \
+  bun .claude/skills/markdown-novel-viewer/scripts/server.cjs \
     --dir "$INPUT_PATH" --host 0.0.0.0 --open --foreground
 else
-  node .claude/skills/markdown-novel-viewer/scripts/server.cjs \
+  bun .claude/skills/markdown-novel-viewer/scripts/server.cjs \
     --file "$INPUT_PATH" --host 0.0.0.0 --open --foreground
 fi
 ```

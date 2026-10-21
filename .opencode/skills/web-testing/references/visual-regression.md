@@ -43,8 +43,8 @@ export default defineConfig({
 ## Commands
 
 ```bash
-npx playwright test --update-snapshots        # Update all
-npx playwright test visual.spec.ts -u         # Update specific
+bunx playwright test --update-snapshots        # Update all
+bunx playwright test visual.spec.ts -u         # Update specific
 ```
 
 ## Workflow

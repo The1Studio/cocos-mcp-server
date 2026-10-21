@@ -5,9 +5,9 @@
 ### Setup
 
 ```bash
-npm install -D @testcontainers/postgresql
+bun install -D @testcontainers/postgresql
 # or
-npm install -D @testcontainers/mongodb
+bun install -D @testcontainers/mongodb
 ```
 
 ### PostgreSQL Example

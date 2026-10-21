@@ -58,9 +58,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: '20'
 
       - name: Install agent-browser
         run: npm install -g agent-browser

@@ -67,9 +67,9 @@
 ## Quick Commands
 
 ```bash
-npm run test                                    # All tests
-npx playwright test --project=chromium,firefox  # Cross-browser
-npx @axe-core/cli https://staging.example.com   # Accessibility
-npx lighthouse https://staging.example.com       # Performance
+bun run test                                    # All tests
+bunx playwright test --project=chromium,firefox  # Cross-browser
+bunx @axe-core/cli https://staging.example.com   # Accessibility
+bunx lighthouse https://staging.example.com       # Performance
 curl -I https://staging.example.com | grep -i security  # Headers
 ```

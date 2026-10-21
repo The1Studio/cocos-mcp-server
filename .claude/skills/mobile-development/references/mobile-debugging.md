@@ -257,7 +257,7 @@ adb shell setprop net.dns1 8.8.8.8
 
 ```bash
 # Install
-npm install -g react-devtools
+bun add -g react-devtools
 
 # Launch
 react-devtools
@@ -269,11 +269,11 @@ react-devtools
 
 ```bash
 # Install
-npm install -g flipper
+bun add -g flipper
 
 # Configure in app
 # Add flipper packages to your app
-npm install --save-dev react-native-flipper
+bun install --dev react-native-flipper
 
 # Features:
 # - Layout inspector
@@ -885,7 +885,7 @@ Fix:
 // Error: Invariant Violation: Native module cannot be null
 
 // Fix: Link native module
-npx react-native link <module-name>
+bunx react-native link <module-name>
 # or
 cd ios && pod install
 ```

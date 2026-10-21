@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * test-full-flow-edge-cases.cjs - Edge case validation for full hook flow
  */
@@ -23,7 +23,7 @@ const tests = [
   { cmd: 'mvn clean install', expect: true, desc: 'maven' },
   { cmd: 'gradle build', expect: true, desc: 'gradle' },
   { cmd: 'dotnet build', expect: true, desc: 'dotnet' },
-  { cmd: 'npm run build', expect: true, desc: 'npm run build' },
+  { cmd: 'bun run build', expect: true, desc: 'bun run build' },
   { cmd: 'go test ./...', expect: true, desc: 'go test' },
 
   // Should be BLOCKED (goes through path extraction)

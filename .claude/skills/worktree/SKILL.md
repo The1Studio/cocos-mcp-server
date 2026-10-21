@@ -13,7 +13,7 @@ Create an isolated git worktree for parallel feature development.
 ### Step 1: Get Repo Info
 
 ```bash
-node .claude/skills/worktree/scripts/worktree.cjs info --json
+bun .claude/skills/worktree/scripts/worktree.cjs info --json
 ```
 
 Parse JSON response for: `repoType`, `baseBranch`, `projects`, `worktreeRoot`, `worktreeRootSource`.
@@ -53,12 +53,12 @@ AskUserQuestion({
 
 **Monorepo:**
 ```bash
-node .claude/skills/worktree/scripts/worktree.cjs create "<PROJECT>" "<SLUG>" --prefix <TYPE>
+bun .claude/skills/worktree/scripts/worktree.cjs create "<PROJECT>" "<SLUG>" --prefix <TYPE>
 ```
 
 **Standalone:**
 ```bash
-node .claude/skills/worktree/scripts/worktree.cjs create "<SLUG>" --prefix <TYPE>
+bun .claude/skills/worktree/scripts/worktree.cjs create "<SLUG>" --prefix <TYPE>
 ```
 
 **Options:**
@@ -71,9 +71,9 @@ node .claude/skills/worktree/scripts/worktree.cjs create "<SLUG>" --prefix <TYPE
 
 Based on project context, run in background:
 - `bun.lock` → `bun install`
-- `pnpm-lock.yaml` → `pnpm install`
-- `yarn.lock` → `yarn install`
-- `package-lock.json` → `npm install`
+- `pnpm-lock.yaml` → `bun install`
+- `yarn.lock` → `bun install`
+- `package-lock.json` → `bun install`
 - `poetry.lock` → `poetry install`
 - `requirements.txt` → `pip install -r requirements.txt`
 - `Cargo.toml` → `cargo build`

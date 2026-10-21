@@ -4,7 +4,7 @@
 
 ```
 CONTROL PLANE                    WORKER NODES
-├── API Server (kubectl)         ├── Kubelet (node agent)
+├── API Server (kubectl)         ├── Kubelet (bun agent)
 ├── Scheduler (pod placement)    ├── Kube-proxy (networking)
 ├── Controller Manager           └── Container Runtime
 └── etcd (cluster state)

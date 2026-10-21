@@ -8,24 +8,22 @@ const PATH = {
 
 function checkCreatorTypesVersion(version) {
     try {
-        // 根据平台选择合适的npm命令
-        const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+        // Use the Bun binary that is running this script.
+        const bun = process.execPath;
         
-        // 检查npm命令是否可用
-        const npmCheck = spawnSync(npmCmd, ["--version"], { 
-            stdio: 'pipe',
-            shell: process.platform === "win32"
+        // 检查bun命令是否可用
+        const bunCheck = spawnSync(bun, ["--version"], { 
+            stdio: 'pipe'
         });
         
-        if (npmCheck.error || npmCheck.status !== 0) {
-            console.warn("Warning: npm command not available, skipping version check");
-            return true; // 如果npm不可用，跳过检查
+        if (bunCheck.error || bunCheck.status !== 0) {
+            console.warn("Warning: bun command not available, skipping version check");
+            return true; // 如果bun不可用，跳过检查
         }
         
         // 获取版本列表
-        const result = spawnSync(npmCmd, ["view", "@cocos/creator-types", "versions"], { 
-            stdio: 'pipe',
-            shell: process.platform === "win32"
+        const result = spawnSync(bun, ["info", "@cocos/creator-types", "versions"], { 
+            stdio: 'pipe'
         });
         
         if (result.error || result.status !== 0) {

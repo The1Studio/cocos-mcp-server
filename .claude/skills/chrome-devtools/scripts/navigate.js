@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Navigate to a URL
  * Usage: node navigate.js --url https://example.com [--wait-until networkidle2] [--timeout 30000]

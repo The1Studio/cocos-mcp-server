@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Get ARIA-based accessibility snapshot with stable element refs
  * Usage: node aria-snapshot.js [--url https://example.com] [--output snapshot.yaml]

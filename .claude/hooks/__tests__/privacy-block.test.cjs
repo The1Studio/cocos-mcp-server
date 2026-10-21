@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Tests for privacy-block.cjs hook
  * Run: node --test .claude/hooks/__tests__/privacy-block.test.cjs
@@ -254,7 +254,7 @@ describe('formatBlockMessage output structure', () => {
 
   it('JSON structure contract is documented', () => {
     // This test documents the expected JSON structure
-    // Actual integration testing is done manually via: echo '{"tool_input":{"file_path":".env"}}' | node privacy-block.cjs
+    // Actual integration testing is done manually via: echo '{"tool_input":{"file_path":".env"}}' | bun privacy-block.cjs
     const expectedStructure = {
       type: 'PRIVACY_PROMPT',
       file: 'string',

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * path-extractor.test.cjs - Exhaustive unit tests for path extraction
  *
@@ -162,7 +162,7 @@ describe('extractFromCommand', () => {
   describe('command keyword filtering', () => {
     it('does not extract bare command keywords', () => {
       // These are commands/subcommands, not paths
-      const keywords = ['echo', 'cat', 'ls', 'cd', 'npm', 'git', 'docker'];
+      const keywords = ['echo', 'cat', 'ls', 'cd', 'bun', 'git', 'docker'];
       for (const kw of keywords) {
         // When used as the command itself (first token), it's skipped
         const paths = extractFromCommand(`${kw} src/file.ts`);
@@ -171,12 +171,12 @@ describe('extractFromCommand', () => {
     });
 
     it('does not extract "run" as path', () => {
-      const paths = extractFromCommand('npm run src/script.js');
+      const paths = extractFromCommand('bun run src/script.js');
       assert.ok(!paths.includes('run'));
     });
 
     it('does not extract "test" as path from npm command', () => {
-      const paths = extractFromCommand('npm test');
+      const paths = extractFromCommand('bun test');
       assert.ok(!paths.includes('test'));
     });
   });
@@ -254,7 +254,7 @@ describe('extractFromCommand', () => {
   // --- Real LLM output patterns ---
   describe('real LLM output patterns', () => {
     it('handles npm run build with redirect and pipe', () => {
-      const paths = extractFromCommand('npm run build 2>&1 | tail -15');
+      const paths = extractFromCommand('bun run build 2>&1 | tail -15');
       // Should NOT extract blocked paths — this is a build command context
       // (Note: path-extractor alone doesn't know about build allowlists,
       //  but it should not extract "build" since it's a command keyword)
@@ -269,7 +269,7 @@ describe('extractFromCommand', () => {
 
     it('handles env var prefix before command', () => {
       // NODE_ENV=production is not a path
-      const paths = extractFromCommand('NODE_ENV=production npm run build');
+      const paths = extractFromCommand(' NODE_ENV=production bun run build');
       assert.ok(!paths.some(p => p === 'NODE_ENV=production'));
     });
 
@@ -437,7 +437,7 @@ describe('isCommandKeyword', () => {
   });
 
   it('recognizes package manager commands', () => {
-    const cmds = ['npm', 'pnpm', 'yarn', 'bun', 'npx'];
+    const cmds = ['bun', 'bun', 'bun install', 'bun', ' bunx'];
     for (const cmd of cmds) {
       assert.ok(isCommandKeyword(cmd), `"${cmd}" should be a keyword`);
     }

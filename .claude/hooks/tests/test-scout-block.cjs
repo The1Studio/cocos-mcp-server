@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Test script for scout-block.cjs hook
@@ -58,37 +58,37 @@ const testCases = [
   // Build commands - should be ALLOWED
   {
     name: 'Bash: npm build',
-    input: { tool_name: 'Bash', tool_input: { command: 'npm build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun build' } },
     expected: 'ALLOWED'
   },
   {
     name: 'Bash: pnpm build',
-    input: { tool_name: 'Bash', tool_input: { command: 'pnpm build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun build' } },
     expected: 'ALLOWED'
   },
   {
     name: 'Bash: yarn build',
-    input: { tool_name: 'Bash', tool_input: { command: 'yarn build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun run build' } },
     expected: 'ALLOWED'
   },
   {
     name: 'Bash: npm run build',
-    input: { tool_name: 'Bash', tool_input: { command: 'npm run build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun run build' } },
     expected: 'ALLOWED'
   },
   {
     name: 'Bash: pnpm --filter web run build',
-    input: { tool_name: 'Bash', tool_input: { command: 'pnpm --filter web run build 2>&1 | tail -100' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun run --filter web run build 2>&1 | tail -100' } },
     expected: 'ALLOWED'
   },
   {
     name: 'Bash: npm install',
-    input: { tool_name: 'Bash', tool_input: { command: 'npm install' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun install' } },
     expected: 'ALLOWED'
   },
   {
     name: 'Bash: npx tsc',
-    input: { tool_name: 'Bash', tool_input: { command: 'npx tsc' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bunx tsc' } },
     expected: 'ALLOWED'
   },
 
@@ -236,12 +236,12 @@ const testCases = [
   },
   {
     name: '[COMPOUND] echo + npm run build (&&)',
-    input: { tool_name: 'Bash', tool_input: { command: 'echo "Building..." && npm run build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'echo "Building..." && bun run build' } },
     expected: 'ALLOWED'
   },
   {
     name: '[COMPOUND] npm install + npm run build (&&)',
-    input: { tool_name: 'Bash', tool_input: { command: 'npm install && npm run build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun install && bun run build' } },
     expected: 'ALLOWED'
   },
   {
@@ -251,7 +251,7 @@ const testCases = [
   },
   {
     name: '[COMPOUND] npm run build + cat dist/file.js (should block)',
-    input: { tool_name: 'Bash', tool_input: { command: 'npm run build && cat dist/bundle.js' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun run build && cat dist/bundle.js' } },
     expected: 'BLOCKED'
   },
 
@@ -278,7 +278,7 @@ let failed = 0;
 for (const test of testCases) {
   try {
     const input = JSON.stringify(test.input);
-    const result = execSync(`node "${scriptPath}"`, {
+    const result = execSync(`bun "${scriptPath}"`, {
       input,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe']

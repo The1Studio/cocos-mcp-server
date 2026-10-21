@@ -7,7 +7,7 @@
 ## Setup
 
 ```bash
-npm init playwright@latest -- --ct
+bun init playwright@latest -- --ct
 ```
 
 ## Configuration
@@ -110,6 +110,6 @@ test('with mocked data', async ({ mount }) => {
 ## Commands
 
 ```bash
-npx playwright test -c playwright-ct.config.ts
-npx playwright test -c playwright-ct.config.ts --ui
+bunx playwright test -c playwright-ct.config.ts
+bunx playwright test -c playwright-ct.config.ts --ui
 ```

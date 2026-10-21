@@ -49,10 +49,10 @@ Node.js script for background removal with progress tracking.
 
 ```bash
 # Basic usage
-node remove-bg-node.js photo.jpg
+bun remove-bg-node.js photo.jpg
 
 # With options
-node remove-bg-node.js photo.jpg -m briaai -o output.png -r 4096 -p
+bun remove-bg-node.js photo.jpg -m briaai -o output.png --preload 4096 -p
 ```
 
 **Options:**
@@ -90,13 +90,13 @@ python media_convert.py -i input.mkv -o output.mp4 --codec h264
 
 ### Shell Scripts
 - Bash (macOS, Linux)
-- rmbg-cli: `npm install -g rmbg-cli`
+- rmbg-cli: `bun add -g rmbg-cli`
 - FFmpeg: `brew install ffmpeg` or `apt-get install ffmpeg`
 - ImageMagick: `brew install imagemagick` or `apt-get install imagemagick`
 
 ### Node.js Scripts
 - Node.js 14+
-- Dependencies: `npm install rmbg`
+- Dependencies: `bun install rmbg`
 
 ### Python Scripts
 - Python 3.7+

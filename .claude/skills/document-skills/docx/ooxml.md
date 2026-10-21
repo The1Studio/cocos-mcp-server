@@ -319,32 +319,32 @@ doc = Document('unpacked', rsid="07DC5ECB")
 ```python
 # Minimal edit - change one word: "The report is monthly" → "The report is quarterly"
 # Original: <w:r w:rsidR="00AB12CD"><w:rPr><w:rFonts w:ascii="Calibri"/></w:rPr><w:t>The report is monthly</w:t></w:r>
-node = doc["word/document.xml"].get_node(tag="w:r", contains="The report is monthly")
+bun = doc["word/document.xml"].get_node(tag="w:r", contains="The report is monthly")
 rpr = tags[0].toxml() if (tags := node.getElementsByTagName("w:rPr")) else ""
 replacement = f'<w:r w:rsidR="00AB12CD">{rpr}<w:t>The report is </w:t></w:r><w:del><w:r>{rpr}<w:delText>monthly</w:delText></w:r></w:del><w:ins><w:r>{rpr}<w:t>quarterly</w:t></w:r></w:ins>'
 doc["word/document.xml"].replace_node(node, replacement)
 
 # Minimal edit - change number: "within 30 days" → "within 45 days"
 # Original: <w:r w:rsidR="00XYZ789"><w:rPr><w:rFonts w:ascii="Calibri"/></w:rPr><w:t>within 30 days</w:t></w:r>
-node = doc["word/document.xml"].get_node(tag="w:r", contains="within 30 days")
+bun = doc["word/document.xml"].get_node(tag="w:r", contains="within 30 days")
 rpr = tags[0].toxml() if (tags := node.getElementsByTagName("w:rPr")) else ""
 replacement = f'<w:r w:rsidR="00XYZ789">{rpr}<w:t>within </w:t></w:r><w:del><w:r>{rpr}<w:delText>30</w:delText></w:r></w:del><w:ins><w:r>{rpr}<w:t>45</w:t></w:r></w:ins><w:r w:rsidR="00XYZ789">{rpr}<w:t> days</w:t></w:r>'
 doc["word/document.xml"].replace_node(node, replacement)
 
 # Complete replacement - preserve formatting even when replacing all text
-node = doc["word/document.xml"].get_node(tag="w:r", contains="apple")
+bun = doc["word/document.xml"].get_node(tag="w:r", contains="apple")
 rpr = tags[0].toxml() if (tags := node.getElementsByTagName("w:rPr")) else ""
 replacement = f'<w:del><w:r>{rpr}<w:delText>apple</w:delText></w:r></w:del><w:ins><w:r>{rpr}<w:t>banana orange</w:t></w:r></w:ins>'
 doc["word/document.xml"].replace_node(node, replacement)
 
 # Insert new content (no attributes needed - auto-injected)
-node = doc["word/document.xml"].get_node(tag="w:r", contains="existing text")
+bun = doc["word/document.xml"].get_node(tag="w:r", contains="existing text")
 doc["word/document.xml"].insert_after(node, '<w:ins><w:r><w:t>new text</w:t></w:r></w:ins>')
 
 # Partially delete another author's insertion
 # Original: <w:ins w:author="Jane Smith" w:date="..."><w:r><w:t>quarterly financial report</w:t></w:r></w:ins>
 # Goal: Delete only "financial" to make it "quarterly report"
-node = doc["word/document.xml"].get_node(tag="w:ins", attrs={"w:id": "5"})
+bun = doc["word/document.xml"].get_node(tag="w:ins", attrs={"w:id": "5"})
 # IMPORTANT: Preserve w:author="Jane Smith" on the outer <w:ins> to maintain authorship
 replacement = '''<w:ins w:author="Jane Smith" w:date="2025-01-15T10:00:00Z">
   <w:r><w:t>quarterly </w:t></w:r>
@@ -356,7 +356,7 @@ doc["word/document.xml"].replace_node(node, replacement)
 # Change part of another author's insertion
 # Original: <w:ins w:author="Jane Smith"><w:r><w:t>in silence, safe and sound</w:t></w:r></w:ins>
 # Goal: Change "safe and sound" to "soft and unbound"
-node = doc["word/document.xml"].get_node(tag="w:ins", attrs={"w:id": "8"})
+bun = doc["word/document.xml"].get_node(tag="w:ins", attrs={"w:id": "8"})
 replacement = f'''<w:ins w:author="Jane Smith" w:date="2025-01-15T10:00:00Z">
   <w:r><w:t>in silence, </w:t></w:r>
 </w:ins>
@@ -369,7 +369,7 @@ replacement = f'''<w:ins w:author="Jane Smith" w:date="2025-01-15T10:00:00Z">
 doc["word/document.xml"].replace_node(node, replacement)
 
 # Delete entire run (use only when deleting all content; use replace_node for partial deletions)
-node = doc["word/document.xml"].get_node(tag="w:r", contains="text to delete")
+bun = doc["word/document.xml"].get_node(tag="w:r", contains="text to delete")
 doc["word/document.xml"].suggest_deletion(node)
 
 # Delete entire paragraph (in-place, handles both regular and numbered list paragraphs)
@@ -402,7 +402,7 @@ doc.add_comment(start=para, end=para, text="Comment on this paragraph")
 
 # Add comment on newly created tracked change
 # First create the tracked change
-node = doc["word/document.xml"].get_node(tag="w:r", contains="old")
+bun = doc["word/document.xml"].get_node(tag="w:r", contains="old")
 new_nodes = doc["word/document.xml"].replace_node(
     node,
     '<w:del><w:r><w:delText>old</w:delText></w:r></w:del><w:ins><w:r><w:t>new</w:t></w:r></w:ins>'
@@ -467,7 +467,7 @@ doc['[Content_Types].xml'].append_to(doc['[Content_Types].xml'].dom.documentElem
     '<Default Extension="png" ContentType="image/png"/>')
 
 # Insert image
-node = doc["word/document.xml"].get_node(tag="w:p", line_number=100)
+bun = doc["word/document.xml"].get_node(tag="w:p", line_number=100)
 doc["word/document.xml"].insert_after(node, f'''<w:p>
   <w:r>
     <w:drawing>
@@ -493,22 +493,22 @@ doc["word/document.xml"].insert_after(node, f'''<w:p>
 
 ```python
 # By text content
-node = doc["word/document.xml"].get_node(tag="w:p", contains="specific text")
+bun = doc["word/document.xml"].get_node(tag="w:p", contains="specific text")
 
 # By line range
 para = doc["word/document.xml"].get_node(tag="w:p", line_number=range(100, 150))
 
 # By attributes
-node = doc["word/document.xml"].get_node(tag="w:del", attrs={"w:id": "1"})
+bun = doc["word/document.xml"].get_node(tag="w:del", attrs={"w:id": "1"})
 
 # By exact line number (must be line number where tag opens)
 para = doc["word/document.xml"].get_node(tag="w:p", line_number=42)
 
 # Combine filters
-node = doc["word/document.xml"].get_node(tag="w:r", line_number=range(40, 60), contains="text")
+bun = doc["word/document.xml"].get_node(tag="w:r", line_number=range(40, 60), contains="text")
 
 # Disambiguate when text appears multiple times - add line_number range
-node = doc["word/document.xml"].get_node(tag="w:r", contains="Section", line_number=range(2400, 2500))
+bun = doc["word/document.xml"].get_node(tag="w:r", contains="Section", line_number=range(2400, 2500))
 ```
 
 ### Saving
@@ -534,7 +534,7 @@ editor = doc["word/document.xml"]
 editor = doc["word/comments.xml"]
 
 # Direct DOM access (defusedxml.minidom.Document)
-node = doc["word/document.xml"].get_node(tag="w:p", line_number=5)
+bun = doc["word/document.xml"].get_node(tag="w:p", line_number=5)
 parent = node.parentNode
 parent.removeChild(node)
 parent.appendChild(node)  # Move to end
@@ -544,7 +544,7 @@ old_node = doc["word/document.xml"].get_node(tag="w:p", contains="original text"
 doc["word/document.xml"].replace_node(old_node, "<w:p><w:r><w:t>replacement text</w:t></w:r></w:p>")
 
 # Multiple insertions - use return value to maintain order
-node = doc["word/document.xml"].get_node(tag="w:r", line_number=100)
+bun = doc["word/document.xml"].get_node(tag="w:r", line_number=100)
 nodes = doc["word/document.xml"].insert_after(node, "<w:r><w:t>A</w:t></w:r>")
 nodes = doc["word/document.xml"].insert_after(nodes[-1], "<w:r><w:t>B</w:t></w:r>")
 nodes = doc["word/document.xml"].insert_after(nodes[-1], "<w:r><w:t>C</w:t></w:r>")

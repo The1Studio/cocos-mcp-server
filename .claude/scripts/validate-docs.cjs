@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Validate documentation accuracy against codebase.
  * Detects potential hallucinations: invented APIs, broken links, missing env vars.

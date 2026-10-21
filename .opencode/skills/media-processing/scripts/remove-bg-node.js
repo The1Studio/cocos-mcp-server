@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Node.js background removal script using RMBG SDK
@@ -29,9 +29,9 @@ Options:
   -h, --help              Show this help message
 
 Examples:
-  node remove-bg-node.js photo.jpg
-  node remove-bg-node.js photo.jpg -m briaai -o output.png
-  node remove-bg-node.js photo.jpg -r 4096 -p
+  bun remove-bg-node.js photo.jpg
+  bun remove-bg-node.js photo.jpg -m briaai -o output.png
+  bun remove-bg-node.js photo.jpg -r 4096 -p
 `)
   process.exit(0)
 }

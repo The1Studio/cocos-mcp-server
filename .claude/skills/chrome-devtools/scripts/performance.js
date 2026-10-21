@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Measure performance metrics and record trace
  * Usage: node performance.js --url https://example.com [--trace trace.json] [--metrics]

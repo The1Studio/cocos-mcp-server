@@ -6,7 +6,7 @@ Server-side SDKs for secure Stripe API integration.
 
 | Language | Package | Install |
 |----------|---------|---------|
-| Node.js | `stripe` | `npm install stripe` |
+| Node.js | `stripe` | `bun install stripe` |
 | Python | `stripe` | `pip install stripe` |
 | Ruby | `stripe` | `gem install stripe` |
 | Go | `stripe-go` | `go get github.com/stripe/stripe-go/v76` |

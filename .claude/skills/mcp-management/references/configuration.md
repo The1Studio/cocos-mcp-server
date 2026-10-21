@@ -27,8 +27,8 @@ Store and retrieve key-value data:
 ```json
 {
   "memory": {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-memory"]
+    "command": "bunx",
+    "args": ["@modelcontextprotocol/server-memory"]
   }
 }
 ```
@@ -40,7 +40,7 @@ File operations with restricted access:
 ```json
 {
   "filesystem": {
-    "command": "npx",
+    "command": "bunx",
     "args": [
       "-y",
       "@modelcontextprotocol/server-filesystem",
@@ -57,8 +57,8 @@ Web search capabilities:
 ```json
 {
   "brave-search": {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+    "command": "bunx",
+    "args": ["@modelcontextprotocol/server-brave-search"],
     "env": {
       "BRAVE_API_KEY": "${BRAVE_API_KEY}"
     }
@@ -73,8 +73,8 @@ Browser automation:
 ```json
 {
   "puppeteer": {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+    "command": "bunx",
+    "args": ["@modelcontextprotocol/server-puppeteer"]
   }
 }
 ```
@@ -86,7 +86,7 @@ Reference env vars with `${VAR_NAME}` syntax:
 ```json
 {
   "api-server": {
-    "command": "node",
+    "command": "bun",
     "args": ["server.js"],
     "env": {
       "API_KEY": "${MY_API_KEY}",

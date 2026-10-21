@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Test suite for worktree.cjs
  * Run: node .claude/skills/worktree/scripts/worktree.test.cjs
@@ -20,7 +20,7 @@ const results = [];
 function run(args, options = {}) {
   const cwd = options.cwd || STANDALONE_DIR;
   try {
-    const output = execSync(`node "${SCRIPT_PATH}" ${args}`, {
+    const output = execSync(`bun "${SCRIPT_PATH}" ${args}`, {
       encoding: 'utf-8',
       cwd,
       stdio: ['pipe', 'pipe', 'pipe']

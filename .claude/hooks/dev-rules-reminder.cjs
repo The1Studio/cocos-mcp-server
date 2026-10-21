@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Development Rules Reminder - UserPromptSubmit Hook (Optimized)
  *

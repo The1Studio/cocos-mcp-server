@@ -12,10 +12,10 @@ metadata:
 Install @remotion/layout-utils if it is not already installed:
 
 ```bash
-npx remotion add @remotion/layout-utils # If project uses npm
+bunx remotion add @remotion/layout-utils # If project uses npm
 bunx remotion add @remotion/layout-utils # If project uses bun
-yarn remotion add @remotion/layout-utils # If project uses yarn
-pnpm exec remotion add @remotion/layout-utils # If project uses pnpm
+bun run remotion add @remotion/layout-utils # If project uses yarn
+bun x remotion add @remotion/layout-utils # If project uses pnpm
 ```
 
 ## Measuring text dimensions

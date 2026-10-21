@@ -18,7 +18,7 @@ ck init  # Runs install.sh which handles all skills
 
 # Option 2: Manual installation
 cd .opencode/skills/plans-kanban
-npm install
+bun install
 ```
 
 **Dependencies:** `gray-matter`
@@ -37,23 +37,23 @@ Visual dashboard for viewing plan directories with:
 
 ```bash
 # View plans dashboard
-node .opencode/skills/plans-kanban/scripts/server.cjs \
+bun .opencode/skills/plans-kanban/scripts/server.cjs \
   --dir ./plans \
   --open
 
 # Remote access (all interfaces)
-node .opencode/skills/plans-kanban/scripts/server.cjs \
+bun .opencode/skills/plans-kanban/scripts/server.cjs \
   --dir ./plans \
   --host 0.0.0.0 \
   --open
 
 # Background mode
-node .opencode/skills/plans-kanban/scripts/server.cjs \
+bun .opencode/skills/plans-kanban/scripts/server.cjs \
   --dir ./plans \
   --background
 
 # Stop all running servers
-node .opencode/skills/plans-kanban/scripts/server.cjs --stop
+bun .opencode/skills/plans-kanban/scripts/server.cjs --stop
 ```
 
 ## Slash Command

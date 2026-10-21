@@ -114,7 +114,7 @@ app.use(helmet({
 
 ```bash
 # Check for vulnerabilities
-npm audit fix
+bun audit fix
 pip-audit --fix
 ```
 

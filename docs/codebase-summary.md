@@ -30,7 +30,7 @@ cocos-mcp-server/
 │   ├── mcp-server.ts        # HTTP server and MCP routing
 │   ├── scene.ts             # Scene context operations
 │   └── settings.ts          # Persistent settings management
-├── dist/                      # Compiled JavaScript (npm run build)
+├── dist/                      # Compiled JavaScript (bun run build)
 ├── docs/                      # Documentation
 │   ├── README.md
 │   ├── quick-start.md
@@ -210,9 +210,9 @@ class ManageNodeTool extends BaseActionTool {
 ### Commands
 
 ```bash
-npm install        # Install dependencies
-npm run build      # TypeScript → dist/
-npm run watch      # Watch mode for development
+bun install # Install dependencies
+bun run build      # TypeScript → dist/
+bun run watch      # Watch mode for development
 ```
 
 ### Build Output
@@ -468,6 +468,6 @@ interface ToolDefinition {
 
 **Last Generated**: 2026-03-13
 **Generation Tool**: Repomix v1.11.1
-**Repository Root**: `/mnt/Work/1M/2. PlayableLabs/cocos-mcp-server`
+**Repository Root**: this repo's root
 
 See `/repomix-output.xml` for the complete packed repository representation.

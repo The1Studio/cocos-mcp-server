@@ -97,7 +97,7 @@ class DockerfileAnalyzer:
         if from_count == 1:
             # Check if build tools are installed
             has_build_tools = any(
-                any(tool in line.lower() for tool in ['gcc', 'make', 'build-essential', 'npm install', 'pip install'])
+                any(tool in line.lower() for tool in ['gcc', 'make', 'build-essential', 'bun install', 'pip install'])
                 for line in self.lines
             )
 

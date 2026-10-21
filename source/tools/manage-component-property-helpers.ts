@@ -341,7 +341,7 @@ export function convertPropertyValue(propertyType: string, value: any): any {
     // to satisfy the `typeof value === 'string'` check below and become `{ uuid: '' }`),
     // but rejected `null` outright. `component`/`componentArray` additionally forwarded a
     // `""` value UNRESOLVED instead of treating it as "clear this reference", which then
-    // failed downstream with a confusing "neither a node uuid nor a component uuid" error.
+    // failed downstream with a confusing "neither a Node uuid nor a component uuid" error.
     // A cleared single reference always serializes as `{ uuid: '' }` — the same shape a
     // set reference uses — so it needs no special handling anywhere set-property already
     // handles a reference dump.
@@ -445,13 +445,13 @@ export function convertPropertyValue(propertyType: string, value: any): any {
             throw new Error(`Node reference value must be a string UUID (received typeof ${typeof value})`);
         case 'component':
             if (typeof value === 'string') return value; // resolved to __id__ later
-            throw new Error(`Component reference value must be a string (node UUID containing the target component) (received typeof ${typeof value})`);
+            throw new Error(`Component reference value must be a string (Node UUID containing the target component) (received typeof ${typeof value})`);
         case 'componentArray':
             {
                 const coerced = parseJsonPayload(value);
                 if (Array.isArray(coerced)) return coerced.map((item: any) => {
                     if (typeof item === 'string') return item; // each resolved to a component __id__ later
-                    throw new Error(`ComponentArray items must be string node UUIDs (each containing the target component) (received item typeof ${typeof item})`);
+                    throw new Error(`ComponentArray items must be string Node UUIDs (each containing the target component) (received item typeof ${typeof item})`);
                 });
             }
             throw new Error(`ComponentArray value must be an array (received typeof ${typeof value})`);

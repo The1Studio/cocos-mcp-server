@@ -23,10 +23,10 @@ Complete guide to browser automation with Puppeteer - a high-level API over Chro
 
 ```bash
 # Install Puppeteer
-npm install puppeteer
+bun install puppeteer
 
 # Install core only (bring your own Chrome)
-npm install puppeteer-core
+bun install puppeteer-core
 ```
 
 ### Basic Usage

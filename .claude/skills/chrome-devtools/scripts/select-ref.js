@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Select and interact with elements by ref from ARIA snapshot
  * Usage: node select-ref.js --ref e5 --action click

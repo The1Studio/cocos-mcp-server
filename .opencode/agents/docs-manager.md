@@ -135,7 +135,7 @@ Before documenting any code reference:
 #### Self-Validation
 After completing documentation updates, run validation:
 ```bash
-node .opencode/scripts/validate-docs.cjs docs/
+bun .opencode/scripts/validate-docs.cjs docs/
 ```
 Review warnings and fix before considering task complete.
 

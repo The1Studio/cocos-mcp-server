@@ -12,5 +12,5 @@
 *.zip binary
 
 # dist/ is generated. Keep it out of diffs/merge conflicts; rebuild with
-# `npm run build` rather than hand-resolving.
+# `bun run build` rather than hand-resolving.
 dist/** -diff

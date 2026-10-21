@@ -29,7 +29,7 @@ repomix --version
 ### Install
 ```bash
 # npm
-npm install -g repomix
+bun add -g repomix
 
 # Homebrew (macOS/Linux)
 brew install repomix
@@ -45,7 +45,7 @@ repomix --style markdown
 repomix --style json
 
 # Package remote repository
-npx repomix --remote owner/repo
+bunx repomix --remote owner/repo
 
 # Custom output with filters
 repomix --include "src/**/*.ts" --remove-comments -o output.md
@@ -64,13 +64,13 @@ repomix --include "src/**/*.ts" --remove-comments -o output.md
 Process remote repositories without cloning:
 ```bash
 # Shorthand
-npx repomix --remote yamadashy/repomix
+bunx repomix --remote yamadashy/repomix
 
 # Full URL
-npx repomix --remote https://github.com/owner/repo
+bunx repomix --remote https://github.com/owner/repo
 
 # Specific commit
-npx repomix --remote https://github.com/owner/repo/commit/hash
+bunx repomix --remote https://github.com/owner/repo/commit/hash
 ```
 
 ### Comment Removal
@@ -90,7 +90,7 @@ repomix --include "src/**/*.ts" --remove-comments -o review.md --style markdown
 ### Security Audit
 ```bash
 # Package third-party library
-npx repomix --remote vendor/library --style xml -o audit.xml
+bunx repomix --remote vendor/library --style xml -o audit.xml
 ```
 
 ### Documentation Generation

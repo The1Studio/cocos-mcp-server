@@ -38,7 +38,7 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz
 
 ```bash
 echo '{"hook_event_name":"Stop","cwd":"'"$(pwd)"'","session_id":"test123"}' | \
-  node .claude/hooks/notifications/notify.cjs
+  bun .claude/hooks/notifications/notify.cjs
 ```
 
 ## Message Format

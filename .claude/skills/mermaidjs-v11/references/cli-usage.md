@@ -6,18 +6,18 @@ Command-line interface for converting Mermaid diagrams to SVG/PNG/PDF.
 
 **Global Install:**
 ```bash
-npm install -g @mermaid-js/mermaid-cli
+bun add -g @mermaid-js/mermaid-cli
 ```
 
 **Local Install:**
 ```bash
-npm install @mermaid-js/mermaid-cli
+bun install @mermaid-js/mermaid-cli
 ./node_modules/.bin/mmdc -h
 ```
 
 **No Install (npx):**
 ```bash
-npx -p @mermaid-js/mermaid-cli mmdc -h
+bunx --package @mermaid-js/mermaid-cli mmdc -h
 ```
 
 **Docker:**
@@ -200,7 +200,7 @@ mmdc -i architecture.mmd -o arch.png \
 # GitHub Actions example
 - name: Generate Diagrams
   run: |
-    npm install -g @mermaid-js/mermaid-cli
+    bun add -g @mermaid-js/mermaid-cli
     mmdc -i docs/diagram.mmd -o docs/diagram.svg
 ```
 

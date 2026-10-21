@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Monitor network requests
  * Usage: node network.js --url https://example.com [--types xhr,fetch] [--output requests.json]

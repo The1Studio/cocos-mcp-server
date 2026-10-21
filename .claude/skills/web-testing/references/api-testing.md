@@ -74,5 +74,5 @@ expect(res.body.data.users).toHaveLength(2);
 ## Contract Testing
 
 ```bash
-npx dredd api.yaml http://localhost:3000
+bunx dredd api.yaml http://localhost:3000
 ```

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Fill form fields
  * Usage: node fill.js --selector "#input" --value "text" [--url https://example.com]

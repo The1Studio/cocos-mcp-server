@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Markdown Novel Viewer Server
@@ -9,8 +9,8 @@
  * - Directories → file listing browser
  *
  * Usage:
- *   node server.cjs --file ./plan.md [--port 3456] [--no-open] [--stop] [--host 0.0.0.0]
- *   node server.cjs --dir ./plans [--port 3456]  # Browse directory
+ *   bun server.cjs --file ./plan.md [--port 3456] [--no-open] [--stop] [--host 0.0.0.0]
+ *   bun server.cjs --dir ./plans [--port 3456]  # Browse directory
  *
  * Options:
  *   --file <path>   Path to markdown file
@@ -266,8 +266,8 @@ async function main() {
   if (!input) {
     console.error('Error: --file or --dir argument required');
     console.error('Usage:');
-    console.error('  node server.cjs --file <path.md> [--port 3456] [--open]');
-    console.error('  node server.cjs --dir <path> [--port 3456] [--open]  # Browse directory');
+    console.error('  bun server.cjs --file <path.md> [--port 3456] [--open]');
+    console.error('  bun server.cjs --dir <path> [--port 3456] [--open]  # Browse directory');
     process.exit(1);
   }
 

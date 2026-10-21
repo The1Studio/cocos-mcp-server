@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Plan Subagent Stop Hook - Cook Skill Reminder
  *

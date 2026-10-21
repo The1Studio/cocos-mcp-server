@@ -191,7 +191,7 @@ pdftoppm -jpeg -r 150 -f 2 -l 5 document.pdf page  # Converts only pages 2-5
 Required dependencies (install if not available):
 
 - **pandoc**: `sudo apt-get install pandoc` (for text extraction)
-- **docx**: `npm install -g docx` (for creating new documents)
+- **docx**: `bun add -g docx` (for creating new documents)
 - **LibreOffice**: `sudo apt-get install libreoffice` (for PDF conversion)
 - **Poppler**: `sudo apt-get install poppler-utils` (for pdftoppm to convert PDF to images)
 - **defusedxml**: `pip install defusedxml` (for secure XML parsing)

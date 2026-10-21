@@ -21,8 +21,8 @@
  *      named explicitly.
  *
  * Usage:
- *   node scripts/check-dist-drift.js
- *   npm run check:dist
+ *   bun scripts/check-dist-drift.js
+ *   bun run check:dist
  *
  * Exit codes:
  *   0 - dist/ matches the current source/ build output, no drift.
@@ -56,7 +56,7 @@ function main() {
     } catch (err) {
         fail(
             "Cannot find the TypeScript compiler (typescript/bin/tsc).\n" +
-            "  Run `npm install` first -- this is a missing-dependency problem, not dist/ drift."
+            "  Run `bun install` first -- this is a missing-dependency problem, not dist/ drift."
         );
         return;
     }
@@ -69,7 +69,7 @@ function main() {
         return;
     }
 
-    // 3. Run the real build. Invoke tsc via `node <bin>` rather than the
+    // 3. Run the real build. Invoke tsc via `bun <bin>` rather than the
     // node_modules/.bin shim so this behaves identically on Windows and
     // POSIX without relying on a shell to resolve .cmd/.ps1 wrappers.
     console.log("[check-dist-drift] Building source/ -> dist/ via tsc ...");
@@ -102,7 +102,7 @@ function main() {
             console.error(`  ${line}`);
         }
         console.error(
-            "\nRun `npm run build` and stage the updated dist/** files in the same commit as your source/** change.\n"
+            "\nRun `bun run build` and stage the updated dist/** files in the same commit as your source/** change.\n"
         );
         process.exit(1);
         return;

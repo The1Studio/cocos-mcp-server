@@ -131,18 +131,18 @@ Several skills require external CLI tools:
   - macOS: `brew install imagemagick`
   - Windows: `choco install imagemagick`
 - **RMBG CLI**: AI background removal
-  - All platforms: `npm install -g rmbg-cli`
+  - All platforms: `bun add -g rmbg-cli`
 
 #### devops
-- **Cloudflare Wrangler**: `npm install -g wrangler`
+- **Cloudflare Wrangler**: `bun add -g wrangler`
 - **Docker**: https://docs.docker.com/get-docker/
 - **Google Cloud CLI**: https://cloud.google.com/sdk/docs/install
 
 #### better-auth, repomix, shopify
 - **Node.js 18+**: https://nodejs.org/
-- **Better Auth**: `npm install better-auth`
-- **Repomix**: `npm install -g repomix`
-- **Shopify CLI**: `npm install -g @shopify/cli @shopify/theme`
+- **Better Auth**: `bun install better-auth`
+- **Repomix**: `bun add -g repomix`
+- **Shopify CLI**: `bun add -g @shopify/cli @shopify/theme`
 
 #### databases
 - **PostgreSQL client**: `sudo apt-get install postgresql-client` (Linux)
@@ -151,8 +151,8 @@ Several skills require external CLI tools:
 
 #### web-frameworks, ui-styling
 - **Node.js 18+**: https://nodejs.org/
-- **pnpm**: `npm install -g pnpm`
-- **yarn**: `npm install -g yarn`
+- **pnpm**: `bun add -g pnpm`
+- **yarn**: `bun add -g yarn`
 
 ## Installation by Platform
 
@@ -174,7 +174,7 @@ sudo apt-get install -y ffmpeg imagemagick postgresql-client
 # Node.js and tools
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
-npm install -g pnpm wrangler repomix rmbg-cli @shopify/cli
+bun add -g pnpm wrangler repomix rmbg-cli @shopify/cli
 ```
 
 ### macOS
@@ -193,7 +193,7 @@ brew install ffmpeg imagemagick postgresql
 
 # Node.js and tools
 brew install node
-npm install -g pnpm wrangler repomix rmbg-cli @shopify/cli
+bun add -g pnpm wrangler repomix rmbg-cli @shopify/cli
 ```
 
 ### Windows
@@ -211,7 +211,7 @@ pip install -r requirements.txt
 choco install ffmpeg imagemagick nodejs
 
 # Node.js tools
-npm install -g pnpm wrangler repomix rmbg-cli @shopify/cli
+bun add -g pnpm wrangler repomix rmbg-cli @shopify/cli
 ```
 
 ## Testing Dependencies
@@ -271,7 +271,7 @@ which node
 # Verify tool works
 ffmpeg -version
 docker --version
-node --version
+bun --version
 ```
 
 ### Permission Errors
@@ -295,15 +295,15 @@ pip install google-genai pypdf python-docx markdown Pillow python-dotenv
 ```bash
 # macOS
 brew install ffmpeg imagemagick
-npm install -g rmbg-cli
+bun add -g rmbg-cli
 
 # Linux
 sudo apt-get install ffmpeg imagemagick
-npm install -g rmbg-cli
+bun add -g rmbg-cli
 
 # Windows
 choco install ffmpeg imagemagick
-npm install -g rmbg-cli
+bun add -g rmbg-cli
 ```
 
 **For other skills:**

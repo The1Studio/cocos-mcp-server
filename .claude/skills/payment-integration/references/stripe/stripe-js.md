@@ -12,7 +12,7 @@ Include on **every page** (enables fraud detection):
 
 Or via npm:
 ```bash
-npm install @stripe/stripe-js
+bun install @stripe/stripe-js
 ```
 
 ```javascript

@@ -26,7 +26,7 @@ Environment:
 
 ```bash
 # Node.js
-npm install @paddle/paddle-node-sdk
+bun install @paddle/paddle-node-sdk
 
 # Python
 pip install paddle-python-sdk

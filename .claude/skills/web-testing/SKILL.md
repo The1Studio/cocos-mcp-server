@@ -13,12 +13,12 @@ Comprehensive web testing: unit, integration, E2E, load, security, visual regres
 ## Quick Start
 
 ```bash
-npx vitest run                    # Unit tests
-npx playwright test               # E2E tests
-npx playwright test --ui          # E2E with UI
+bunx vitest run                    # Unit tests
+bunx playwright test               # E2E tests
+bunx playwright test --ui          # E2E with UI
 k6 run load-test.js               # Load tests
-npx @axe-core/cli https://example.com  # Accessibility
-npx lighthouse https://example.com     # Performance
+bunx @axe-core/cli https://example.com  # Accessibility
+bunx lighthouse https://example.com     # Performance
 ```
 
 ## Testing Strategy (Choose Your Model)
@@ -71,13 +71,13 @@ npx lighthouse https://example.com     # Performance
 
 ### Initialize Playwright Project
 ```bash
-node ./scripts/init-playwright.js [--ct] [--dir <path>]
+bun ./scripts/init-playwright.js [--ct] [--dir <path>]
 ```
 Creates best-practice Playwright setup: config, fixtures, example tests.
 
 ### Analyze Test Results
 ```bash
-node ./scripts/analyze-test-results.js \
+bun ./scripts/analyze-test-results.js \
   --playwright test-results/results.json \
   --vitest coverage/vitest.json \
   --output markdown

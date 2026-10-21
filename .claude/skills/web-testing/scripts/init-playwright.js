@@ -1,7 +1,7 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Initialize Playwright with best-practice configuration
- * Usage: node init-playwright.js [--ct] [--dir <path>]
+ * Usage: bun init-playwright.js [--ct] [--dir <path>]
  *
  * Options:
  *   --ct       Include component testing setup
@@ -44,7 +44,7 @@ export default defineConfig({
     { name: 'mobile-safari', use: { ...devices['iPhone 12'] } },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: 'bun run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
@@ -209,7 +209,7 @@ writeFile('.env.test.example', envExample);
 if (includeComponentTesting) {
   writeFile('playwright-ct.config.ts', componentTestConfig);
   console.log('\n📦 Component testing config created. Install:');
-  console.log('   npm install -D @playwright/experimental-ct-react');
+  console.log('   bun add -d @playwright/experimental-ct-react');
 }
 
 // Package.json scripts suggestion
@@ -223,11 +223,11 @@ console.log(`
 
 // Install commands
 console.log('\n📦 Install dependencies:');
-console.log('   npm install -D @playwright/test');
-console.log('   npx playwright install');
+console.log('   bun add -d @playwright/test');
+console.log('   bunx playwright install');
 
 if (includeComponentTesting) {
-  console.log('   npm install -D @playwright/experimental-ct-react');
+  console.log('   bun add -d @playwright/experimental-ct-react');
 }
 
 console.log('\n✨ Playwright setup complete!\n');

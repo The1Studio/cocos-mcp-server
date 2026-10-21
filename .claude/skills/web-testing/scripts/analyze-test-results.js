@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Analyze and summarize test results from multiple formats
  * Usage: node analyze-test-results.js [options]

@@ -219,7 +219,7 @@ Deploy Mintlify docs alongside Next.js app.
 
 1. **Install Mintlify:**
    ```bash
-   npm install -D mintlify
+   bun install -D mintlify
    ```
 
 2. **Add Build Script:**
@@ -364,9 +364,9 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 18
+          bun-version: 1.4.3
 
       - name: Install dependencies
         run: npm ci
@@ -402,9 +402,9 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 18
+          bun-version: 1.4.3
 
       - name: Install Mintlify
         run: npm install -g mintlify

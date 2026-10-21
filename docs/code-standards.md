@@ -59,8 +59,8 @@ i18n/                     # Localization (en.js, zh.js)
 - **Declaration**: Generated for external use
 - **Source Maps**: Enabled for debugging
 
-Build: `npm run build` (source/ → dist/)
-Watch: `npm run watch`
+Build: `bun run build` (source/ → dist/)
+Watch: `bun run watch`
 
 ## Naming Conventions
 
@@ -318,7 +318,7 @@ console.error('[ManageNode] Failed to update node:', error);
 ## Testing
 
 No automated test runner is configured. Manual testing:
-1. Build: `npm run build`
+1. Build: `bun run build`
 2. Open the extension in Cocos Creator
 3. Test each action via the MCP endpoints or REST API
 
@@ -379,4 +379,4 @@ Generated files (do not edit):
 - `*.d.ts` - TypeScript declarations
 - Source maps for debugging
 
-Clean build: Delete `dist/` before `npm run build`.
+Clean build: Delete `dist/` before `bun run build`.

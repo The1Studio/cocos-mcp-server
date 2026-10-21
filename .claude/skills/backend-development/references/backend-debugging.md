@@ -121,7 +121,7 @@ if err := riskyOperation(); err != nil {
 **1. Chrome DevTools (Built-in)**
 ```bash
 # Run with inspect flag
-node --inspect-brk app.js
+bun --inspect-brk app.js
 
 # Open chrome://inspect in Chrome
 # Set breakpoints, step through code
@@ -455,7 +455,7 @@ async def log_requests(request: Request, call_next):
 **Node.js (0x)**
 ```bash
 # Install
-npm install -g 0x
+bun add -g 0x
 
 # Profile application
 0x node app.js
@@ -467,7 +467,7 @@ npm install -g 0x
 **Node.js (Clinic.js)**
 ```bash
 # Install
-npm install -g clinic
+bun add -g clinic
 
 # CPU profiling
 clinic doctor -- node app.js
@@ -749,7 +749,7 @@ const cache = new LRU({ max: 1000, ttl: 1000 * 60 * 60 });
 **Detection:**
 ```bash
 # Node.js: Check heap size over time
-node --expose-gc --max-old-space-size=4096 app.js
+bun --expose-gc --max-old-space-size=4096 app.js
 
 # Take periodic heap snapshots
 # Compare snapshots in Chrome DevTools

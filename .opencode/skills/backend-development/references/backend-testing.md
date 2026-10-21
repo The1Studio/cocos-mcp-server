@@ -335,7 +335,7 @@ docker run -t owasp/zap2docker-stable zap-baseline.py \
 
 ```bash
 # npm audit for Node.js
-npm audit fix
+bun audit fix
 
 # Snyk for multi-language
 snyk test

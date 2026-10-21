@@ -56,7 +56,7 @@ cd extensions/cocos-mcp-server && git pull && cd ../..
 
 ```bash
 cd extensions/cocos-mcp-server
-npm install --production
+bun install --production
 cd ../..
 ```
 
@@ -150,7 +150,7 @@ Protocol: HTTP transport, JSON-RPC 2.0. Endpoint: `http://127.0.0.1:3000/mcp`
 |---------|----------|
 | Server won't start | Check port `3000` is not in use: `lsof -i :3000` |
 | Health check fails | Ensure server is started in Cocos Creator editor panel |
-| Build errors | Run `cd extensions/cocos-mcp-server && npm run build` |
+| Build errors | Run `cd extensions/cocos-mcp-server && bun run build` |
 | Connection refused | Verify URL and port match editor panel settings |
 | Tools not working | Ensure a scene is open in Cocos Creator |
 

@@ -66,11 +66,11 @@ When Chrome MCP is not configured, use `ck:chrome-devtools` skill (Puppeteer wit
 SKILL_DIR="$HOME/.opencode/skills/chrome-devtools/scripts"
 
 # Install deps if first time
-npm install --prefix "$SKILL_DIR" 2>/dev/null
+bun install --cwd "$SKILL_DIR" 2>/dev/null
 
 # Screenshot + console error check
-node "$SKILL_DIR/screenshot.js" --url http://localhost:3000 --output ./verification-screenshot.png
-node "$SKILL_DIR/console.js" --url http://localhost:3000 --types error,pageerror --duration 5000
+bun "$SKILL_DIR/screenshot.js" --url http://localhost:3000 --output ./verification-screenshot.png
+bun "$SKILL_DIR/console.js" --url http://localhost:3000 --types error,pageerror --duration 5000
 ```
 
 If `ck:chrome-devtools` skill is also unavailable, skip visual verification and note in report:

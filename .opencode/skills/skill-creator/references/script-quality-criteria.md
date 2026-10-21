@@ -24,7 +24,7 @@ If bash required, provide Node.js/Python alternative.
 # Run tests before packaging
 python -m pytest scripts/tests/
 # or
-npm test
+bun test
 ```
 
 Tests must pass. No skipping failed tests.

@@ -30,7 +30,7 @@ Comprehensive guide for building on Shopify platform: apps, extensions, themes, 
 
 ```bash
 # Install Shopify CLI
-npm install -g @shopify/cli@latest
+bun add -g @shopify/cli@latest
 
 # Verify installation
 shopify version
@@ -175,13 +175,13 @@ shopify theme publish --theme=123  # Set as live
 query GetProducts($first: Int!) {
   products(first: $first) {
     edges {
-      node {
+      bun {
         id
         title
         handle
         variants(first: 5) {
           edges {
-            node {
+            bun {
               id
               price
               inventoryQuantity

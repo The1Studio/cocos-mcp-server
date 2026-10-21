@@ -85,8 +85,8 @@ Your summary report should include:
 
 **Tools & Commands:**
 You should be familiar with common testing commands:
-- `npm test`,`yarn test`, `pnpm test` or `bun test` for JavaScript/TypeScript projects
-- `npm run test:coverage`,`yarn test:coverage`, `pnpm test:coverage` or `bun test:coverage` for coverage reports
+- `bun test`,`bun test`, `bun test` or `bun test` for JavaScript/TypeScript projects
+- `bun run test:coverage`,`bun run test:coverage`, `bun test:coverage` or `bun test:coverage` for coverage reports
 - `pytest` or `python -m unittest` for Python projects
 - `go test` for Go projects
 - `cargo test` for Rust projects

@@ -20,7 +20,7 @@ This skill enables Claude to discover, analyze, and execute MCP server capabilit
 
 ```bash
 cd .opencode/skills/mcp-management/scripts
-npm install
+bun install
 ```
 
 ### 2. Configure MCP Servers
@@ -31,12 +31,12 @@ Create `.opencode/.mcp.json`:
 {
   "mcpServers": {
     "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
+      "command": "bunx",
+      "args": ["@modelcontextprotocol/server-memory"]
     },
     "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/allowed/path"]
+      "command": "bunx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/allowed/path"]
     }
   }
 }
@@ -48,7 +48,7 @@ See `.opencode/.mcp.json.example` for more examples.
 
 ```bash
 cd .opencode/skills/mcp-management/scripts
-npx ts-node cli.ts list-tools
+bunx ts-node cli.ts list-tools
 ```
 
 ## Usage Patterns
@@ -56,9 +56,9 @@ npx ts-node cli.ts list-tools
 ### Pattern 1: Discover Available Tools
 
 ```bash
-npx ts-node scripts/cli.ts list-tools
-npx ts-node scripts/cli.ts list-prompts
-npx ts-node scripts/cli.ts list-resources
+bunx ts-node scripts/cli.ts list-tools
+bunx ts-node scripts/cli.ts list-prompts
+bunx ts-node scripts/cli.ts list-resources
 ```
 
 ### Pattern 2: LLM-Driven Tool Selection
@@ -68,7 +68,7 @@ The LLM reads `assets/tools.json` and intelligently selects tools. No separate a
 ### Pattern 3: Execute MCP Tools
 
 ```bash
-npx ts-node scripts/cli.ts call-tool memory add '{"key":"name","value":"Alice"}'
+bunx ts-node scripts/cli.ts call-tool memory add '{"key":"name","value":"Alice"}'
 ```
 
 ### Pattern 4: Use with Subagent
@@ -168,7 +168,7 @@ Scripts check for variables in this order:
 
 ## Common MCP Servers
 
-Install with `npx`:
+Install with `bunx`:
 
 - `@modelcontextprotocol/server-memory` - Key-value storage
 - `@modelcontextprotocol/server-filesystem` - File operations
@@ -196,7 +196,7 @@ Ensure `.opencode/.mcp.json` exists and is valid JSON.
 ### "Server connection failed"
 
 Check:
-- Server command is installed (`npx` packages installed?)
+- Server command is installed (`bunx` packages installed?)
 - Server args are correct
 - Environment variables are set
 
@@ -204,7 +204,7 @@ Check:
 
 List available tools first:
 ```bash
-npx ts-node scripts/cli.ts list-tools
+bunx ts-node scripts/cli.ts list-tools
 ```
 
 ## Resources

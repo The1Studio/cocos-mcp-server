@@ -50,7 +50,7 @@ After docs-manager completes:
 ## Phase 4: Documentation Validation (Post-Update)
 
 Run validation to detect potential hallucinations:
-1. Run: `node .opencode/scripts/validate-docs.cjs docs/`
+1. Run: `bun .opencode/scripts/validate-docs.cjs docs/`
 2. Display validation report (warnings only, non-blocking)
 3. Checks: code references, internal links, config keys
 

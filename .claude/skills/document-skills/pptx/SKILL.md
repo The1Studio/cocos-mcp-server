@@ -475,10 +475,10 @@ pdftoppm -jpeg -r 150 -f 2 -l 5 template.pdf slide  # Converts only pages 2-5
 Required dependencies (should already be installed):
 
 - **markitdown**: `pip install "markitdown[pptx]"` (for text extraction from presentations)
-- **pptxgenjs**: `npm install -g pptxgenjs` (for creating presentations via html2pptx)
-- **playwright**: `npm install -g playwright` (for HTML rendering in html2pptx)
-- **react-icons**: `npm install -g react-icons react react-dom` (for icons)
-- **sharp**: `npm install -g sharp` (for SVG rasterization and image processing)
+- **pptxgenjs**: `bun add -g pptxgenjs` (for creating presentations via html2pptx)
+- **playwright**: `bun add -g playwright` (for HTML rendering in html2pptx)
+- **react-icons**: `bun add -g react-icons react react-dom` (for icons)
+- **sharp**: `bun add -g sharp` (for SVG rasterization and image processing)
 - **LibreOffice**: `sudo apt-get install libreoffice` (for PDF conversion)
 - **Poppler**: `sudo apt-get install poppler-utils` (for pdftoppm to convert PDF to images)
 - **defusedxml**: `pip install defusedxml` (for secure XML parsing)

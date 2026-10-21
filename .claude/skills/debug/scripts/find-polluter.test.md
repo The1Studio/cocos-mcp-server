@@ -73,13 +73,13 @@ rm -rf /tmp/polluter-test
 - Pollution path must be accurate
 
 **Customization:**
-If your project doesn't use `npm test`, modify line 42:
+If your project doesn't use `bun test`, modify line 42:
 ```bash
 # Replace
-npm test "$TEST_FILE" > /dev/null 2>&1 || true
+bun test "$TEST_FILE" > /dev/null 2>&1 || true
 
 # With your test command
-node "$TEST_FILE" > /dev/null 2>&1 || true
+bun "$TEST_FILE" > /dev/null 2>&1 || true
 # Or
 jest "$TEST_FILE" > /dev/null 2>&1 || true
 ```

@@ -285,7 +285,7 @@ export default function Page() {
 
 ```bash
 # Install bundle analyzer
-npm install @next/bundle-analyzer
+bun install @next/bundle-analyzer
 
 # Create next.config.js wrapper
 ```
@@ -303,7 +303,7 @@ module.exports = withBundleAnalyzer({
 
 ```bash
 # Run analysis
-ANALYZE=true npm run build
+ ANALYZE=true bun run build
 ```
 
 ### Dynamic Import (Code Splitting)

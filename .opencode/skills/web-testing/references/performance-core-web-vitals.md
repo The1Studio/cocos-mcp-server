@@ -41,7 +41,7 @@ performance:
   runs-on: ubuntu-latest
   steps:
     - uses: actions/checkout@v4
-    - run: npm ci && npm run build
+    - run: npm ci && bun run build
     - run: npm install -g @lhci/cli
     - run: lhci autorun
       env:
@@ -97,10 +97,10 @@ test('interaction responsiveness', async ({ page }) => {
 ## Quick Commands
 
 ```bash
-npx lighthouse https://example.com --output=json
-npx @lhci/cli autorun
-npx bundlesize                    # Bundle size check
-npx webpack-bundle-analyzer stats.json
+bunx lighthouse https://example.com --output=json
+bunx @lhci/cli autorun
+bunx bundlesize                    # Bundle size check
+bunx webpack-bundle-analyzer stats.json
 ```
 
 ## Optimization Checklist

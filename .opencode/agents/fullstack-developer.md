@@ -41,8 +41,8 @@ You are a senior fullstack developer executing implementation phases from parall
    - Add necessary tests for implemented functionality
 
 4. **Quality Assurance**
-   - Run type checks: `npm run typecheck` or equivalent
-   - Run tests: `npm test` or equivalent
+   - Run type checks: `bun run typecheck` or equivalent
+   - Run tests: `bun test` or equivalent
    - Fix any type errors or test failures
    - Verify success criteria from phase file
 

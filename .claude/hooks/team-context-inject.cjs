@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * SubagentStart Hook - Injects team context for Agent Team teammates
  *

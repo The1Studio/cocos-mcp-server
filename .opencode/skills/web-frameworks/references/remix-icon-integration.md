@@ -15,13 +15,13 @@ RemixIcon provides 3,100+ icons in outlined (-line) and filled (-fill) styles, b
 
 ```bash
 # npm
-npm install remixicon
+bun install remixicon
 
 # yarn
-yarn add remixicon
+bun add remixicon
 
 # pnpm
-pnpm install remixicon
+bun install remixicon
 
 # bun
 bun add remixicon
@@ -30,13 +30,13 @@ bun add remixicon
 ### React Package
 
 ```bash
-npm install @remixicon/react
+bun install @remixicon/react
 ```
 
 ### Vue 3 Package
 
 ```bash
-npm install @remixicon/vue
+bun install @remixicon/vue
 ```
 
 ### CDN

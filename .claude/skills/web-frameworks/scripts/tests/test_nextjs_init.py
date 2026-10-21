@@ -247,7 +247,7 @@ class TestNextJSInitializer:
 
         assert "# test-app" in readme
         assert "Next.js" in readme
-        assert "npm run dev" in readme
+        assert "bun run dev" in readme
 
     def test_create_config_files(self, tmp_path):
         """Test configuration files creation."""

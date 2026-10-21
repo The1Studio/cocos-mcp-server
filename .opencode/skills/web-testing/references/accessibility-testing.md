@@ -67,9 +67,9 @@ test('Button accessible', async () => {
 ## CLI Tools
 
 ```bash
-npx @axe-core/cli https://example.com
-npx lighthouse https://example.com --only-categories=accessibility
-npx pa11y https://example.com
+bunx @axe-core/cli https://example.com
+bunx lighthouse https://example.com --only-categories=accessibility
+bunx pa11y https://example.com
 ```
 
 ## CI Integration

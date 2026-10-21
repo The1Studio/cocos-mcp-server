@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Tests for dev-rules-reminder.cjs hook - path resolution (Issue #327)
  * Run: node --test .claude/hooks/__tests__/dev-rules-reminder.test.cjs
@@ -27,7 +27,7 @@ const HOOK_PATH = path.join(__dirname, '..', 'dev-rules-reminder.cjs');
  */
 function runHook(inputData, options = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('node', [HOOK_PATH], {
+    const proc = spawn('bun', [HOOK_PATH], {
       cwd: options.cwd || process.cwd(),
       env: {
         ...process.env,
@@ -288,7 +288,7 @@ describe('dev-rules-reminder.cjs', () => {
 
     it('exits 0 on error (fail-open)', async () => {
       // Send invalid JSON-like input via write
-      const proc = spawn('node', [HOOK_PATH], {
+      const proc = spawn('bun', [HOOK_PATH], {
         cwd: process.cwd(),
         env: { ...process.env, CLAUDE_ENV_FILE: '' }
       });

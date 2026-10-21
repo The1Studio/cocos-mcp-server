@@ -19,13 +19,13 @@ Execute scripts to handle entire workflow - no manual URL construction needed.
 
 ```bash
 # 1. DETECT query type (topic-specific vs general)
-node scripts/detect-topic.js "<user query>"
+bun scripts/detect-topic.js "<user query>"
 
 # 2. FETCH documentation using script output
-node scripts/fetch-docs.js "<user query>"
+bun scripts/fetch-docs.js "<user query>"
 
 # 3. ANALYZE results (if multiple URLs returned)
-cat llms.txt | node scripts/analyze-llms-txt.js -
+cat llms.txt | bun scripts/analyze-llms-txt.js -
 ```
 
 Scripts handle URL construction, fallback chains, and error handling automatically.
@@ -78,16 +78,16 @@ Scripts handle URL construction, fallback chains, and error handling automatical
 
 **Topic query:** "How do I use date picker in shadcn?"
 ```bash
-node scripts/detect-topic.js "<query>"  # → {topic, library, isTopicSpecific}
-node scripts/fetch-docs.js "<query>"    # → 2-3 URLs
+bun scripts/detect-topic.js "<query>"  # → {topic, library, isTopicSpecific}
+bun scripts/fetch-docs.js "<query>"    # → 2-3 URLs
 # Read URLs with WebFetch
 ```
 
 **General query:** "Documentation for Next.js"
 ```bash
-node scripts/detect-topic.js "<query>"         # → {isTopicSpecific: false}
-node scripts/fetch-docs.js "<query>"           # → 8+ URLs
-cat llms.txt | node scripts/analyze-llms-txt.js -  # → {totalUrls, distribution}
+bun scripts/detect-topic.js "<query>"         # → {isTopicSpecific: false}
+bun scripts/fetch-docs.js "<query>"           # → 8+ URLs
+cat llms.txt | bun scripts/analyze-llms-txt.js -  # → {totalUrls, distribution}
 # Deploy agents per recommendation
 ```
 

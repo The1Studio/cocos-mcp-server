@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with: { node-version: 20, cache: 'npm' }
       - run: npm ci
       - run: npm run test:unit -- --coverage
@@ -30,7 +30,7 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with: { node-version: 20, cache: 'npm' }
       - run: npm ci
       - run: npx playwright install --with-deps
@@ -46,7 +46,7 @@ jobs:
 
 ```bash
 # By shard (equal files)
-npx playwright test --shard=1/4
+bunx playwright test --shard=1/4
 
 # By timing (Knapsack)
 - uses: chaosaffe/split-tests@v1
@@ -105,7 +105,7 @@ e2e:
   stage: e2e
   parallel: 4
   script:
-    - npm ci && npx playwright install --with-deps
+    - npm ci && bunx playwright install --with-deps
     - npx playwright test --shard=$CI_NODE_INDEX/$CI_NODE_TOTAL
   artifacts:
     when: on_failure

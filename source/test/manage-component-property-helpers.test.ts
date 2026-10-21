@@ -65,7 +65,7 @@ describe('convertPropertyValue — componentArray propertyType (issue #18)', () 
     });
 
     it('throws when an item is not a string', () => {
-        expect(() => convertPropertyValue('componentArray', [123])).toThrow(/must be string node UUIDs/);
+        expect(() => convertPropertyValue('componentArray', [123])).toThrow(/must be string Node UUIDs/);
     });
 
     it('throws when the value itself is not an array', () => {

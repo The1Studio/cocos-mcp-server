@@ -30,20 +30,20 @@ Use the `inject-auth.js` script:
 cd $SKILL_DIR  # .claude/skills/chrome-devtools/scripts
 
 # Option A: Inject cookies
-node inject-auth.js --url https://example.com --cookies '[{"name":"session","value":"abc123","domain":".example.com"}]'
+bun inject-auth.js --url https://example.com --cookies '[{"name":"session","value":"abc123","domain":".example.com"}]'
 
 # Option B: Inject Bearer token
-node inject-auth.js --url https://example.com --token "Bearer eyJhbGciOi..." --header Authorization --token-key access_token
+bun inject-auth.js --url https://example.com --token "Bearer eyJhbGciOi..." --header Authorization --token-key access_token
 
 # Option C: Inject localStorage
-node inject-auth.js --url https://example.com --local-storage '{"auth_token":"xyz","user_id":"123"}'
+bun inject-auth.js --url https://example.com --local-storage '{"auth_token":"xyz","user_id":"123"}'
 ```
 
 ### Step 4: Run Tests
 After auth injection, run tests normally:
 ```bash
-node navigate.js --url https://example.com/dashboard
-node screenshot.js --url https://example.com/profile --output profile.png
+bun navigate.js --url https://example.com/dashboard
+bun screenshot.js --url https://example.com/profile --output profile.png
 ```
 
 ## Workflow

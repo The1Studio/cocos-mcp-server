@@ -65,7 +65,7 @@ Add to your `.claude/settings.json` or `.claude/settings.local.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/notifications/notify.cjs"
+            "command": "bun .claude/hooks/notifications/notify.cjs"
           }
         ]
       }
@@ -76,7 +76,7 @@ Add to your `.claude/settings.json` or `.claude/settings.local.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/notifications/notify.cjs"
+            "command": "bun .claude/hooks/notifications/notify.cjs"
           }
         ]
       }
@@ -87,7 +87,7 @@ Add to your `.claude/settings.json` or `.claude/settings.local.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/notifications/notify.cjs"
+            "command": "bun .claude/hooks/notifications/notify.cjs"
           }
         ]
       }
@@ -106,7 +106,7 @@ Choose only the events you want notifications for.
 #### Step 3: Test Your Setup
 
 ```bash
-echo '{"hook_event_name":"Stop","cwd":"'$(pwd)'","session_id":"test123"}' | node .claude/hooks/notifications/notify.cjs
+echo '{"hook_event_name":"Stop","cwd":"'$(pwd)'","session_id":"test123"}' | bun .claude/hooks/notifications/notify.cjs
 ```
 
 Expected output (if Telegram and Discord configured):
@@ -151,7 +151,7 @@ Cross-platform hook blocking heavy directories to improve Claude performance.
 
 **Testing:**
 ```bash
-echo '{"tool_input":{"command":"ls node_modules"}}' | node .claude/hooks/scout-block.cjs
+echo '{"tool_input":{"command":"ls node_modules"}}' | bun .claude/hooks/scout-block.cjs
 ```
 
 ## Security

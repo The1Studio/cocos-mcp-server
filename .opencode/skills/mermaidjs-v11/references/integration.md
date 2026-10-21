@@ -37,9 +37,9 @@ JavaScript API integration, HTML embedding, and platform-specific usage.
 
 **Installation:**
 ```bash
-npm install mermaid
+bun install mermaid
 # or
-yarn add mermaid
+bun add mermaid
 ```
 
 **Import and Initialize:**

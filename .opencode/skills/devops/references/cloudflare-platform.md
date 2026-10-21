@@ -134,7 +134,7 @@ export default {
 
 ### Installation
 ```bash
-npm install -g wrangler
+bun add -g wrangler
 wrangler login
 wrangler init my-worker
 ```

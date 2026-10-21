@@ -423,7 +423,7 @@ CATEGORY_GUIDES = {
         ],
         "tip": """Add to settings.json:
 ```json
-"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "node .opencode/hooks/notifications/notify.cjs"}]}]
+"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "bun .opencode/hooks/notifications/notify.cjs"}]}]
 ```
 Docs: `.opencode/hooks/notifications/docs/`""",
     },

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Connect to an existing Chrome browser launched with remote debugging
  *

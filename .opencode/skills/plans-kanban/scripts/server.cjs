@@ -1,11 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Plans Kanban Server
  * Background HTTP server for plans dashboard with progress tracking
  *
  * Usage:
- *   node server.cjs --dir ./plans [--port 3500] [--open] [--stop] [--host 0.0.0.0]
+ *   bun server.cjs --dir ./plans [--port 3500] [--open] [--stop] [--host 0.0.0.0]
  *
  * Options:
  *   --dir <path>    Path to plans directory
@@ -147,7 +147,7 @@ async function main() {
   if (!args.dir) {
     console.error('Error: --dir argument required');
     console.error('Usage:');
-    console.error('  node server.cjs --dir <plans-dir> [--port 3500] [--open]');
+    console.error('  bun server.cjs --dir <plans-dir> [--port 3500] [--open]');
     process.exit(1);
   }
 

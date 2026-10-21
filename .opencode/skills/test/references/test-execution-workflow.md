@@ -14,8 +14,8 @@ Run syntax/type checks before tests to catch compile errors early:
 
 ```bash
 # JavaScript/TypeScript
-npx tsc --noEmit          # TypeScript check
-npx eslint .              # Lint check
+bunx tsc --noEmit          # TypeScript check
+bunx eslint .              # Lint check
 
 # Python
 python -m py_compile file.py
@@ -35,10 +35,10 @@ cargo check
 
 ### JavaScript/TypeScript
 ```bash
-npm test                    # or yarn test / pnpm test / bun test
-npm run test:coverage       # with coverage
-npx vitest run              # Vitest
-npx jest --coverage         # Jest with coverage
+bun test # or yarn test / pnpm test / bun test
+bun run test:coverage       # with coverage
+bunx vitest run              # Vitest
+bunx jest --coverage         # Jest with coverage
 ```
 
 ### Python
@@ -78,7 +78,7 @@ Identify gaps:
 ## Step 6: Build Verification
 
 ```bash
-npm run build               # JS/TS production build
+bun run build               # JS/TS production build
 python setup.py build       # Python
 go build ./...              # Go
 cargo build --release       # Rust

@@ -178,7 +178,7 @@ Context: 91% [CRITICAL - compaction needed]
         "matcher": "*",
         "hooks": [{
           "type": "command",
-          "command": "node .claude/hooks/usage-context-awareness.cjs"
+          "command": "bun .claude/hooks/usage-context-awareness.cjs"
         }]
       }
     ]

@@ -8,7 +8,7 @@ Installation, workspace configuration, and project structure for monorepos.
 
 Using official starter:
 ```bash
-npx create-turbo@latest my-monorepo
+bunx create-turbo@latest my-monorepo
 cd my-monorepo
 ```
 
@@ -22,13 +22,13 @@ Interactive prompts:
 Install in existing project:
 ```bash
 # npm
-npm install turbo --save-dev
+bun install turbo --dev
 
 # yarn
-yarn add turbo --dev
+bun add turbo --dev
 
 # pnpm
-pnpm add turbo --save-dev
+bun add turbo --save-dev
 
 # bun
 bun add turbo --dev

@@ -546,8 +546,8 @@ await authClient.phoneNumber.verifyOTP({
 After adding any plugin:
 
 ```bash
-npx @better-auth/cli generate
-npx @better-auth/cli migrate # if using Kysely
+bunx @better-auth/cli generate
+bunx @better-auth/cli migrate # if using Kysely
 ```
 
 Or manually apply migrations for your ORM (Drizzle, Prisma).

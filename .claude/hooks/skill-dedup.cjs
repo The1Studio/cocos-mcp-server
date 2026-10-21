@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Skill Dedup Hook - Prevents local skills from shadowing global versions
  *

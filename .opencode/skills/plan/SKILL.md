@@ -111,7 +111,7 @@ Check `## Plan Context` injected by hooks:
 - **"Suggested: {path}"** → Branch hint only. Ask if activate or create new.
 - **"Plan: none"** → Create new using `Plan dir:` from `## Naming`
 
-After creating plan: `node .opencode/scripts/set-active-plan.cjs {plan-dir}`
+After creating plan: `bun .opencode/scripts/set-active-plan.cjs {plan-dir}`
 Reports: Active plans → plan-specific path. Suggested → default path.
 
 ### Important

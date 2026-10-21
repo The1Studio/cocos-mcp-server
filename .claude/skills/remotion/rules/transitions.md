@@ -16,10 +16,10 @@ First, the @remotion/transitions package needs to be installed.
 If it is not, use the following command:
 
 ```bash
-npx remotion add @remotion/transitions # If project uses npm
+bunx remotion add @remotion/transitions # If project uses npm
 bunx remotion add @remotion/transitions # If project uses bun
-yarn remotion add @remotion/transitions # If project uses yarn
-pnpm exec remotion add @remotion/transitions # If project uses pnpm
+bun run remotion add @remotion/transitions # If project uses yarn
+bun x remotion add @remotion/transitions # If project uses pnpm
 ```
 
 ## Example usage

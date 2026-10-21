@@ -1,9 +1,9 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Notification Router - Main entry point for hook notifications
  * Reads stdin JSON, routes to enabled providers
  *
- * Usage: echo '{"hook_event_name":"Stop"}' | node notify.cjs
+ * Usage: echo '{"hook_event_name":"Stop"}' | bun notify.cjs
  */
 'use strict';
 

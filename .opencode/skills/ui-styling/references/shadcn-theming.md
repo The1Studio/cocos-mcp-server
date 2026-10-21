@@ -8,7 +8,7 @@ Theme configuration, CSS variables, dark mode, and component customization.
 
 **1. Install next-themes:**
 ```bash
-npm install next-themes
+bun install next-themes
 ```
 
 **2. Create theme provider:**

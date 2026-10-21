@@ -237,9 +237,9 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: '20'
           cache: 'npm'
 
       - name: Install dependencies

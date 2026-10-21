@@ -17,10 +17,10 @@ First, the @remotion/google-fonts package needs to be installed.
 If it is not installed, use the following command:
 
 ```bash
-npx remotion add @remotion/google-fonts # If project uses npm
+bunx remotion add @remotion/google-fonts # If project uses npm
 bunx remotion add @remotion/google-fonts # If project uses bun
-yarn remotion add @remotion/google-fonts # If project uses yarn
-pnpm exec remotion add @remotion/google-fonts # If project uses pnpm
+bun run remotion add @remotion/google-fonts # If project uses yarn
+bun x remotion add @remotion/google-fonts # If project uses pnpm
 ```
 
 ```tsx
@@ -65,10 +65,10 @@ For local font files, use the `@remotion/fonts` package.
 First, install @remotion/fonts:
 
 ```bash
-npx remotion add @remotion/fonts # If project uses npm
+bunx remotion add @remotion/fonts # If project uses npm
 bunx remotion add @remotion/fonts # If project uses bun
-yarn remotion add @remotion/fonts # If project uses yarn
-pnpm exec remotion add @remotion/fonts # If project uses pnpm
+bun run remotion add @remotion/fonts # If project uses yarn
+bun x remotion add @remotion/fonts # If project uses pnpm
 ```
 
 ### Loading a local font

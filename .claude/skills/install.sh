@@ -523,7 +523,7 @@ install_node_deps() {
 
     # Check Node.js
     if command_exists node; then
-        NODE_VERSION=$(node --version)
+        NODE_VERSION=$(bun --version)
         print_success "Node.js already installed ($NODE_VERSION)"
     else
         print_info "Installing Node.js..."
@@ -609,9 +609,9 @@ install_node_deps() {
             print_success "$package already installed via npm"
         else
             print_info "Installing $package..."
-            npm install -g "$package" 2>/dev/null || {
+            bun add -g "$package" 2>/dev/null || {
                 print_warning "Failed to install $package globally. Trying with sudo..."
-                sudo npm install -g "$package"
+                sudo bun add -g "$package"
             }
             print_success "$package installed"
         fi
@@ -623,35 +623,35 @@ install_node_deps() {
     # chrome-devtools
     if [ -d "$SCRIPT_DIR/chrome-devtools/scripts" ] && [ -f "$SCRIPT_DIR/chrome-devtools/scripts/package.json" ]; then
         print_info "Installing chrome-devtools dependencies..."
-        (cd "$SCRIPT_DIR/chrome-devtools/scripts" && npm install --quiet)
+        (cd "$SCRIPT_DIR/chrome-devtools/scripts" && bun install --quiet)
         print_success "chrome-devtools dependencies installed"
     fi
 
     # sequential-thinking
     if [ -d "$SCRIPT_DIR/sequential-thinking" ] && [ -f "$SCRIPT_DIR/sequential-thinking/package.json" ]; then
         print_info "Installing sequential-thinking dependencies..."
-        (cd "$SCRIPT_DIR/sequential-thinking" && npm install --quiet)
+        (cd "$SCRIPT_DIR/sequential-thinking" && bun install --quiet)
         print_success "sequential-thinking dependencies installed"
     fi
 
     # mcp-management
     if [ -d "$SCRIPT_DIR/mcp-management/scripts" ] && [ -f "$SCRIPT_DIR/mcp-management/scripts/package.json" ]; then
         print_info "Installing mcp-management dependencies..."
-        (cd "$SCRIPT_DIR/mcp-management/scripts" && npm install --quiet)
+        (cd "$SCRIPT_DIR/mcp-management/scripts" && bun install --quiet)
         print_success "mcp-management dependencies installed"
     fi
 
     # markdown-novel-viewer (marked, highlight.js, gray-matter)
     if [ -d "$SCRIPT_DIR/markdown-novel-viewer" ] && [ -f "$SCRIPT_DIR/markdown-novel-viewer/package.json" ]; then
         print_info "Installing markdown-novel-viewer dependencies..."
-        (cd "$SCRIPT_DIR/markdown-novel-viewer" && npm install --quiet)
+        (cd "$SCRIPT_DIR/markdown-novel-viewer" && bun install --quiet)
         print_success "markdown-novel-viewer dependencies installed"
     fi
 
     # plans-kanban (gray-matter)
     if [ -d "$SCRIPT_DIR/plans-kanban" ] && [ -f "$SCRIPT_DIR/plans-kanban/package.json" ]; then
         print_info "Installing plans-kanban dependencies..."
-        (cd "$SCRIPT_DIR/plans-kanban" && npm install --quiet)
+        (cd "$SCRIPT_DIR/plans-kanban" && bun install --quiet)
         print_success "plans-kanban dependencies installed"
     fi
 
@@ -664,9 +664,9 @@ install_node_deps() {
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 print_info "Installing Shopify CLI..."
-                npm install -g @shopify/cli @shopify/theme 2>/dev/null || {
+                bun add -g @shopify/cli @shopify/theme 2>/dev/null || {
                     print_warning "Failed to install Shopify CLI globally. Trying with sudo..."
-                    sudo npm install -g @shopify/cli @shopify/theme
+                    sudo bun add -g @shopify/cli @shopify/theme
                 }
                 print_success "Shopify CLI installed"
             fi
@@ -921,7 +921,7 @@ verify_installations() {
         print_warning "ImageMagick is not available"
     fi
 
-    # Node.js & npm
+    # Node.js & bun
     if command_exists node; then
         print_success "Node.js is available"
     else

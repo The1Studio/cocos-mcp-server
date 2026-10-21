@@ -72,7 +72,7 @@ export const auth = betterAuth({
 
 **Install:**
 ```bash
-npm install drizzle-orm better-auth
+bun install drizzle-orm better-auth
 ```
 
 **Setup:**
@@ -104,14 +104,14 @@ export const auth = betterAuth({
 
 **Generate Schema:**
 ```bash
-npx @better-auth/cli generate --adapter drizzle
+bunx @better-auth/cli generate --adapter drizzle
 ```
 
 ### Prisma
 
 **Install:**
 ```bash
-npm install @prisma/client better-auth
+bun install @prisma/client better-auth
 ```
 
 **Setup:**
@@ -131,21 +131,21 @@ export const auth = betterAuth({
 
 **Generate Schema:**
 ```bash
-npx @better-auth/cli generate --adapter prisma
+bunx @better-auth/cli generate --adapter prisma
 ```
 
 **Apply to Prisma:**
 ```bash
 # Add generated schema to schema.prisma
-npx prisma migrate dev --name init
-npx prisma generate
+bunx prisma migrate dev --name init
+bunx prisma generate
 ```
 
 ### Kysely
 
 **Install:**
 ```bash
-npm install kysely better-auth
+bun install kysely better-auth
 ```
 
 **Setup:**
@@ -172,14 +172,14 @@ export const auth = betterAuth({
 
 **Auto-migrate with Kysely:**
 ```bash
-npx @better-auth/cli migrate --adapter kysely
+bunx @better-auth/cli migrate --adapter kysely
 ```
 
 ### MongoDB
 
 **Install:**
 ```bash
-npm install mongodb better-auth
+bun install mongodb better-auth
 ```
 
 **Setup:**
@@ -200,7 +200,7 @@ export const auth = betterAuth({
 
 **Generate Collections:**
 ```bash
-npx @better-auth/cli generate --adapter mongodb
+bunx @better-auth/cli generate --adapter mongodb
 ```
 
 ## Core Database Schema
@@ -274,20 +274,20 @@ CREATE TABLE verification (
 
 ```bash
 # Generate schema files
-npx @better-auth/cli generate
+bunx @better-auth/cli generate
 
 # Specify adapter
-npx @better-auth/cli generate --adapter drizzle
-npx @better-auth/cli generate --adapter prisma
+bunx @better-auth/cli generate --adapter drizzle
+bunx @better-auth/cli generate --adapter prisma
 
 # Specify output
-npx @better-auth/cli generate --output ./db/schema.ts
+bunx @better-auth/cli generate --output ./db/schema.ts
 ```
 
 ### Auto-migrate (Kysely only)
 
 ```bash
-npx @better-auth/cli migrate
+bunx @better-auth/cli migrate
 ```
 
 For other ORMs, apply generated schema manually.
@@ -320,7 +320,7 @@ export const auth = betterAuth({
 
 After adding fields:
 ```bash
-npx @better-auth/cli generate
+bunx @better-auth/cli generate
 ```
 
 Update user with custom fields:
@@ -336,7 +336,7 @@ await authClient.updateUser({
 Plugins add their own tables/fields. Regenerate schema after adding plugins:
 
 ```bash
-npx @better-auth/cli generate
+bunx @better-auth/cli generate
 ```
 
 ### Two-Factor Plugin Tables
@@ -359,35 +359,35 @@ npx @better-auth/cli generate
 
 ```bash
 # Generate schema
-npx @better-auth/cli generate
+bunx @better-auth/cli generate
 
 # Apply migrations (Kysely)
-npx @better-auth/cli migrate
+bunx @better-auth/cli migrate
 
 # Or manual (Prisma)
-npx prisma migrate dev
+bunx prisma migrate dev
 
 # Or manual (Drizzle)
-npx drizzle-kit push
+bunx drizzle-kit push
 ```
 
 ### Production
 
 ```bash
 # Review generated migration
-npx @better-auth/cli generate
+bunx @better-auth/cli generate
 
 # Test in staging
 # Apply to production with your ORM's migration tool
 
 # Prisma
-npx prisma migrate deploy
+bunx prisma migrate deploy
 
 # Drizzle
-npx drizzle-kit push
+bunx drizzle-kit push
 
 # Kysely
-npx @better-auth/cli migrate
+bunx @better-auth/cli migrate
 ```
 
 ## Connection Pooling
@@ -555,7 +555,7 @@ const pool = new Pool({
 
 ```bash
 # Regenerate schema
-npx @better-auth/cli generate
+bunx @better-auth/cli generate
 
 # Apply migrations
 # For Prisma: npx prisma migrate dev

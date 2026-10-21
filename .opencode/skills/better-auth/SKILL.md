@@ -24,7 +24,7 @@ Better Auth is comprehensive, framework-agnostic authentication/authorization fr
 ### Installation
 
 ```bash
-npm install better-auth
+bun install better-auth
 # or pnpm/yarn/bun add better-auth
 ```
 
@@ -63,8 +63,8 @@ export const auth = betterAuth({
 ### Database Schema
 
 ```bash
-npx @better-auth/cli generate  # Generate schema/migrations
-npx @better-auth/cli migrate   # Apply migrations (Kysely only)
+bunx @better-auth/cli generate  # Generate schema/migrations
+bunx @better-auth/cli migrate   # Apply migrations (Kysely only)
 ```
 
 ### Mount API Handler
@@ -171,7 +171,7 @@ Better Auth uses client-server architecture:
 - [ ] Install `better-auth` package
 - [ ] Set environment variables (SECRET, URL)
 - [ ] Create auth server instance with database config
-- [ ] Run schema migration (`npx @better-auth/cli generate`)
+- [ ] Run schema migration (`bunx @better-auth/cli generate`)
 - [ ] Mount API handler in framework
 - [ ] Create client instance
 - [ ] Implement sign-up/sign-in UI

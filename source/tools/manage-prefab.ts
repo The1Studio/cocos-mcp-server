@@ -30,7 +30,7 @@ export class ManagePrefab extends BaseActionTool {
             },
             nodeUuid: {
                 type: 'string',
-                description: 'Scene node UUID (for create, update, revert, restore actions). For update/revert/restore this may be any node inside the prefab instance; the instance root is resolved from it.'
+                description: 'Scene Node UUID (for create, update, revert, restore actions). For update/revert/restore this may be any Node inside the prefab instance; the instance root is resolved from it.'
             },
             savePath: {
                 type: 'string',
@@ -38,7 +38,7 @@ export class ManagePrefab extends BaseActionTool {
             },
             parentUuid: {
                 type: 'string',
-                description: 'Parent node UUID for the instantiated prefab (for instantiate action, optional)'
+                description: 'Parent Node UUID for the instantiated prefab (for instantiate action, optional)'
             },
             position: {
                 type: 'object',
@@ -82,7 +82,7 @@ export class ManagePrefab extends BaseActionTool {
             },
             assetUuid: {
                 type: 'string',
-                description: 'Prefab asset UUID to restore from (for revert and restore actions, optional — resolved from the node when omitted)'
+                description: 'Prefab asset UUID to restore from (for revert and restore actions, optional — resolved from the Node when omitted)'
             }
         },
         required: ['action']
@@ -490,7 +490,7 @@ export class ManagePrefab extends BaseActionTool {
         try {
             nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
         } catch (err: any) {
-            return { success: false, error: `Failed to query node ${nodeUuid}: ${err.message}` };
+            return { success: false, error: `Failed to query Node ${nodeUuid}: ${err.message}` };
         }
         if (!nodeData) return { success: false, error: 'Node not found' };
 
@@ -600,7 +600,7 @@ export class ManagePrefab extends BaseActionTool {
             if (appliedRejected) {
                 return {
                     success: false,
-                    error: `Editor rejected apply-prefab for node ${rootUuid}, so its result is not trustworthy and no child nodes were removed. Confirm it is a prefab-instance root with a valid asset link.` +
+                    error: `Editor rejected apply-prefab for Node ${rootUuid}, so its result is not trustworthy and no child nodes were removed. Confirm it is a prefab-instance root with a valid asset link.` +
                         (persisted === true
                             ? ` The rejected apply did rewrite ${prefabPath} — diff it against git before retrying.`
                             : ''),
@@ -611,7 +611,7 @@ export class ManagePrefab extends BaseActionTool {
             if (persisted === false) {
                 return {
                     success: false,
-                    error: `apply-prefab reported no error but ${prefabPath} was not rewritten. The node may have no overrides to apply, or its prefab link is stale.`,
+                    error: `apply-prefab reported no error but ${prefabPath} was not rewritten. The Node may have no overrides to apply, or its prefab link is stale.`,
                     data: { nodeUuid, rootUuid, assetUuid, prefabPath, persisted }
                 };
             }
@@ -837,7 +837,9 @@ export class ManagePrefab extends BaseActionTool {
 
         let imported: boolean;
         try {
-            imported = (await Editor.Message.request('asset-db', 'reimport-asset', assetUuid)) !== false;
+            // Declared void by the editor typings; the runtime can still return false.
+            const response: unknown = await Editor.Message.request('asset-db', 'reimport-asset', assetUuid);
+            imported = response !== false;
         } catch {
             imported = false;
         }
@@ -998,20 +1000,20 @@ export class ManagePrefab extends BaseActionTool {
             if (!entry || entry.__type__ !== 'cc.Node') continue;
             for (const ref of Array.isArray(entry._children) ? entry._children : []) {
                 const childIndex = ref?.__id__;
-                if (typeof childIndex !== 'number') return `node ${index} has a malformed _children entry`;
+                if (typeof childIndex !== 'number') return `Node ${index} has a malformed _children entry`;
                 const child = prefabData[childIndex];
-                if (!child || child.__type__ !== 'cc.Node') return `node ${index} lists a non-node child at ${childIndex}`;
+                if (!child || child.__type__ !== 'cc.Node') return `Node ${index} lists a non-Node child at ${childIndex}`;
                 if (child._parent && child._parent.__id__ !== index) {
-                    return `node ${childIndex} does not point back at parent ${index}`;
+                    return `Node ${childIndex} does not point back at parent ${index}`;
                 }
             }
             for (const ref of Array.isArray(entry._components) ? entry._components : []) {
                 const componentIndex = ref?.__id__;
-                if (typeof componentIndex !== 'number') return `node ${index} has a malformed _components entry`;
+                if (typeof componentIndex !== 'number') return `Node ${index} has a malformed _components entry`;
                 const component = prefabData[componentIndex];
-                if (!component) return `node ${index} lists a missing component at ${componentIndex}`;
+                if (!component) return `Node ${index} lists a missing component at ${componentIndex}`;
                 if (component.node && component.node.__id__ !== index) {
-                    return `component ${componentIndex} does not point back at node ${index}`;
+                    return `component ${componentIndex} does not point back at Node ${index}`;
                 }
             }
         }
@@ -1137,14 +1139,14 @@ export class ManagePrefab extends BaseActionTool {
             const rootUuid = context.rootUuid;
             const resolvedAssetUuid = assetUuid || context.assetUuid;
             if (!resolvedAssetUuid) {
-                return { success: false, error: `Could not resolve the prefab asset for node ${nodeUuid}. Pass assetUuid explicitly.` };
+                return { success: false, error: `Could not resolve the prefab asset for Node ${nodeUuid}. Pass assetUuid explicitly.` };
             }
 
             const restored = await (Editor.Message.request as any)('scene', 'restore-prefab', rootUuid, resolvedAssetUuid);
             if (restored === false) {
                 return {
                     success: false,
-                    error: `Editor rejected restore-prefab for node ${rootUuid}. Confirm it is a prefab-instance root with a valid asset link.`,
+                    error: `Editor rejected restore-prefab for Node ${rootUuid}. Confirm it is a prefab-instance root with a valid asset link.`,
                     data: { nodeUuid, rootUuid, assetUuid: resolvedAssetUuid }
                 };
             }

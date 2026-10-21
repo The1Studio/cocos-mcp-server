@@ -57,14 +57,14 @@ Use when:
 
 **Install shadcn/ui with Tailwind:**
 ```bash
-npx shadcn@latest init
+bunx shadcn@latest init
 ```
 
 CLI prompts for framework, TypeScript, paths, and theme preferences. This configures both shadcn/ui and Tailwind CSS.
 
 **Add components:**
 ```bash
-npx shadcn@latest add button card dialog form
+bunx shadcn@latest add button card dialog form
 ```
 
 **Use components with utility styling:**
@@ -95,7 +95,7 @@ export function Dashboard() {
 
 **Vite projects:**
 ```bash
-npm install -D tailwindcss @tailwindcss/vite
+bun install -D tailwindcss @tailwindcss/vite
 ```
 
 ```javascript

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Tests for session-init.cjs hook - specifically the compact mitigation (Issue #277)
  * Run: node --test .claude/hooks/__tests__/session-init.test.cjs
@@ -21,7 +21,7 @@ const HOOK_PATH = path.join(__dirname, '..', 'session-init.cjs');
  */
 function runHook(inputData) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('node', [HOOK_PATH], {
+    const proc = spawn('bun', [HOOK_PATH], {
       cwd: process.cwd(),
       env: {
         ...process.env,
@@ -231,7 +231,7 @@ describe('session-init.cjs', () => {
         .execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
 
       const result = await new Promise((resolve, reject) => {
-        const proc = spawn('node', [HOOK_PATH], {
+        const proc = spawn('bun', [HOOK_PATH], {
           cwd: gitRoot,  // Run from git root
           env: { ...process.env, CLAUDE_ENV_FILE: '' }
         });
@@ -262,7 +262,7 @@ describe('session-init.cjs', () => {
       const subdirPath = require('path').join(gitRoot, '.claude', 'hooks');
 
       const result = await new Promise((resolve, reject) => {
-        const proc = spawn('node', [HOOK_PATH], {
+        const proc = spawn('bun', [HOOK_PATH], {
           cwd: subdirPath,  // Run from subdirectory
           env: { ...process.env, CLAUDE_ENV_FILE: '' }
         });

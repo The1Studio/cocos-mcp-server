@@ -11,7 +11,7 @@ Client-side library for checkout and pricing.
 
 ```bash
 # npm
-npm install @paddle/paddle-js
+bun install @paddle/paddle-js
 ```
 
 ## Initialization

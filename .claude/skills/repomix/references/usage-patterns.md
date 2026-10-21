@@ -27,8 +27,8 @@ git checkout main && repomix --include "src/**" -o main.xml
 
 ### Cross-Repository
 ```bash
-npx repomix --remote org/repo1 -o repo1.xml
-npx repomix --remote org/repo2 -o repo2.xml
+bunx repomix --remote org/repo1 -o repo1.xml
+bunx repomix --remote org/repo2 -o repo2.xml
 ```
 **Use:** Microservices, library comparisons, consistency checks, integration analysis
 
@@ -36,7 +36,7 @@ npx repomix --remote org/repo2 -o repo2.xml
 
 ### Third-Party Library
 ```bash
-npx repomix --remote vendor/library --style xml -o audit.xml
+bunx repomix --remote vendor/library --style xml -o audit.xml
 ```
 **Workflow:** Package library → enable security checks → review vulnerabilities → check suspicious patterns → AI analysis
 **Check for:** API keys, hardcoded credentials, network calls, obfuscation, malicious patterns
@@ -91,20 +91,20 @@ repomix --include "examples/**,demos/**,*.example.js" --style markdown -o exampl
 
 ### Quick Assessment
 ```bash
-npx repomix --remote owner/library --style markdown -o library-eval.md
+bunx repomix --remote owner/library --style markdown -o library-eval.md
 ```
 **Evaluate:** Code quality, architecture, dependencies, tests, docs, maintenance
 
 ### Feature Comparison
 ```bash
-npx repomix --remote owner/lib-a --style xml -o lib-a.xml
-npx repomix --remote owner/lib-b --style xml -o lib-b.xml
+bunx repomix --remote owner/lib-a --style xml -o lib-a.xml
+bunx repomix --remote owner/lib-b --style xml -o lib-b.xml
 ```
 **Compare:** Features, API design, performance, bundle size, dependencies, maintenance
 
 ### Integration Feasibility
 ```bash
-npx repomix --remote vendor/library --include "src/**,*.md" -o library.xml
+bunx repomix --remote vendor/library --include "src/**,*.md" -o library.xml
 repomix --include "src/integrations/**" -o our-integrations.xml
 ```
 Analyze compatibility between target library and your integration points
@@ -112,7 +112,7 @@ Analyze compatibility between target library and your integration points
 ### Migration Planning
 ```bash
 repomix --include "node_modules/old-lib/**" -o old-lib.xml
-npx repomix --remote owner/new-lib -o new-lib.xml
+bunx repomix --remote owner/new-lib -o new-lib.xml
 ```
 Compare current vs target library, analyze usage patterns
 
@@ -123,7 +123,7 @@ Compare current vs target library, analyze usage patterns
 # GitHub Actions
 - name: Generate Snapshot
   run: |
-    npm install -g repomix
+    bun add -g repomix
     repomix --style markdown -o release-snapshot.md
 - name: Upload Artifact
   uses: actions/upload-artifact@v3
@@ -216,8 +216,8 @@ repomix --include "src/**/*.ts" -i "node_modules/**,dist/**,vendor/**"
 **Problem:** Cannot access remote repo
 **Fix:**
 ```bash
-npx repomix --remote https://github.com/owner/repo  # Full URL
-npx repomix --remote https://github.com/owner/repo/commit/abc123  # Specific commit
+bunx repomix --remote https://github.com/owner/repo  # Full URL
+bunx repomix --remote https://github.com/owner/repo/commit/abc123  # Specific commit
 # For private: clone first, run locally
 ```
 

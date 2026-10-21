@@ -81,5 +81,5 @@ Emulators miss: network throttling, touch latency, gesture recognition variation
 ## Commands
 
 ```bash
-npx playwright test --project=mobile-chrome --project=mobile-safari
+bunx playwright test --project=mobile-chrome --project=mobile-safari
 ```

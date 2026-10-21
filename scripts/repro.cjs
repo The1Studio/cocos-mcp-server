@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * repro.cjs — command-line client for a running Cocos MCP Server.
  *

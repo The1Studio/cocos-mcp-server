@@ -59,7 +59,7 @@ flowchart LR
 Convert `.mmd` files to images:
 ```bash
 # Installation
-npm install -g @mermaid-js/mermaid-cli
+bun add -g @mermaid-js/mermaid-cli
 
 # Basic conversion
 mmdc -i diagram.mmd -o diagram.svg

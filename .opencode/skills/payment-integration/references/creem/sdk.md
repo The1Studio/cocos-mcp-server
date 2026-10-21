@@ -7,7 +7,7 @@
 Full API access with maximum flexibility:
 
 ```bash
-npm install creem
+bun install creem
 # or
 pip install creem
 ```
@@ -44,7 +44,7 @@ session = creem.checkout.sessions.create(
 Helper functions for common operations:
 
 ```bash
-npm install creem_io
+bun install creem_io
 ```
 
 ```javascript
@@ -72,7 +72,7 @@ const hasAccess = await client.checkAccess(customerId, productId);
 End-to-end billing integration:
 
 ```bash
-npm install @creem/nextjs
+bun install @creem/nextjs
 ```
 
 ```typescript
@@ -103,7 +103,7 @@ export const POST = handleWebhook({
 Combined auth + payments:
 
 ```bash
-npm install @creem/better-auth
+bun install @creem/better-auth
 ```
 
 ```typescript
@@ -135,7 +135,7 @@ if (session.user.subscription?.status === 'active') {
 Pre-built starter with Prisma, shadcn/ui, Tailwind:
 
 ```bash
-npx create-creem-app my-saas
+bunx create-creem-app my-saas
 # or
 git clone https://github.com/creem-io/nextjs-template
 ```

@@ -27,7 +27,7 @@ Gemini CLI provides automatic MCP tool discovery and execution via natural langu
 ## Installation
 
 ```bash
-npm install -g gemini-cli
+bun add -g gemini-cli
 ```
 
 Verify installation:
@@ -125,8 +125,8 @@ Edit `.opencode/.mcp.json`:
 {
   "mcpServers": {
     "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "command": "bunx",
+      "args": ["@modelcontextprotocol/server-memory"],
       "trust": true
     }
   }
@@ -143,8 +143,8 @@ Limit tool exposure:
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "command": "bunx",
+      "args": ["chrome-devtools-mcp@latest"],
       "includeTools": ["navigate_page", "screenshot"],
       "excludeTools": ["evaluate_js"]
     }
@@ -160,8 +160,8 @@ Use `$VAR_NAME` syntax for sensitive data:
 {
   "mcpServers": {
     "brave-search": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "command": "bunx",
+      "args": ["@modelcontextprotocol/server-brave-search"],
       "env": {
         "BRAVE_API_KEY": "$BRAVE_API_KEY"
       }

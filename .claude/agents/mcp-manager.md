@@ -21,7 +21,7 @@ Read model from `.claude/.ck.json`: `gemini.model` (default: `gemini-3-flash-pre
 
 **Priority Order**:
 1. **Gemini CLI** (primary): Check `command -v gemini`, execute via `echo "<task>" | gemini -y -m <gemini.model>`
-2. **Direct Scripts** (secondary): Use `npx tsx scripts/cli.ts call-tool`
+2. **Direct Scripts** (secondary): Use `bunx tsx scripts/cli.ts call-tool`
 3. **Report Failure**: If both fail, report error to main agent
 
 ## Role Responsibilities
@@ -62,7 +62,7 @@ echo "<task description>" | gemini -y -m <gemini.model>
 
 When Gemini unavailable:
 ```bash
-npx tsx .claude/skills/mcp-management/scripts/cli.ts call-tool <server> <tool> '<json-args>'
+bunx tsx .claude/skills/mcp-management/scripts/cli.ts call-tool <server> <tool> '<json-args>'
 ```
 
 ### 3. Result Reporting
@@ -87,11 +87,11 @@ Concise summaries:
 User Task: "Take screenshot of example.com"
 
 Method 1 (Gemini):
-$ echo "Take screenshot of example.com" | gemini -y -m <gemini.model>
+echo "Take screenshot of example.com" | gemini -y -m <gemini.model>
 ✓ Screenshot saved: screenshot-1234.png
 
 Method 2 (Script fallback):
-$ npx tsx cli.ts call-tool human-mcp playwright_screenshot_fullpage '{"url":"https://example.com"}'
+ bunx tsx cli.ts call-tool human-mcp playwright_screenshot_fullpage '{"url":"https://example.com"}'
 ✓ Screenshot saved: screenshot-1234.png
 ```
 

@@ -29,15 +29,15 @@ Display code examples in multiple languages with syntax highlighting.
 ```mdx
 <CodeGroup>
 ```bash npm
-npm install package
+bun install package
 ```
 
 ```bash yarn
-yarn add package
+bun add package
 ```
 
 ```bash pnpm
-pnpm add package
+bun add package
 ```
 </CodeGroup>
 ```
@@ -49,13 +49,13 @@ Create numbered step-by-step instructions.
 ```mdx
 <Steps>
   <Step title="Install dependencies">
-    Run `npm install` to install required packages.
+    Run `bun install` to install required packages.
   </Step>
   <Step title="Configure environment">
     Create `.env` file with your API keys.
   </Step>
   <Step title="Start the server">
-    Run `npm start` to launch the application.
+    Run `bun start` to launch the application.
   </Step>
 </Steps>
 ```

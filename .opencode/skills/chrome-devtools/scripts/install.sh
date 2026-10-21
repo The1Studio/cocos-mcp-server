@@ -8,15 +8,15 @@ echo ""
 
 # Check Node.js version
 echo "Checking Node.js version..."
-NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+NODE_VERSION=$(bun --version | cut -d'v' -f2 | cut -d'.' -f1)
 
 if [ "$NODE_VERSION" -lt 18 ]; then
-  echo "❌ Error: Node.js 18+ is required. Current version: $(node --version)"
+  echo "❌ Error: Node.js 18+ is required. Current version: $(bun --version)"
   echo "   Please upgrade Node.js: https://nodejs.org/"
   exit 1
 fi
 
-echo "✓ Node.js version: $(node --version)"
+echo "✓ Node.js version: $(bun --version)"
 echo ""
 
 # Check for system dependencies (Linux only)
@@ -70,7 +70,7 @@ fi
 
 # Install Node.js dependencies
 echo "Installing Node.js dependencies..."
-npm install
+bun install
 
 echo ""
 echo "✅ Installation complete!"

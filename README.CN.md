@@ -286,13 +286,13 @@ claude mcp add --transport http cocos-creator http://127.0.0.1:3000/mcp（使用
 
 ```bash
 cd extensions/cocos-mcp-server
-npm install
+bun install
 ```
 
 ### 3. 构建插件
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### 4. 启用插件
@@ -358,13 +358,13 @@ cocos-mcp-server/
 
 ```bash
 # 安装依赖
-npm install
+bun install
 
 # 开发构建（监视模式）
-npm run watch
+bun run watch
 
 # 生产构建
-npm run build
+bun run build
 ```
 
 ### 添加新工具
@@ -388,7 +388,7 @@ npm run build
 
 1. **服务器无法启动**: 检查端口可用性和防火墙设置
 2. **工具不工作**: 确保场景已加载且 UUID 有效
-3. **构建错误**: 运行 `npm run build` 检查 TypeScript 错误
+3. **构建错误**: 运行 `bun run build` 检查 TypeScript 错误
 4. **连接问题**: 验证 HTTP URL 和服务器状态
 
 ### 调试模式

@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-npm init playwright@latest
-npx playwright install
+bun init playwright@latest
+bunx playwright install
 ```
 
 ## Test Structure
@@ -98,18 +98,18 @@ export default defineConfig({
 ## Sharding (CI)
 
 ```bash
-npx playwright test --shard=1/4
-npx playwright test --shard=2/4
+bunx playwright test --shard=1/4
+bunx playwright test --shard=2/4
 ```
 
 ## Commands
 
 ```bash
-npx playwright test                    # Run all
-npx playwright test --ui               # UI mode
-npx playwright test --project=chromium # Specific browser
-npx playwright codegen https://example.com  # Generate
-npx playwright show-report             # View report
+bunx playwright test                    # Run all
+bunx playwright test --ui               # UI mode
+bunx playwright test --project=chromium # Specific browser
+bunx playwright codegen https://example.com  # Generate
+bunx playwright show-report             # View report
 ```
 
 ## Related

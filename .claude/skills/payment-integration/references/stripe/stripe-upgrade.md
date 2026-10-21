@@ -94,7 +94,7 @@ Stripe.js uses an evergreen model with major releases (Acacia, Basil, Clover) on
 
 **Via npm:**
 ```bash
-npm install @stripe/stripe-js
+bun install @stripe/stripe-js
 ```
 
 Major npm versions correspond to specific Stripe.js versions.
@@ -141,7 +141,7 @@ All mobile SDKs work with any Stripe API version you use on your backend unless 
 
 1. Review the [API Changelog](https://docs.stripe.com/changelog.md) for changes between your current and target versions
 2. Check [Upgrades Guide](https://docs.stripe.com/upgrades.md) for migration guidance
-3. Update server-side SDK package version (e.g., `npm update stripe`, `pip install --upgrade stripe`)
+3. Update server-side SDK package version (e.g., `bun update stripe`, `pip install --upgrade stripe`)
 4. Update the `apiVersion` parameter in your Stripe client initialization
 5. Test your integration against the new API version using the `Stripe-Version` header
 6. Update webhook handlers to handle new event structures

@@ -4,8 +4,8 @@
   "description": "Background HTTP server rendering markdown files with calm, book-like reading experience",
   "main": "scripts/server.cjs",
   "scripts": {
-    "start": "node scripts/server.cjs",
-    "test": "node scripts/tests/server.test.cjs"
+    "start": "bun scripts/server.cjs",
+    "test": "bun scripts/tests/server.test.cjs"
   },
   "dependencies": {
     "gray-matter": "^4.0.3",

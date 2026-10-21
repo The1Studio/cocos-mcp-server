@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Click an element
  * Usage: node click.js --selector ".button" [--url https://example.com] [--wait-for ".result"]

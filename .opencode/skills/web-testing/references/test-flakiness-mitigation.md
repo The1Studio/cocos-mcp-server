@@ -82,5 +82,5 @@ await page.route('**/external-api/**', route =>
 ## Flakiness Detection
 
 ```bash
-npx playwright test --repeat-each=5
+bunx playwright test --repeat-each=5
 ```

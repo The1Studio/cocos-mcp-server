@@ -291,7 +291,7 @@ class TurborepoMigrator:
         report.append("  1. Review generated turbo.json pipeline configuration")
         report.append("  2. Adjust output directories based on your build tools")
         report.append("  3. Configure remote caching: turbo login && turbo link")
-        report.append("  4. Run 'npm install' to install Turborepo")
+        report.append("  4. Run 'bun install' to install Turborepo")
         report.append("  5. Test with: turbo run build --dry-run")
         report.append("")
 

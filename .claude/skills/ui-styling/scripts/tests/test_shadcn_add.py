@@ -199,7 +199,7 @@ class TestShadcnInstaller:
         success, message = installer.add_components(["button"])
 
         assert success is False
-        assert "npx not found" in message
+        assert "bunx not found" in message
 
     def test_add_all_components_no_config(self, tmp_path):
         """Test adding all components without config."""

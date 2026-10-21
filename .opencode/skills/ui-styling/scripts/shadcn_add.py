@@ -83,7 +83,7 @@ class ShadcnInstaller:
         if not self.check_shadcn_config():
             return (
                 False,
-                "shadcn not initialized. Run 'npx shadcn@latest init' first",
+                "shadcn not initialized. Run 'bunx shadcn@latest init' first",
             )
 
         # Check which components already exist
@@ -126,7 +126,7 @@ class ShadcnInstaller:
             error_msg = f"Failed to add components: {e.stderr or e.stdout or str(e)}"
             return False, error_msg
         except FileNotFoundError:
-            return False, "npx not found. Ensure Node.js is installed"
+            return False, "bunx not found. Ensure Node.js is installed"
 
     def add_all_components(self, overwrite: bool = False) -> tuple[bool, str]:
         """
@@ -141,7 +141,7 @@ class ShadcnInstaller:
         if not self.check_shadcn_config():
             return (
                 False,
-                "shadcn not initialized. Run 'npx shadcn@latest init' first",
+                "shadcn not initialized. Run 'bunx shadcn@latest init' first",
             )
 
         cmd = ["npx", "shadcn@latest", "add", "--all"]
@@ -171,7 +171,7 @@ class ShadcnInstaller:
             error_msg = f"Failed to add all components: {e.stderr or e.stdout or str(e)}"
             return False, error_msg
         except FileNotFoundError:
-            return False, "npx not found. Ensure Node.js is installed"
+            return False, "bunx not found. Ensure Node.js is installed"
 
     def list_installed(self) -> tuple[bool, str]:
         """

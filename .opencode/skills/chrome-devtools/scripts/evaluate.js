@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Execute JavaScript in page context
  * Usage: node evaluate.js --script "document.title" [--url https://example.com]

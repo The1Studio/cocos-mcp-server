@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * path-extractor.cjs - Extract paths from Claude Code tool inputs
  *
@@ -257,7 +257,7 @@ function isCommandKeyword(token) {
     'uniq', 'cut', 'tr', 'sed', 'awk', 'diff', 'chmod', 'chown', 'ln', 'file',
 
     // Package managers and their subcommands
-    'npm', 'pnpm', 'yarn', 'bun', 'npx', 'pnpx', 'bunx', 'node',
+    'bun', 'bun', 'bun install', 'bun', ' bunx', 'pnpx', 'bunx', 'bun',
     'run', 'build', 'test', 'lint', 'dev', 'start', 'install', 'ci', 'exec',
     'add', 'remove', 'update', 'publish', 'pack', 'init', 'create',
 

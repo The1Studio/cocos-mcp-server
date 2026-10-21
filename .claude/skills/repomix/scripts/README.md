@@ -21,7 +21,7 @@ Requires Python 3.10+ and repomix CLI:
 
 ```bash
 # Install repomix
-npm install -g repomix
+bun add -g repomix
 
 # Install Python dependencies (if needed)
 pip install pytest pytest-cov pytest-mock  # For running tests
@@ -161,7 +161,7 @@ Current coverage: 99%
 
 **repomix not found:**
 ```bash
-npm install -g repomix
+bun add -g repomix
 ```
 
 **Permission denied:**

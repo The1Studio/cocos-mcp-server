@@ -114,8 +114,8 @@ The most valuable outcome wasn't the code—it was the *architectural principles
 Version 2.0.0 is ready for production. All 40 hours of planned effort delivered. Zero technical debt from this rewrite—we cleaned house while we built.
 
 File paths:
-- `/mnt/Work/1M/2. PlayableLabs/cocos-mcp-server/source/tools/base-action-tool.ts` — Base class foundation
-- `/mnt/Work/1M/2. PlayableLabs/cocos-mcp-server/source/utils/normalize.ts` — Payload normalization
-- `/mnt/Work/1M/2. PlayableLabs/cocos-mcp-server/source/tools/manage-*.ts` — 21 consolidated tool files
-- `/mnt/Work/1M/2. PlayableLabs/cocos-mcp-server/source/resources/cocos-resources.ts` — MCP Resources implementation
-- `/mnt/Work/1M/2. PlayableLabs/cocos-mcp-server/package.json` — Version 2.0.0
+- `<repo-root>/source/tools/base-action-tool.ts` — Base class foundation
+- `<repo-root>/source/utils/normalize.ts` — Payload normalization
+- `<repo-root>/source/tools/manage-*.ts` — 21 consolidated tool files
+- `<repo-root>/source/resources/cocos-resources.ts` — MCP Resources implementation
+- `<repo-root>/package.json` — Version 2.0.0

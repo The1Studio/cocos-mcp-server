@@ -4,8 +4,8 @@
 
 ## Setup
 ```bash
-npm i @tanstack/ai @tanstack/react-ai
-npm i @tanstack/ai-openai      # or @tanstack/ai-anthropic, @tanstack/ai-google
+bun install @tanstack/ai @tanstack/react-ai
+bun install @tanstack/ai-openai      # or @tanstack/ai-anthropic, @tanstack/ai-google
 ```
 
 ## Client — useChat

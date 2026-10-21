@@ -13,7 +13,7 @@ Browser automation CLI designed for AI agents. Uses "snapshot + refs" paradigm f
 
 ```bash
 # Install globally
-npm install -g agent-browser
+bun add -g agent-browser
 
 # Download Chromium (one-time)
 agent-browser install
@@ -281,7 +281,7 @@ See `references/browserbase-cloud-setup.md` for detailed setup.
 
 | Issue | Solution |
 |-------|----------|
-| Command not found | Run `npm install -g agent-browser` |
+| Command not found | Run `bun add -g agent-browser` |
 | Chromium missing | Run `agent-browser install` |
 | Linux deps missing | Run `agent-browser install --with-deps` |
 | Session stale | Close browser: `agent-browser close` |

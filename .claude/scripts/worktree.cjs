@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Backward-compatible wrapper for worktree CLI.
  *

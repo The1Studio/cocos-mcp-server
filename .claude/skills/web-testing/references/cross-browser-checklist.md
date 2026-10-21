@@ -61,8 +61,8 @@ export default defineConfig({
 ## Commands
 
 ```bash
-npx playwright test --project=chromium
-npx playwright test --project=mobile-chrome --project=mobile-safari
+bunx playwright test --project=chromium
+bunx playwright test --project=mobile-chrome --project=mobile-safari
 ```
 
 ## Testing Services

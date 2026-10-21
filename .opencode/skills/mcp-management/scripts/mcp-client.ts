@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * MCP Client - Core client for interacting with MCP servers
  */

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Polar Webhook Verification Script
@@ -6,7 +6,7 @@
  * Verifies Polar webhook signatures following Standard Webhooks specification.
  *
  * Usage:
- *   node polar-webhook-verify.js <webhook-payload-json> <webhook-secret>
+ *   bun polar-webhook-verify.js <webhook-payload-json> <webhook-secret>
  *
  * Environment Variables:
  *   POLAR_WEBHOOK_SECRET - Webhook secret (base64 encoded)
@@ -146,10 +146,10 @@ if (require.main === module) {
   const args = process.argv.slice(2);
 
   if (args.length < 1) {
-    console.log('Usage: node polar-webhook-verify.js <webhook-payload-json> [webhook-secret]');
+    console.log('Usage: bun polar-webhook-verify.js <webhook-payload-json> [webhook-secret]');
     console.log('\nWebhook secret can also be provided via POLAR_WEBHOOK_SECRET environment variable');
     console.log('\nExample:');
-    console.log('  node polar-webhook-verify.js \'{"type":"order.paid","data":{...}}\' base64secret');
+    console.log('  bun polar-webhook-verify.js \'{"type":"order.paid","data":{...}}\' base64secret');
     process.exit(1);
   }
 

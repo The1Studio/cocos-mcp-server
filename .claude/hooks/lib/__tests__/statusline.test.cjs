@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 'use strict';
 
 /**
@@ -455,7 +455,7 @@ test('extractTarget: Bash tool (short command)', () => {
 });
 
 test('extractTarget: Bash tool (long command truncated)', () => {
-  const longCmd = 'npm install --save-dev @types/node @types/jest @types/react @types/react-dom @types/webpack';
+  const longCmd = 'bun install --dev @types/node @types/jest @types/react @types/react-dom @types/webpack';
   const target = extractTarget('Bash', { command: longCmd });
   assertTrue(target.endsWith('...'), 'Should truncate long command with ...');
   assertTrue(target.length <= 33, 'Should be max 30 chars + ...');

@@ -67,7 +67,7 @@ Both skills can coexist - use the right tool for each task:
 
 ```bash
 # Quick screenshot with compression -> chrome-devtools
-node "$SKILL_DIR/screenshot.js" --url https://example.com --output ss.png
+bun "$SKILL_DIR/screenshot.js" --url https://example.com --output ss.png
 
 # Long autonomous session -> agent-browser
 agent-browser --session test1 open https://example.com
@@ -82,13 +82,13 @@ agent-browser close
 
 | chrome-devtools | agent-browser |
 |-----------------|---------------|
-| `node navigate.js --url X` | `agent-browser open X` |
-| `node aria-snapshot.js --url X` | `agent-browser open X && agent-browser snapshot -i` |
-| `node select-ref.js --ref e5 --action click` | `agent-browser click @e5` |
-| `node fill.js --selector "#email" --value "X"` | `agent-browser fill @e1 "X"` |
-| `node screenshot.js --output X.png` | `agent-browser screenshot -o X.png` |
-| `node console.js --types error` | No direct equivalent |
-| `node network.js` | No direct equivalent |
+| `bun navigate.js --url X` | `agent-browser open X` |
+| `bun aria-snapshot.js --url X` | `agent-browser open X && agent-browser snapshot -i` |
+| `bun select-ref.js --ref e5 --action click` | `agent-browser click @e5` |
+| `bun fill.js --selector "#email" --value "X"` | `agent-browser fill @e1 "X"` |
+| `bun screenshot.js --output X.png` | `agent-browser screenshot -o X.png` |
+| `bun console.js --types error` | No direct equivalent |
+| `bun network.js` | No direct equivalent |
 
 ### Key Differences
 

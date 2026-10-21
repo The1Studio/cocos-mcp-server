@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Git Worktree Manager for ClaudeKit
  * Cross-platform Node.js script for creating isolated git worktrees
@@ -771,7 +771,7 @@ function cmdCreate() {
 function cmdRemove() {
   if (!arg1) {
     outputError('MISSING_WORKTREE', 'Worktree name or path is required', {
-      suggestion: 'Usage: node worktree.cjs remove <name-or-path>\nUse "node worktree.cjs list" to see available worktrees'
+      suggestion: 'Usage: node worktree.cjs remove <name-or-path>\nUse "bun worktree.cjs list" to see available worktrees'
     });
   }
 
@@ -829,7 +829,7 @@ function cmdRemove() {
 
   if (removableMatches.length === 0) {
     outputError('WORKTREE_NOT_FOUND', `No worktree matching "${arg1}" found`, {
-      suggestion: 'Use "node worktree.cjs list" to see available worktrees',
+      suggestion: 'Use "bun worktree.cjs list" to see available worktrees',
       availableWorktrees: removable.map(w => path.basename(w.path))
     });
   }

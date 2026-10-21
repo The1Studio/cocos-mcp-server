@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 'use strict';
 
 // Config Counter - Count CLAUDE.md, rules, MCPs, hooks across user and project scopes

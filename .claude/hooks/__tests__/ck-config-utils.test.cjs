@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Tests for ck-config-utils.cjs - Config and path utilities
  * Run: node --test .claude/hooks/__tests__/ck-config-utils.test.cjs

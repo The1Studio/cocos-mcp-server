@@ -26,11 +26,11 @@ Process video, audio, and images using FFmpeg, ImageMagick, and RMBG CLI tools.
 ```bash
 # macOS
 brew install ffmpeg imagemagick
-npm install -g rmbg-cli
+bun add -g rmbg-cli
 
 # Ubuntu/Debian
 sudo apt-get install ffmpeg imagemagick
-npm install -g rmbg-cli
+bun add -g rmbg-cli
 
 # Verify
 ffmpeg -version && magick -version && rmbg --version

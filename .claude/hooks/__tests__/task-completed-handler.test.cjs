@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Tests for task-completed-handler.cjs hook
  * Run: node --test .claude/hooks/__tests__/task-completed-handler.test.cjs
@@ -18,7 +18,7 @@ const HOOK_PATH = path.join(__dirname, '..', 'task-completed-handler.cjs');
  */
 function runHook(inputData, options = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('node', [HOOK_PATH], {
+    const proc = spawn('bun', [HOOK_PATH], {
       cwd: process.cwd(),
       env: { ...process.env, ...(options.env || {}) }
     });

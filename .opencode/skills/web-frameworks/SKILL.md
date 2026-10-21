@@ -41,9 +41,9 @@ Use when building a standalone application:
 
 **Setup:**
 ```bash
-npx create-next-app@latest my-app
+bunx create-next-app@latest my-app
 cd my-app
-npm install remixicon
+bun install remixicon
 ```
 
 ### Monorepo: Next.js + Turborepo + RemixIcon
@@ -57,7 +57,7 @@ Use when building multiple applications with shared code:
 
 **Setup:**
 ```bash
-npx create-turbo@latest my-monorepo
+bunx create-turbo@latest my-monorepo
 # Then configure Next.js apps in apps/ directory
 # Install remixicon in shared UI packages
 ```
@@ -77,25 +77,25 @@ npx create-turbo@latest my-monorepo
 
 ```bash
 # Create new project
-npx create-next-app@latest my-app
+bunx create-next-app@latest my-app
 cd my-app
 
 # Install RemixIcon
-npm install remixicon
+bun install remixicon
 
 # Import in layout
 # app/layout.tsx
 import 'remixicon/fonts/remixicon.css'
 
 # Start development
-npm run dev
+bun run dev
 ```
 
 ### Turborepo Monorepo
 
 ```bash
 # Create monorepo
-npx create-turbo@latest my-monorepo
+bunx create-turbo@latest my-monorepo
 cd my-monorepo
 
 # Structure:
@@ -106,10 +106,10 @@ cd my-monorepo
 # turbo.json         - Pipeline configuration
 
 # Run all apps
-npm run dev
+bun run dev
 
 # Build all packages
-npm run build
+bun run build
 ```
 
 ### RemixIcon Integration
@@ -245,9 +245,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 18
+          bun-version: 1.4.3
       - run: npm install
       - run: npx turbo run build test lint
         env:

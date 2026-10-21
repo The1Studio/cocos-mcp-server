@@ -6,7 +6,7 @@ Generate .docx files with JavaScript/TypeScript.
 
 ## Setup
 Assumes docx is already installed globally
-If not installed: `npm install -g docx`
+If not installed: `bun add -g docx`
 
 ```javascript
 const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun, Media, 

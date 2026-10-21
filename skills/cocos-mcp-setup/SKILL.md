@@ -52,7 +52,7 @@ git clone https://github.com/TinycellCorp/cocos-mcp-server.git extensions/cocos-
 Use `--prefix` option to specify target directory. (Do not use `cd` - to ensure allowed-tools matching)
 
 ```bash
-npm install --production --prefix extensions/cocos-mcp-server
+bun install --production --cwd extensions/cocos-mcp-server
 ```
 
 - On error: Display "npm install failed." and **stop**

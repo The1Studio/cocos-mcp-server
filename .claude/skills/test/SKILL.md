@@ -56,7 +56,7 @@ Structured QA report template: test results overview, coverage metrics, failed t
 
 ```
 Code tests     → test-execution-workflow.md
-  npm test / pytest / go test / cargo test / flutter test
+  bun test / pytest / go test / cargo test / flutter test
   Coverage: npm run test:coverage / pytest --cov
 
 UI tests       → ui-testing-workflow.md

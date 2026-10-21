@@ -134,6 +134,6 @@ describe('applyPropertyToEditor — componentArray (new propertyType, issue #18)
         await expect(applyPropertyToEditor(
             { ...baseArgs, property: 'waypoints', propertyType: 'componentArray', value: [123], processedValue: [123] },
             getComponentInfo
-        )).rejects.toThrow(/must be string node UUIDs/);
+        )).rejects.toThrow(/must be string Node UUIDs/);
     });
 });

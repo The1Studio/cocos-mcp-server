@@ -165,13 +165,13 @@ mutation UpdateProduct($input: ProductInput!) {
 query GetProducts($first: Int!, $query: String) {
   products(first: $first, query: $query) {
     edges {
-      node {
+      bun {
         id
         title
         status
         variants(first: 5) {
           edges {
-            node { id price inventoryQuantity }
+            bun { id price inventoryQuantity }
           }
         }
       }
@@ -188,7 +188,7 @@ query GetProducts($first: Int!, $query: String) {
 query GetOrders($first: Int!) {
   orders(first: $first) {
     edges {
-      node {
+      bun {
         id
         name
         createdAt

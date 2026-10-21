@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * test-monorepo-scenarios.cjs - Integration tests for monorepo patterns
  *
@@ -81,39 +81,39 @@ const scenarios = [
 
   // === Build commands - MUST be ALLOWED ===
   {
-    input: { tool_name: 'Bash', tool_input: { command: 'npm run build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun run build' } },
     expected: 'ALLOWED',
-    desc: 'npm run build'
+    desc: 'bun run build'
   },
   {
-    input: { tool_name: 'Bash', tool_input: { command: 'pnpm build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun build' } },
     expected: 'ALLOWED',
-    desc: 'pnpm build'
+    desc: 'bun build'
   },
   {
-    input: { tool_name: 'Bash', tool_input: { command: 'yarn build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun run build' } },
     expected: 'ALLOWED',
-    desc: 'yarn build'
+    desc: 'bun run build'
   },
   {
-    input: { tool_name: 'Bash', tool_input: { command: 'npm test' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun test' } },
     expected: 'ALLOWED',
-    desc: 'npm test'
+    desc: 'bun test'
   },
   {
-    input: { tool_name: 'Bash', tool_input: { command: 'npm install' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun install' } },
     expected: 'ALLOWED',
-    desc: 'npm install'
+    desc: 'bun install'
   },
   {
-    input: { tool_name: 'Bash', tool_input: { command: 'pnpm --filter web run build' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bun run --filter web run build' } },
     expected: 'ALLOWED',
-    desc: 'pnpm filter build'
+    desc: 'bun filter build'
   },
   {
-    input: { tool_name: 'Bash', tool_input: { command: 'npx tsc' } },
+    input: { tool_name: 'Bash', tool_input: { command: 'bunx tsc' } },
     expected: 'ALLOWED',
-    desc: 'npx tsc'
+    desc: 'bunx tsc'
   },
   {
     input: { tool_name: 'Bash', tool_input: { command: 'jest --coverage' } },
@@ -169,7 +169,7 @@ let failed = 0;
 
 for (const scenario of scenarios) {
   try {
-    execSync(`node "${hookPath}"`, {
+    execSync(`bun "${hookPath}"`, {
       input: JSON.stringify(scenario.input),
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe']
@@ -206,7 +206,7 @@ console.log(`\nResults: ${passed} passed, ${failed} failed`);
 // Highlight if any bug fix cases failed
 const bugFixFailed = scenarios.filter(s => s.desc.includes('[BUG FIX]')).some(s => {
   try {
-    execSync(`node "${hookPath}"`, {
+    execSync(`bun "${hookPath}"`, {
       input: JSON.stringify(s.input),
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe']

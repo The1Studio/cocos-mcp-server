@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * scout-checker.test.cjs - Integration tests for the scout-block facade
  *
@@ -41,8 +41,8 @@ const DEFAULT_OPTS = {
 
 describe('splitCompoundCommand', () => {
   it('splits on &&', () => {
-    const parts = splitCompoundCommand('echo hi && npm run build');
-    assert.deepStrictEqual(parts, ['echo hi', 'npm run build']);
+    const parts = splitCompoundCommand('echo hi && bun run build');
+    assert.deepStrictEqual(parts, ['echo hi', 'bun run build']);
   });
 
   it('splits on ||', () => {
@@ -67,8 +67,8 @@ describe('splitCompoundCommand', () => {
   });
 
   it('returns single-element for simple command', () => {
-    const parts = splitCompoundCommand('npm run build');
-    assert.deepStrictEqual(parts, ['npm run build']);
+    const parts = splitCompoundCommand('bun run build');
+    assert.deepStrictEqual(parts, ['bun run build']);
   });
 
   it('filters out empty segments', () => {
@@ -95,27 +95,27 @@ describe('splitCompoundCommand', () => {
 
 describe('stripCommandPrefix', () => {
   it('strips single ENV var', () => {
-    assert.strictEqual(stripCommandPrefix('NODE_ENV=production npm run build'), 'npm run build');
+    assert.strictEqual(stripCommandPrefix(' NODE_ENV=production bun run build'), 'bun run build');
   });
 
   it('strips multiple ENV vars', () => {
-    assert.strictEqual(stripCommandPrefix('NODE_ENV=prod CI=true npm run build'), 'npm run build');
+    assert.strictEqual(stripCommandPrefix(' NODE_ENV=prod CI=true bun run build'), 'bun run build');
   });
 
   it('strips sudo', () => {
-    assert.strictEqual(stripCommandPrefix('sudo npm install'), 'npm install');
+    assert.strictEqual(stripCommandPrefix('sudo bun install'), 'bun install');
   });
 
   it('strips env wrapper', () => {
-    assert.strictEqual(stripCommandPrefix('env npm run build'), 'npm run build');
+    assert.strictEqual(stripCommandPrefix(' env bun run build'), 'bun run build');
   });
 
   it('strips sudo + env vars', () => {
-    assert.strictEqual(stripCommandPrefix('sudo NODE_ENV=prod npm start'), 'npm start');
+    assert.strictEqual(stripCommandPrefix(' sudo NODE_ENV=prod bun start'), 'bun start');
   });
 
   it('returns original for plain command', () => {
-    assert.strictEqual(stripCommandPrefix('npm run build'), 'npm run build');
+    assert.strictEqual(stripCommandPrefix('bun run build'), 'bun run build');
   });
 
   it('handles null/undefined', () => {
@@ -158,24 +158,24 @@ describe('unwrapShellExecutor', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('isBuildCommand', () => {
-  it('matches npm build', () => assert.ok(isBuildCommand('npm build')));
-  it('matches npm run build', () => assert.ok(isBuildCommand('npm run build')));
-  it('matches pnpm build', () => assert.ok(isBuildCommand('pnpm build')));
-  it('matches yarn build', () => assert.ok(isBuildCommand('yarn build')));
+  it('matches npm build', () => assert.ok(isBuildCommand('bun build')));
+  it('matches npm run build', () => assert.ok(isBuildCommand('bun run build')));
+  it('matches pnpm build', () => assert.ok(isBuildCommand('bun build')));
+  it('matches yarn build', () => assert.ok(isBuildCommand('bun run build')));
   it('matches bun build', () => assert.ok(isBuildCommand('bun build')));
-  it('matches npm test', () => assert.ok(isBuildCommand('npm test')));
-  it('matches npm run lint', () => assert.ok(isBuildCommand('npm run lint')));
-  it('matches npm run dev', () => assert.ok(isBuildCommand('npm run dev')));
-  it('matches npm install', () => assert.ok(isBuildCommand('npm install')));
-  it('matches npm ci', () => assert.ok(isBuildCommand('npm ci')));
+  it('matches npm test', () => assert.ok(isBuildCommand('bun test')));
+  it('matches npm run lint', () => assert.ok(isBuildCommand('bun run lint')));
+  it('matches npm run dev', () => assert.ok(isBuildCommand('bun run dev')));
+  it('matches npm install', () => assert.ok(isBuildCommand('bun install')));
+  it('matches npm ci', () => assert.ok(isBuildCommand('bun install --frozen-lockfile')));
   it('matches pnpm --filter web run build', () => {
-    assert.ok(isBuildCommand('pnpm --filter web run build'));
+    assert.ok(isBuildCommand('bun run --filter web run build'));
   });
   it('matches yarn workspace app build', () => {
-    assert.ok(isBuildCommand('yarn workspace app build'));
+    assert.ok(isBuildCommand('bun run workspace app build'));
   });
   it('matches npm run build with pipes', () => {
-    assert.ok(isBuildCommand('npm run build 2>&1 | tail -15'));
+    assert.ok(isBuildCommand('bun run build 2>&1 | tail -15'));
   });
 
   it('does NOT match echo', () => assert.ok(!isBuildCommand('echo hello')));
@@ -191,7 +191,7 @@ describe('isBuildCommand', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('tool command matching (via isBuildCommand)', () => {
-  it('matches npx tsc', () => assert.ok(isBuildCommand('npx tsc')));
+  it('matches npx tsc', () => assert.ok(isBuildCommand('bunx tsc')));
   it('matches tsc --noEmit', () => assert.ok(isBuildCommand('tsc --noEmit')));
   it('matches esbuild src/index.ts', () => assert.ok(isBuildCommand('esbuild src/index.ts')));
   it('matches vite build', () => assert.ok(isBuildCommand('vite build')));
@@ -307,22 +307,22 @@ describe('checkScoutBlock - Bash commands', () => {
   // --- Should ALLOW (build commands) ---
   describe('allowed build commands', () => {
     it('allows npm build', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'npm build' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bun build' }, options: DEFAULT_OPTS });
       assert.ok(!r.blocked);
     });
 
     it('allows npm run build', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'npm run build' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bun run build' }, options: DEFAULT_OPTS });
       assert.ok(!r.blocked);
     });
 
     it('allows pnpm --filter web run build', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'pnpm --filter web run build 2>&1 | tail -100' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bun run --filter web run build 2>&1 | tail -100' }, options: DEFAULT_OPTS });
       assert.ok(!r.blocked);
     });
 
     it('allows npx tsc', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'npx tsc' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bunx tsc' }, options: DEFAULT_OPTS });
       assert.ok(!r.blocked);
     });
 
@@ -358,12 +358,12 @@ describe('checkScoutBlock - Bash commands', () => {
     });
 
     it('allows echo + npm run build (&&)', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'echo "Building..." && npm run build' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'echo "Building..." && bun run build' }, options: DEFAULT_OPTS });
       assert.ok(!r.blocked);
     });
 
     it('allows npm install + npm run build', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'npm install && npm run build' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bun install && bun run build' }, options: DEFAULT_OPTS });
       assert.ok(!r.blocked);
     });
 
@@ -373,17 +373,17 @@ describe('checkScoutBlock - Bash commands', () => {
     });
 
     it('blocks npm run build + cat dist/bundle.js', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'npm run build && cat dist/bundle.js' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bun run build && cat dist/bundle.js' }, options: DEFAULT_OPTS });
       assert.ok(r.blocked);
     });
 
     it('allows all-allowed compound command', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'npm install && npm run build && npm test' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bun install && bun run build && bun test' }, options: DEFAULT_OPTS });
       assert.ok(!r.blocked);
     });
 
     it('blocks when ONE sub-command accesses blocked dir', () => {
-      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'npm install && ls node_modules && npm test' }, options: DEFAULT_OPTS });
+      const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bun install && ls node_modules && bun test' }, options: DEFAULT_OPTS });
       assert.ok(r.blocked);
     });
   });
@@ -548,32 +548,32 @@ describe('P0 - absolute and relative paths', () => {
 
 describe('P1a - ENV prefix commands', () => {
   it('allows NODE_ENV=production npm run build', () => {
-    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'NODE_ENV=production npm run build' }, options: DEFAULT_OPTS });
+    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: ' NODE_ENV=production bun run build' }, options: DEFAULT_OPTS });
     assert.ok(!r.blocked);
   });
 
   it('allows CI=true npm test', () => {
-    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'CI=true npm test' }, options: DEFAULT_OPTS });
+    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: ' CI=true bun test' }, options: DEFAULT_OPTS });
     assert.ok(!r.blocked);
   });
 
   it('allows FORCE_COLOR=1 npx vitest', () => {
-    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'FORCE_COLOR=1 npx vitest' }, options: DEFAULT_OPTS });
+    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: ' FORCE_COLOR=1 bunx vitest' }, options: DEFAULT_OPTS });
     assert.ok(!r.blocked);
   });
 
   it('allows DEBUG=* npm run dev', () => {
-    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'DEBUG=* npm run dev' }, options: DEFAULT_OPTS });
+    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: ' DEBUG=* bun run dev' }, options: DEFAULT_OPTS });
     assert.ok(!r.blocked);
   });
 
   it('allows multiple ENV vars before build', () => {
-    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'NODE_ENV=production CI=true npm run build' }, options: DEFAULT_OPTS });
+    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: ' NODE_ENV=production CI=true bun run build' }, options: DEFAULT_OPTS });
     assert.ok(!r.blocked);
   });
 
   it('allows sudo npm install', () => {
-    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'sudo npm install' }, options: DEFAULT_OPTS });
+    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'sudo bun install' }, options: DEFAULT_OPTS });
     assert.ok(!r.blocked);
   });
 });
@@ -665,8 +665,8 @@ describe('P1 - shell executor unwrapping', () => {
     assert.ok(r.blocked);
   });
 
-  it('allows bash -c "npm run build"', () => {
-    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bash -c "npm run build"' }, options: DEFAULT_OPTS });
+  it('allows bash -c "bun run build"', () => {
+    const r = checkScoutBlock({ toolName: 'Bash', toolInput: { command: 'bash -c "bun run build"' }, options: DEFAULT_OPTS });
     assert.ok(!r.blocked);
   });
 });

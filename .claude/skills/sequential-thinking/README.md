@@ -107,54 +107,54 @@ Automatically activated for:
 
 ```bash
 # Process a thought
-node scripts/process-thought.js --thought "Initial analysis" --number 1 --total 5 --next true
+bun scripts/process-thought.js --thought "Initial analysis" --number 1 --total 5 --next true
 
 # Process with revision
-node scripts/process-thought.js --thought "Corrected analysis" --number 2 --total 5 --next true --revision 1
+bun scripts/process-thought.js --thought "Corrected analysis" --number 2 --total 5 --next true --revision 1
 
 # Process with branching
-node scripts/process-thought.js --thought "Branch A" --number 2 --total 5 --next true --branch 1 --branchId "branch-a"
+bun scripts/process-thought.js --thought "Branch A" --number 2 --total 5 --next true --branch 1 --branchId "branch-a"
 
 # View history
-node scripts/process-thought.js --history
+bun scripts/process-thought.js --history
 
 # Reset history
-node scripts/process-thought.js --reset
+bun scripts/process-thought.js --reset
 ```
 
 ### Format Thought (Display)
 
 ```bash
 # Box format (default)
-node scripts/format-thought.js --thought "Analysis" --number 1 --total 5
+bun scripts/format-thought.js --thought "Analysis" --number 1 --total 5
 
 # Simple text format
-node scripts/format-thought.js --thought "Analysis" --number 1 --total 5 --format simple
+bun scripts/format-thought.js --thought "Analysis" --number 1 --total 5 --format simple
 
 # Markdown format
-node scripts/format-thought.js --thought "Analysis" --number 1 --total 5 --format markdown
+bun scripts/format-thought.js --thought "Analysis" --number 1 --total 5 --format markdown
 
 # With revision
-node scripts/format-thought.js --thought "Revised" --number 2 --total 5 --revision 1
+bun scripts/format-thought.js --thought "Revised" --number 2 --total 5 --revision 1
 
 # With branch
-node scripts/format-thought.js --thought "Branch" --number 2 --total 5 --branch 1 --branchId "a"
+bun scripts/format-thought.js --thought "Branch" --number 2 --total 5 --branch 1 --branchId "a"
 ```
 
 ### Running Tests
 
 ```bash
 # Install dependencies (first time only)
-npm install
+bun install
 
 # Run all tests
-npm test
+bun test
 
 # Run tests in watch mode
-npm run test:watch
+bun run test:watch
 
 # Run with coverage
-npm run test:coverage
+bun run test:coverage
 ```
 
 ## When to Use Scripts

@@ -18,7 +18,7 @@ ck init  # Runs install.sh which handles all skills
 
 # Option 2: Manual installation
 cd .claude/skills/markdown-novel-viewer
-npm install
+bun install
 ```
 
 **Dependencies:** `marked`, `highlight.js`, `gray-matter`
@@ -35,23 +35,23 @@ Universal viewer - pass ANY path and view it:
 
 ```bash
 # View a markdown file
-node .claude/skills/markdown-novel-viewer/scripts/server.cjs \
+bun .claude/skills/markdown-novel-viewer/scripts/server.cjs \
   --file ./plans/my-plan/plan.md \
   --open
 
 # Browse a directory
-node .claude/skills/markdown-novel-viewer/scripts/server.cjs \
+bun .claude/skills/markdown-novel-viewer/scripts/server.cjs \
   --dir ./plans \
   --host 0.0.0.0 \
   --open
 
 # Background mode
-node .claude/skills/markdown-novel-viewer/scripts/server.cjs \
+bun .claude/skills/markdown-novel-viewer/scripts/server.cjs \
   --file ./README.md \
   --background
 
 # Stop all running servers
-node .claude/skills/markdown-novel-viewer/scripts/server.cjs --stop
+bun .claude/skills/markdown-novel-viewer/scripts/server.cjs --stop
 ```
 
 ## Slash Command
@@ -172,7 +172,7 @@ assets/
 ## Dependencies
 
 - Node.js built-in: `http`, `fs`, `path`, `net`
-- npm: `marked`, `highlight.js`, `gray-matter` (installed via `npm install`)
+- npm: `marked`, `highlight.js`, `gray-matter` (installed via `bun install`)
 
 ## Customization
 
@@ -201,7 +201,7 @@ To access from another device on your network:
 
 ```bash
 # Start with 0.0.0.0 to bind to all interfaces
-node server.cjs --file ./README.md --host 0.0.0.0 --port 3456
+bun server.cjs --file ./README.md --host 0.0.0.0 --port 3456
 ```
 
 When using `--host 0.0.0.0`, the server auto-detects your local network IP and includes it in the output:

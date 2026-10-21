@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Test runner - runs all tests
@@ -23,7 +23,7 @@ function runTest(testFile) {
     console.log('='.repeat(60));
 
     const testPath = path.join(__dirname, testFile);
-    const proc = spawn('node', [testPath], {
+    const proc = spawn('bun', [testPath], {
       stdio: 'inherit',
     });
 

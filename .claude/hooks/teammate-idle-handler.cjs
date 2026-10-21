@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * TeammateIdle Hook - Injects available task context when teammate goes idle
  *

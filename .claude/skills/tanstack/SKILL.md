@@ -19,9 +19,9 @@ Build full-stack React apps with TanStack Start, manage forms with TanStack Form
 ## Quick Start — TanStack Start
 
 ```bash
-npm create @tanstack/start@latest    # create project
-npm run dev                          # dev server :3000
-npm run build                        # production build
+bun create @tanstack/start@latest    # create project
+bun run dev                          # dev server :3000
+bun run build                        # production build
 ```
 
 ### Project Structure
