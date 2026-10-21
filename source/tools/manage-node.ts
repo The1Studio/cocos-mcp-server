@@ -69,6 +69,10 @@ export class ManageNode extends BaseActionTool {
                 description: '[create, move] Whether to keep world transform',
                 default: false
             },
+            layer: {
+                type: 'number',
+                description: '[create] Node layer bitmask applied after creation (e.g. 33554432 = UI_2D, 1073741824 = DEFAULT). A new node is created on DEFAULT, so a UI node under a UI camera needs its layer set; omit to leave the editor default. The result reports whether it took effect.'
+            },
             initialTransform: {
                 type: 'object',
                 properties: {
@@ -258,6 +262,13 @@ export class ManageNode extends BaseActionTool {
 
             const siblingIndex = coerceInt(args.siblingIndex);
 
+            // Refuse a layer we cannot apply BEFORE creating anything, so a bad argument does
+            // not leave an orphan node behind (#153).
+            const requestedLayer = args.layer === undefined || args.layer === null ? undefined : coerceInt(args.layer);
+            if (args.layer !== undefined && args.layer !== null && requestedLayer === undefined) {
+                return errorResult(`layer must be an integer layer bitmask (e.g. 33554432 for UI_2D); received ${JSON.stringify(args.layer)}. No node was created.`);
+            }
+
             console.log('Creating node with options:', createNodeOptions);
 
             const nodeUuid = await Editor.Message.request('scene', 'create-node', createNodeOptions);
@@ -324,6 +335,24 @@ export class ManageNode extends BaseActionTool {
                 }
             }
 
+            // `create-node` leaves a new node on the DEFAULT layer, so a node meant for a UI
+            // camera is culled until its layer is fixed by hand (#153). Applied through the same
+            // verified write as set_property; a failure is reported, not hidden, and does not
+            // undo the creation.
+            let layerResult: { requested: number; applied: boolean; error?: string } | undefined;
+            if (requestedLayer !== undefined && uuid) {
+                try {
+                    await this.awaitNodeCommit(uuid);
+                    const layerWrite = await this.setNodeProperty(uuid, 'layer', requestedLayer, 'number');
+                    layerResult = layerWrite.success
+                        ? { requested: requestedLayer, applied: true }
+                        : { requested: requestedLayer, applied: false, error: layerWrite.error };
+                } catch (err: any) {
+                    layerResult = { requested: requestedLayer, applied: false, error: err?.message || String(err) };
+                }
+                if (!layerResult.applied) console.warn(`layer ${requestedLayer} was not applied: ${layerResult.error}`);
+            }
+
             let verificationData: any = null;
             try {
                 const nodeInfo = await this.getNodeInfo(uuid);
@@ -357,6 +386,10 @@ export class ManageNode extends BaseActionTool {
                 assetUuid: finalAssetUuid,
                 ...(resolvedFromModel ? { resolvedFromModelUuid: resolvedFromModel } : {}),
                 ...(siblingOrder ? { siblingOrder } : {}),
+                ...(layerResult ? { layer: layerResult } : {}),
+                ...(layerResult && !layerResult.applied
+                    ? { layerWarning: `layer ${layerResult.requested} was NOT applied (${layerResult.error}); the node keeps the editor default layer.` }
+                    : {}),
                 ...(siblingOrder && !siblingOrder.applied
                     ? { warning: `siblingIndex ${siblingOrder.requested} was NOT applied (${siblingOrder.reason}); the node is the last child.` }
                     : {}),
