@@ -137,7 +137,7 @@ Pre-built starter with Prisma, shadcn/ui, Tailwind:
 ```bash
 bunx create-creem-app my-saas
 # or
-git clone https://github.com/creem-io/nextjs-template
+git clone git@github.com:creem-io/nextjs-template
 ```
 
 Includes:

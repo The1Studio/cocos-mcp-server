@@ -43,7 +43,7 @@ If `assets/` does not exist, you are not in a Cocos Creator project root. Naviga
 ```bash
 # Clone into extensions directory
 mkdir -p extensions
-git clone https://github.com/nicekid1/cocos-mcp-server.git extensions/cocos-mcp-server
+git clone git@github.com:nicekid1/cocos-mcp-server.git extensions/cocos-mcp-server
 ```
 
 If the plugin already exists, pull latest instead:
