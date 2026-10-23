@@ -55,7 +55,7 @@ WebSearch: "MyLibrary github repository"
 # Found: https://github.com/org/mylibrary
 
 # 2. Clone
-git clone https://github.com/org/mylibrary /tmp/docs-analysis
+git clone git@github.com:org/mylibrary /tmp/docs-analysis
 
 # 3. Pack with Repomix
 cd /tmp/docs-analysis

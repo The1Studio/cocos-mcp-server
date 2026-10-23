@@ -42,7 +42,7 @@
 
 ```markdown
 ## Installing the [Service] Skill
-1. Download: `git clone https://github.com/company/skills`
+1. Download: `git clone git@github.com:company/skills`
    Or download ZIP from Releases
 2. Install: Claude.ai > Settings > Skills > Upload skill (zipped)
 3. Enable: Toggle on the skill, ensure MCP server connected

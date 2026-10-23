@@ -20969,7 +20969,7 @@ git -C extensions/cocos-mcp-server pull
 #### If not exists (Fresh install)
 
 ```bash
-git clone https://github.com/TinycellCorp/cocos-mcp-server.git extensions/cocos-mcp-server
+git clone git@github.com:TinycellCorp/cocos-mcp-server.git extensions/cocos-mcp-server
 ```
 
 - On error: Display "Plugin installation failed." and **stop**
