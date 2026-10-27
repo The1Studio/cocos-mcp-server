@@ -358,6 +358,85 @@ describe('ManageComponent', () => {
         expect(setCalls.some((c: any[]) => c[2].path === '__comps__.0.cameraSection.fov')).toBe(true);
     });
 
+    describe('set_property — component property named value (issue #157)', () => {
+        const VALUE_COMPONENT = 'ValueController';
+        const TARGET_NODE = 'label-node';
+        const TARGET_COMPONENT_UUID = 'label-component-uuid';
+
+        function hostDump() {
+            return {
+                __comps__: [{
+                    __type__: VALUE_COMPONENT,
+                    type: VALUE_COMPONENT,
+                    enabled: true,
+                    value: {
+                        uuid: { value: 'value-component-uuid' },
+                        title: { name: 'title', value: 'Hello', type: 'String' },
+                        // An unset @property(Label) can omit its serialized value. The
+                        // property descriptor itself must not be mistaken for the dump
+                        // envelope just because the property is named `value`.
+                        value: { name: 'value', type: 'cc.Label', extends: [] }
+                    }
+                }]
+            };
+        }
+
+        function targetNodeDump() {
+            return {
+                __comps__: [{
+                    __type__: 'cc.Label',
+                    type: 'cc.Label',
+                    value: { uuid: { value: TARGET_COMPONENT_UUID } }
+                }]
+            };
+        }
+
+        it.each(['set_property', 'set_properties_batch'] as const)(
+            '%s writes and verifies the literal value property', async (action) => {
+                const mockRequest = (global as any).Editor.Message.request as jest.Mock;
+                const dump = hostDump();
+                mockRequest.mockImplementation((_module: string, request: string, payload: any) => {
+                    if (request === 'query-node') {
+                        return Promise.resolve(payload === TARGET_NODE ? targetNodeDump() : dump);
+                    }
+                    if (request === 'set-property') {
+                        const segments: string[] = payload.path.split('.');
+                        const compIndex = Number(segments[1]);
+                        let cursor: any = dump.__comps__[compIndex].value;
+                        for (let i = 2; i < segments.length - 1; i++) cursor = cursor[segments[i]].value;
+                        cursor[segments[segments.length - 1]].value = payload.dump.value;
+                        return Promise.resolve({});
+                    }
+                    return Promise.resolve({});
+                });
+
+                const property = { property: 'value', propertyType: 'component', value: TARGET_NODE };
+                const args = action === 'set_property'
+                    ? { nodeUuid: NODE_UUID, componentType: VALUE_COMPONENT, ...property }
+                    : { nodeUuid: NODE_UUID, componentType: VALUE_COMPONENT, properties: [property] };
+                const result = await tool.execute(action, args);
+
+                if (action === 'set_property') {
+                    expect(result.success).toBe(true);
+                    expect(result.data.changeVerified).toBe(true);
+                } else {
+                    expect(result.success).toBe(true);
+                    expect(result.data.results[0].success).toBe(true);
+                    expect(result.data.results[0].changeVerified).toBe(true);
+                }
+
+                const setCalls = mockRequest.mock.calls.filter((c: any[]) => c[1] === 'set-property');
+                expect(setCalls).toHaveLength(1);
+                expect(setCalls[0][2]).toEqual({
+                    uuid: NODE_UUID,
+                    path: '__comps__.0.value',
+                    dump: { value: { uuid: TARGET_COMPONENT_UUID }, type: 'cc.Label' }
+                });
+                expect(dump.__comps__[0].value.title.value).toBe('Hello');
+            }
+        );
+    });
+
     /**
      * action=add on a custom `@ccclass` script.
      *

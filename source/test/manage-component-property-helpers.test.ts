@@ -240,6 +240,22 @@ describe('convertPropertyValue — string propertyType rejects non-primitive val
     });
 });
 
+describe('analyzeProperty — component property named value (issue #157)', () => {
+    it('reads an object-valued value descriptor from the property map', () => {
+        const result = analyzeProperty({
+            properties: {
+                title: { name: 'title', value: 'Hello', type: 'String' },
+                value: { name: 'value', value: { uuid: '' }, type: 'cc.Label', extends: [] }
+            }
+        }, 'value');
+
+        expect(result.exists).toBe(true);
+        expect(result.originalValue).toEqual({ uuid: '' });
+        expect(result.availableProperties).toEqual(expect.arrayContaining(['title', 'value']));
+        expect(result.availableProperties).not.toContain('extends');
+    });
+});
+
 describe('analyzeProperty — append slot of an array (issue #68)', () => {
     const comp = (arr: any[]) => ({
         properties: { value: { priceLabels: { name: 'priceLabels', type: 'cc.Label', isArray: true, value: arr } } }

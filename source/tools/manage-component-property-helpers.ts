@@ -136,8 +136,18 @@ export function analyzeProperty(component: any, propertyName: string): PropertyA
     // Method 2: search nested properties structure (Cocos Creator component dump format).
     //  For dotted names like "cameraSection.mainCamera", walk segments through nested `.value` dumps.
     if (!propertyExists && component.properties && typeof component.properties === 'object') {
-        const rootValueObj = component.properties.value && typeof component.properties.value === 'object'
-            ? component.properties.value
+        const valueEntry = component.properties.value;
+        // `getComponents` has already unwrapped the query-node component envelope, so a
+        // property map may itself contain a user property named `value`. Only unwrap that
+        // key when it is a container, not when it is the property's descriptor.
+        const valueEntryIsDescriptor = isValidPropertyDescriptor(valueEntry) && (
+            typeof valueEntry.name === 'string' ||
+            typeof valueEntry.displayName === 'string' ||
+            typeof valueEntry.type === 'string' ||
+            typeof valueEntry.readonly === 'boolean'
+        );
+        const rootValueObj = valueEntry && typeof valueEntry === 'object' && !valueEntryIsDescriptor
+            ? valueEntry
             : component.properties;
 
         const segments = propertyName.split('.');
@@ -150,7 +160,7 @@ export function analyzeProperty(component: any, propertyName: string): PropertyA
             // Populate availableProperties at the relevant level (root or final container)
             if (i === 0 || (i === segments.length - 1)) {
                 for (const [k, v] of Object.entries(cursor || {})) {
-                    if (v && typeof v === 'object') {
+                    if (k !== 'uuid' && v && typeof v === 'object') {
                         const prefix = i === 0 ? '' : `${segments.slice(0, i).join('.')}.`;
                         availableProperties.push(`${prefix}${k}`);
                     }
