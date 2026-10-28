@@ -15,6 +15,8 @@
  *   --stop          Stop all running kanban servers
  *   --background    Run in background (detached) - legacy mode
  *   --foreground    Run in foreground (for CC background tasks)
+ *   --idle-timeout  Minutes without an HTTP request before the server exits (default 30, 0 = never).
+ *                   Env T1K_SERVER_IDLE_MINUTES is the fallback when the flag is absent.
  */
 
 const fs = require('fs');
@@ -23,8 +25,9 @@ const os = require('os');
 const { spawn, execSync } = require('child_process');
 
 const { findAvailablePort, DEFAULT_PORT } = require('./lib/port-finder.cjs');
-const { writePidFile, stopAllServers, setupShutdownHandlers, findRunningInstances } = require('./lib/process-mgr.cjs');
+const { writePidFile, removePidFile, stopAllServers, setupShutdownHandlers, findRunningInstances } = require('./lib/process-mgr.cjs');
 const { createHttpServer } = require('./lib/http-server.cjs');
+const { watchIdle, resolveIdleMinutes } = require(path.join(__dirname, '..', '..', 'common', 'idle-exit.cjs'));
 
 /**
  * Parse command line arguments
@@ -38,7 +41,8 @@ function parseArgs(argv) {
     stop: false,
     background: false,
     foreground: false,
-    isChild: false
+    isChild: false,
+    idleTimeout: undefined
   };
 
   for (let i = 2; i < argv.length; i++) {
@@ -59,6 +63,8 @@ function parseArgs(argv) {
       args.foreground = true;
     } else if (arg === '--child') {
       args.isChild = true;
+    } else if (arg === '--idle-timeout' && argv[i + 1]) {
+      args.idleTimeout = argv[++i];
     } else if (!arg.startsWith('--') && !args.dir) {
       args.dir = arg;
     }
@@ -159,11 +165,15 @@ async function main() {
     process.exit(1);
   }
 
+  // Validate idle timeout up front so a bad value fails before any spawn
+  const idleMinutes = resolveIdleMinutes(args.idleTimeout);
+
   // Background mode - spawn child and exit (legacy mode for manual runs)
   // Skip if --foreground is set (for Claude Code background tasks)
   if (args.background && !args.foreground && !args.isChild) {
     const childArgs = ['--dir', plansDir, '--port', String(args.port), '--host', args.host, '--child'];
     if (args.open) childArgs.push('--open');
+    if (args.idleTimeout !== undefined) childArgs.push('--idle-timeout', args.idleTimeout);
 
     const child = spawn(process.execPath, [__filename, ...childArgs], {
       detached: true,
@@ -216,6 +226,17 @@ async function main() {
 
     writePidFile(port, process.pid);
     setupShutdownHandlers(port, () => server.close());
+
+    // Idle exit: any HTTP request re-arms the window; expiry removes the pidfile and exits 0
+    watchIdle(server, {
+      idleMinutes,
+      onIdle: () => {
+        console.error(`[plans-kanban] no HTTP requests for ${idleMinutes} min; exiting`);
+        server.close();
+        removePidFile(port);
+        process.exit(0);
+      }
+    });
 
     // Output for CLI/command integration
     // In foreground mode (CC background task), always output JSON
