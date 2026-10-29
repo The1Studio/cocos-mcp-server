@@ -101,17 +101,37 @@ describe('ManageMaterial.set_property (#24)', () => {
         expect(saved._props[0]).not.toHaveProperty('occlusionMap');
     });
 
-    it('writes into the technique the material actually uses', async () => {
-        const file = writeMaterial({ albedo: 1 }, 2);
+    // #1640: `_props` is indexed by pass, not technique. The old test pinned the bug
+    // (value landed in _props[_techIdx]); this asserts the healthy state instead.
+    it('writes into the pass entry, not _props[_techIdx], on a technique-1 material', async () => {
+        const file = writeMaterial({ albedo: 1 }, 0);
+        const mtl = JSON.parse(fs.readFileSync(file, 'utf-8'));
+        mtl._techIdx = 1;
+        fs.writeFileSync(file, JSON.stringify(mtl, null, 2), 'utf-8');
         routeMessages(standaloneMaterial(file));
 
         const result = await tool.execute('set_property', { url: MTL_URL, property: 'albedo', value: 7 });
 
         expect(result.success).toBe(true);
-        expect(result.data.techniqueIndex).toBe(2);
+        expect(result.data.techniqueIndex).toBe(1);
+        expect(result.data.passIndex).toBe(0);
         const saved = JSON.parse(fs.readFileSync(file, 'utf-8'));
-        expect(saved._props[2].albedo).toBe(7);
-        expect(saved._props[0]).toEqual({});
+        expect(saved._props[0].albedo).toBe(7);
+        expect(saved._props).toHaveLength(1); // no stray block at _props[1]
+    });
+
+    it('writes the pass named by passIndex and rejects an invalid one', async () => {
+        const file = writeMaterial({ albedo: 1 }, 0);
+        routeMessages(standaloneMaterial(file));
+
+        const ok = await tool.execute('set_property', { url: MTL_URL, property: 'albedo', value: 3, passIndex: 1 });
+        expect(ok.success).toBe(true);
+        const saved = JSON.parse(fs.readFileSync(file, 'utf-8'));
+        expect(saved._props[1].albedo).toBe(3);
+        expect(saved._props[0].albedo).toBe(1);
+
+        const bad = await tool.execute('set_property', { url: MTL_URL, property: 'albedo', value: 3, passIndex: -1 });
+        expect(bad.success).toBe(false);
     });
 
     it('reports failure when the write did not persist after reimport', async () => {

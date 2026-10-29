@@ -40,6 +40,11 @@ export class ManageMaterial extends BaseActionTool {
             value: {
                 description: '[set_property] Value written verbatim into `_props`. Use the serialized form: numbers/booleans as-is, colors as {"__type__":"cc.Color","r":255,"g":0,"b":0,"a":255}, asset references as {"__uuid__":"<uuid>","__expectedType__":"cc.Texture2D"}. Pass null to clear the property (the key is removed so the effect default applies).'
             },
+            passIndex: {
+                type: 'number',
+                description: '[set_property] Pass index within the selected technique whose `_props` entry is written (default 0). This is a pass index, not the technique index (`_techIdx`).',
+                default: 0
+            },
             pattern: {
                 type: 'string',
                 description: '[list] Glob pattern to filter materials (default: db://assets/**/*.mtl)',
@@ -127,10 +132,16 @@ export class ManageMaterial extends BaseActionTool {
             return errorResult(`${args.url} is not a cc.Material asset (found __type__=${material?.__type__ ?? 'none'})`);
         }
 
+        // `_props` is indexed by PASS of the selected technique, not by technique: a
+        // technique-1 material with one pass keeps its values in `_props[0]` (#1640).
         const techIdx: number = typeof material._techIdx === 'number' ? material._techIdx : 0;
+        const passIdx = args.passIndex === undefined ? 0 : args.passIndex;
+        if (!Number.isInteger(passIdx) || passIdx < 0) {
+            return errorResult(`passIndex must be a non-negative integer (got ${JSON.stringify(args.passIndex)})`);
+        }
         if (!Array.isArray(material._props)) material._props = [];
-        while (material._props.length <= techIdx) material._props.push({});
-        const props = material._props[techIdx] || (material._props[techIdx] = {});
+        while (material._props.length <= passIdx) material._props.push({});
+        const props = material._props[passIdx] || (material._props[passIdx] = {});
 
         const clearing = args.value === null;
         if (clearing) delete props[args.property];
@@ -149,11 +160,11 @@ export class ManageMaterial extends BaseActionTool {
 
         // Read the asset back. A success envelope here means the serialized property
         // actually changed on disk — never that a message resolved without throwing.
-        const verification = this.verifySavedProperty(resolved.filePath, techIdx, args.property, args.value, clearing);
+        const verification = this.verifySavedProperty(resolved.filePath, passIdx, args.property, args.value, clearing);
         if (!verification.verified) return errorResult(verification.error!);
 
         return successResult(
-            { url: args.url, file: resolved.filePath, property: args.property, value: args.value, techniqueIndex: techIdx, cleared: clearing },
+            { url: args.url, file: resolved.filePath, property: args.property, value: args.value, techniqueIndex: techIdx, passIndex: passIdx, cleared: clearing },
             clearing
                 ? `Property '${args.property}' cleared from material ${args.url} (verified on disk)`
                 : `Property '${args.property}' set on material ${args.url} (verified on disk)`
@@ -161,7 +172,7 @@ export class ManageMaterial extends BaseActionTool {
     }
 
     private verifySavedProperty(
-        filePath: string, techIdx: number, property: string, value: any, clearing: boolean
+        filePath: string, passIdx: number, property: string, value: any, clearing: boolean
     ): { verified: boolean; error?: string } {
         let saved: any;
         try {
@@ -169,15 +180,15 @@ export class ManageMaterial extends BaseActionTool {
         } catch (err: any) {
             return { verified: false, error: `Could not re-read ${filePath} to verify the write: ${err.message}` };
         }
-        const savedProps = Array.isArray(saved?._props) ? saved._props[techIdx] : undefined;
+        const savedProps = Array.isArray(saved?._props) ? saved._props[passIdx] : undefined;
         if (clearing) {
             if (savedProps && Object.prototype.hasOwnProperty.call(savedProps, property)) {
-                return { verified: false, error: `Wrote the material but '${property}' is still present in _props[${techIdx}] after reimport.` };
+                return { verified: false, error: `Wrote the material but '${property}' is still present in _props[${passIdx}] after reimport.` };
             }
             return { verified: true };
         }
         if (!savedProps || JSON.stringify(savedProps[property]) !== JSON.stringify(value)) {
-            return { verified: false, error: `Wrote the material but '${property}' did not persist in _props[${techIdx}] after reimport.` };
+            return { verified: false, error: `Wrote the material but '${property}' did not persist in _props[${passIdx}] after reimport.` };
         }
         return { verified: true };
     }
