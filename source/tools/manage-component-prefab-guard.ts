@@ -71,8 +71,11 @@ export function extractReferencedNodeUuids(propertyType: string, processedValue:
  * Identify the prefab instance a node belongs to, or null when it sits in plain scene space.
  * Returns the instance ROOT uuid so two nodes inside the same instance compare equal.
  * A query failure yields null — this check is advisory and must never break a write.
+ *
+ * Exported so the node-hierarchy reset actions (`reset_property` / `reset_component`, #1649)
+ * share this one discriminator instead of reading `__prefab__` a second way.
  */
-async function prefabInstanceRoot(
+export async function prefabInstanceRoot(
     nodeUuid: string,
     queryNode: (uuid: string) => Promise<any>
 ): Promise<string | null> {
