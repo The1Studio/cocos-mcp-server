@@ -543,6 +543,18 @@ export function convertPropertyValue(propertyType: string, value: any): any {
     }
 }
 
+/**
+ * Whether an array element is shaped like a `{ uuid }` REFERENCE.
+ *
+ * `verifyComponentPropertyChange` uses this to decide whether an expected array is a
+ * reference array (nodeArray / componentArray / assetArray) or a primitive one
+ * (numberArray / stringArray). Sending a primitive array down the reference branch made
+ * every such write fail verification (#1650).
+ */
+function isReferenceShaped(item: any): boolean {
+    return item !== null && typeof item === 'object' && 'uuid' in item;
+}
+
 /** Generate an LLM-friendly suggestion when requested component type is not found */
 export function generateComponentSuggestion(requestedType: string, availableTypes: string[], property: string): string {
     const similarTypes = availableTypes.filter(type =>
@@ -705,13 +717,20 @@ export async function verifyComponentPropertyChange(
             if (Array.isArray(expectedValue) && expectedValue.some(e => isPlainObject(e) && !('uuid' in e))) {
                 // objectArray (issue #66): elements are plain value objects, not references.
                 verified = matchesRequestedStructure(expectedValue, propertyData);
-            } else if (Array.isArray(expectedValue)) {
-                // nodeArray / componentArray: every element is itself a { uuid } reference.
+            } else if (Array.isArray(expectedValue) && expectedValue.some(isReferenceShaped)) {
+                // nodeArray / componentArray / assetArray: elements are `{ uuid }` references.
                 // Compare by per-element uuid (order-preserving), never by deep-equaling the
                 // whole array — the editor's read-back dump may carry extra per-element
                 // metadata (e.g. an internal object id) that a plain component/node reference
                 // write never included, which would fail a JSON.stringify comparison even
                 // though every reference resolved correctly.
+                //
+                // The `some(isReferenceShaped)` gate is load-bearing (#1650): an EMPTY
+                // reference array has no element to inspect, and a `numberArray` /
+                // `stringArray` has only primitives. Sending those here made `extractUuid`
+                // return '' for every element, so `expUuid !== ''` was always false and a
+                // correct primitive-array write could never verify — the caller saw
+                // "expected [4,3,3,2] but the editor reads back [4,3,3,2]".
                 const actualArr = Array.isArray(actualValue) ? actualValue : [];
                 verified = actualArr.length === expectedValue.length &&
                     expectedValue.every((exp: any, idx: number) => {
