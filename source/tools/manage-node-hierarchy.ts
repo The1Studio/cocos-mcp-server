@@ -1,10 +1,11 @@
 import { BaseActionTool } from './base-action-tool';
 import { ActionToolResult, successResult, errorResult } from '../types';
 import { coerceBool, coerceInt, normalizeStringArray } from '../utils/normalize';
+import { prefabInstanceRoot } from './manage-component-prefab-guard';
 
 export class ManageNodeHierarchy extends BaseActionTool {
     readonly name = 'manage_node_hierarchy';
-    readonly description = 'Advanced node hierarchy operations. Actions: reset_property, move_array_element, remove_array_element, copy, paste, cut, reset_transform, reset_component, restore_prefab, execute_method. For basic node CRUD use manage_node instead.';
+    readonly description = 'Advanced node hierarchy operations. Actions: reset_property, move_array_element, remove_array_element, copy, paste, cut, reset_transform, reset_component, restore_prefab, execute_method. reset_property and reset_component restore CLASS DEFAULTS, not the values a prefab instance carries. For basic node CRUD use manage_node instead.';
     readonly actions = [
         'reset_property',
         'move_array_element',
@@ -83,21 +84,56 @@ export class ManageNodeHierarchy extends BaseActionTool {
     }
 
     private async resetProperty(uuid: string, path: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'reset-property', {
+        try {
+            const result: boolean = await Editor.Message.request('scene', 'reset-property', {
                 uuid,
                 path,
                 dump: { value: null }
-            }).then((result: boolean) => {
-                if (result === false) {
-                    resolve(errorResult(`Editor rejected reset-property for '${path}' on node ${uuid}.`));
-                    return;
-                }
-                resolve(successResult(null, `Property '${path}' reset to default value`));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
             });
-        });
+            if (result === false) {
+                return errorResult(`Editor rejected reset-property for '${path}' on node ${uuid}.`);
+            }
+        } catch (err: any) {
+            return errorResult(err.message);
+        }
+
+        // #1649: `reset-property` takes no "revert to the prefab's value" parameter
+        // (`SetPropertyOptions` is `{ uuid, path, dump, record? }`), so on an instance node it
+        // writes the CLASS DEFAULT and the prefab's own value is lost. Report that honestly
+        // instead of a bare success the caller reads as a faithful reset.
+        if (await this.isInsidePrefabInstance(uuid)) {
+            return successResult(
+                { persistenceVerified: false },
+                `Property '${path}' reset to its class default. This node sits inside a prefab ` +
+                `instance, so the class default is NOT the value the prefab carries — the ` +
+                `prefab's value for '${path}' has been replaced. To restore the prefab's value, ` +
+                `revert the instance (manage_prefab action=revert) instead of resetting.`
+            );
+        }
+        return successResult(
+            { persistenceVerified: true },
+            `Property '${path}' reset to default value (the class default; this node is not inside a prefab instance)`
+        );
+    }
+
+    /**
+     * Whether `uuid` belongs to a prefab instance. Advisory only: a query failure or an
+     * unresolvable uuid reports `false` so the reset is never broken by this check
+     * (the issue #48 contract for `detectPrefabOverrideRisk`).
+     */
+    private async isInsidePrefabInstance(uuid: string): Promise<boolean> {
+        const queryNode = (target: string) => Editor.Message.request('scene', 'query-node', target);
+        if (await prefabInstanceRoot(uuid, queryNode)) return true;
+        // `reset_component` is given a COMPONENT uuid. An editor dump carries `__prefab__` on
+        // both nodes and components, so testing the uuid directly covers that case too; when
+        // it does not resolve, ask the component which instance mounted it.
+        try {
+            const component: any = await Editor.Message.request('scene', 'query-component', uuid);
+            const mountedRoot = component?.mountedRoot;
+            return Boolean(mountedRoot && await prefabInstanceRoot(mountedRoot, queryNode));
+        } catch {
+            return false;
+        }
     }
 
     private async moveArrayElement(uuid: string, path: string, target: number, offset: number): Promise<ActionToolResult> {
@@ -184,13 +220,28 @@ export class ManageNodeHierarchy extends BaseActionTool {
     }
 
     private async resetComponent(uuid: string): Promise<ActionToolResult> {
-        return new Promise((resolve) => {
-            Editor.Message.request('scene', 'reset-component', { uuid }).then(() => {
-                resolve(successResult(null, 'Component reset to default values'));
-            }).catch((err: Error) => {
-                resolve(errorResult(err.message));
-            });
-        });
+        try {
+            await Editor.Message.request('scene', 'reset-component', { uuid });
+        } catch (err: any) {
+            return errorResult(err.message);
+        }
+
+        // #1649: same limitation as resetProperty — `ResetComponentOptions` is `{ uuid }`,
+        // so there is no way to ask the editor for the prefab's values instead of the
+        // class defaults. Say so rather than reporting a reset that lost them.
+        if (await this.isInsidePrefabInstance(uuid)) {
+            return successResult(
+                { persistenceVerified: false },
+                `Component reset to its CLASS DEFAULT values. This component sits inside a ` +
+                `prefab instance, so the class defaults are NOT the values the prefab carries ` +
+                `— every property the prefab had set has been replaced. To restore the prefab's ` +
+                `values, revert the instance (manage_prefab action=revert) instead of resetting.`
+            );
+        }
+        return successResult(
+            { persistenceVerified: true },
+            'Component reset to default values (the class defaults; this component is not inside a prefab instance)'
+        );
     }
 
     private async restorePrefab(nodeUuid: string, assetUuid: string): Promise<ActionToolResult> {
